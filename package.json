@@ -1,12 +1,9 @@
-{
+﻿{
     "name":  "gebo",
     "version":  "0.1.0",
     "private":  true,
     "type":  "module",
     "description":  "GEBO â€” verification-first agent registry for BNB Smart Chain",
-    "engines": {
-        "node": "24.x"
-    },
     "scripts":  {
                     "dev":  "next dev",
                     "build":  "next build",
@@ -17,7 +14,11 @@
                     "tier":  "tsx scripts/check-tier.ts",
                     "typecheck":  "tsc --noEmit",
                     "test":  "vitest run",
-                    "test:watch":  "vitest"
+                    "test:watch":  "vitest",
+                    "docs:measurements":  "tsx scripts/write-measurements.ts",
+                    "classify":  "tsx scripts/classify-agents.ts",
+                    "categories:emerging":  "tsx scripts/emerging-categories.ts",
+                    "verify":  "tsc --noEmit \u0026\u0026 vitest run \u0026\u0026 next build"
                 },
     "dependencies":  {
                          "@altananetwork/sdk":  "^0.8.0",
