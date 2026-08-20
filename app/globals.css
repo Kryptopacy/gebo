@@ -1,0 +1,346 @@
+/* ============================================================================
+   GEBO — instrument-panel design language
+
+   VISUAL_DENSITY 8: hairlines instead of cards, mono for every number,
+   tight data rhythm inside generous section rhythm.
+   MOTION_INTENSITY 2: hover and focus states only, no entrance choreography.
+   DESIGN_VARIANCE 5: left-anchored asymmetric grid, no centred hero.
+
+   One accent (BSC yellow). Green and red appear ONLY to encode measured
+   state, never as decoration.
+   ========================================================================= */
+
+:root {
+  --ink-900: #08090b;
+  --ink-850: #0c0e11;
+  --ink-800: #101317;
+  --ink-750: #14181d;
+  --rule: #1e232a;
+  --rule-soft: #16191e;
+
+  --fg: #eceef1;
+  --fg-2: #a2a9b4;
+  --fg-3: #6f7783;
+  --fg-4: #4a515b;
+
+  --accent: #f0b90b;
+  --pass: #3ecf8e;
+  --fail: #f2545b;
+  --hold: #e0a030;
+
+  --sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, monospace;
+
+  --shell: 1240px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ink-900);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: inherit; text-decoration: none; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.shell { max-width: var(--shell); margin: 0 auto; padding: 0 28px; }
+
+/* ── masthead ───────────────────────────────────────────────────────── */
+.masthead {
+  border-bottom: 1px solid var(--rule);
+  background: color-mix(in oklab, var(--ink-900) 88%, transparent);
+  backdrop-filter: blur(10px);
+  position: sticky; top: 0; z-index: 20;
+}
+.masthead .shell {
+  height: 60px; display: flex; align-items: center; gap: 36px;
+}
+.wordmark {
+  display: inline-flex; align-items: center; gap: 11px;
+  white-space: nowrap;
+}
+.wordmark-text {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+/* The mark is GEBO's own artwork, converted from the source JPEG to a real
+   alpha channel (see scripts/build-logo.ts). Sized to sit inside the 60px
+   masthead without crowding the wordmark. */
+.wordmark-mark {
+  width: 26px; height: 26px; flex: none;
+  display: block;
+  object-fit: contain;
+}
+.masthead nav {
+  margin-left: auto; display: flex; align-items: center; gap: 22px;
+  font-size: 13.5px; color: var(--fg-3);
+}
+.masthead nav a { transition: color .15s ease; white-space: nowrap; }
+.masthead nav a:hover { color: var(--fg); }
+.masthead nav .nav-sep {
+  padding-left: 22px; border-left: 1px solid var(--rule);
+}
+
+/* ── vertical rhythm ────────────────────────────────────────────────── */
+.band { padding: 68px 0; border-bottom: 1px solid var(--rule-soft); }
+.band-tight { padding: 40px 0; border-bottom: 1px solid var(--rule-soft); }
+.band-last { border-bottom: 0; }
+
+/* ── display type ───────────────────────────────────────────────────── */
+h1 {
+  font-size: clamp(2.4rem, 5.2vw, 3.9rem);
+  line-height: 1.03;
+  letter-spacing: -0.036em;
+  font-weight: 560;
+  margin: 0 0 20px;
+  max-width: 20ch;
+}
+h2 {
+  font-size: clamp(1.35rem, 2.3vw, 1.75rem);
+  line-height: 1.15;
+  letter-spacing: -0.026em;
+  font-weight: 560;
+  margin: 0 0 14px;
+  max-width: 30ch;
+}
+h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6px; }
+
+.standfirst {
+  font-size: 17px; line-height: 1.5; color: var(--fg-2);
+  max-width: 58ch; margin: 0;
+}
+.prose { color: var(--fg-2); max-width: 66ch; }
+.prose p { margin: 0 0 12px; }
+
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.t-2 { color: var(--fg-2); }
+.t-3 { color: var(--fg-3); }
+.t-4 { color: var(--fg-4); }
+.sm { font-size: 13px; }
+.xs { font-size: 11.5px; }
+
+/* Section label. Used at most once per three bands — see design notes. */
+.section-label {
+  font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.16em; color: var(--fg-4); margin: 0 0 20px;
+}
+
+/* ── the collapse: hero data figure ─────────────────────────────────── */
+.collapse { border-top: 1px solid var(--rule); margin-top: 4px; }
+.collapse-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.1fr);
+  gap: 32px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  align-items: start;
+}
+.collapse-step:last-child { border-bottom: 0; }
+
+.collapse-figure {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  font-weight: 500;
+}
+.collapse-step[data-terminal="true"] .collapse-figure { color: var(--accent); }
+.collapse-caption { font-size: 14px; margin-top: 7px; color: var(--fg); }
+.collapse-note { font-size: 12.5px; color: var(--fg-3); margin-top: 3px; max-width: 62ch; }
+
+.collapse-track {
+  height: 10px; background: var(--ink-750);
+  border: 1px solid var(--rule-soft);
+  position: relative; overflow: hidden; margin-top: 10px;
+}
+.collapse-track > span {
+  position: absolute; inset: 0 auto 0 0; display: block;
+  background: var(--fg-4);
+}
+.collapse-step[data-terminal="true"] .collapse-track > span { background: var(--accent); }
+.collapse-pct {
+  font-family: var(--mono); font-size: 11.5px; color: var(--fg-4);
+  margin-top: 7px; letter-spacing: 0.01em;
+}
+
+/* ── data rows (no cards) ───────────────────────────────────────────── */
+.rows { border-top: 1px solid var(--rule); }
+.row {
+  display: grid; gap: 20px; align-items: baseline;
+  padding: 15px 0; border-bottom: 1px solid var(--rule-soft);
+}
+.row:last-child { border-bottom: 0; }
+.row-hover { transition: background .12s ease; }
+.row-hover:hover { background: var(--ink-850); }
+
+.r-jobs      { grid-template-columns: 2.1fr 1fr 1fr; }
+.r-operators { grid-template-columns: 1.6fr 5rem 5rem 1fr; }
+.r-agents    { grid-template-columns: 2.2fr 7.5rem 1.1fr 7rem 1.6fr; }
+.r-spec      { grid-template-columns: 13rem minmax(0, 1fr); }
+
+.rows-head {
+  display: grid; gap: 20px;
+  font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.13em; color: var(--fg-4);
+  padding-bottom: 10px;
+}
+
+/* ── readouts ───────────────────────────────────────────────────────── */
+.readouts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  border-top: 1px solid var(--rule);
+}
+.readout {
+  padding: 18px 22px 20px;
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.readout:last-child { border-right: 0; }
+.readout dt {
+  font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.13em; color: var(--fg-4); margin-bottom: 9px;
+}
+.readout dd {
+  margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 1.65rem; line-height: 1; letter-spacing: -0.035em;
+}
+.readout .qualifier {
+  font-family: var(--sans); font-size: 11.5px; color: var(--fg-4);
+  margin-top: 10px; line-height: 1.45; letter-spacing: 0;
+}
+.readout[data-empty="true"] dd { font-size: 0.95rem; color: var(--fg-4); letter-spacing: 0; }
+
+/* ── state chips ────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 8px; border: 1px solid var(--rule); color: var(--fg-3);
+  white-space: nowrap;
+}
+.chip::before {
+  content: ""; width: 5px; height: 5px; flex: none; background: currentColor;
+}
+.chip[data-state="VERIFIED"] { color: var(--pass); border-color: color-mix(in oklab, var(--pass) 38%, transparent); }
+.chip[data-state="LISTED"]   { color: var(--fg-2); border-color: var(--rule); }
+.chip[data-state="DORMANT"]  { color: var(--fg-4); }
+.chip[data-state="SHADOWED"] { color: var(--fail); border-color: color-mix(in oklab, var(--fail) 38%, transparent); }
+.chip-flat { text-transform: none; letter-spacing: 0.01em; }
+.chip-flat::before { display: none; }
+
+/* ── notices ────────────────────────────────────────────────────────── */
+.notice {
+  border-left: 2px solid var(--accent);
+  padding: 14px 0 14px 18px;
+  color: var(--fg-2); font-size: 14px; max-width: 74ch;
+}
+.notice strong { color: var(--fg); font-weight: 560; }
+.notice[data-tone="fail"] { border-left-color: var(--fail); }
+
+/* ── authority / blast radius ───────────────────────────────────────── */
+.authority { border: 1px solid var(--rule); }
+.authority[data-risk="unknown"] { border-color: color-mix(in oklab, var(--fail) 42%, transparent); }
+.authority-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 20px; border-bottom: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.authority[data-risk="unknown"] .authority-head {
+  color: var(--fail); background: color-mix(in oklab, var(--fail) 9%, transparent);
+}
+.authority-body { padding: 4px 20px 8px; }
+
+/* ── misc ───────────────────────────────────────────────────────────── */
+.spec { margin: 0; }
+.spec > div {
+  display: grid; grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--rule-soft);
+  font-size: 13px;
+}
+.spec > div:last-child { border-bottom: 0; }
+.spec dt { color: var(--fg-4); }
+.spec dd { margin: 0; color: var(--fg-2); }
+.spec dd.mono, .spec dd .mono { font-family: var(--mono); }
+
+.uri {
+  font-family: var(--mono); font-size: 12px; color: var(--fg-2);
+  word-break: break-all; line-height: 1.5;
+}
+.uri mark {
+  background: color-mix(in oklab, var(--fail) 26%, transparent);
+  color: var(--fg); padding: 0 2px;
+  border-bottom: 1px solid var(--fail);
+}
+
+.crumb {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.03em;
+  color: var(--fg-4); margin-bottom: 18px;
+}
+.crumb a { transition: color .15s ease; }
+.crumb a:hover { color: var(--fg-2); }
+
+.link {
+  color: var(--fg-2); border-bottom: 1px solid var(--fg-4);
+  padding-bottom: 1px; transition: color .15s ease, border-color .15s ease;
+  font-size: 13.5px;
+}
+.link:hover { color: var(--fg); border-color: var(--accent); }
+
+.inline-list { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.stack-sm { display: flex; flex-direction: column; gap: 8px; }
+.mt-l { margin-top: 34px; }
+.mt-m { margin-top: 22px; }
+
+.headline-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+  gap: 56px; align-items: end;
+}
+
+/* ── responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .headline-pair { grid-template-columns: 1fr; gap: 26px; align-items: start; }
+  .collapse-step { grid-template-columns: 1fr; gap: 12px; }
+  .r-operators { grid-template-columns: 1fr 4rem 4rem; }
+  .r-operators > :nth-child(4) { display: none; }
+  .r-agents { grid-template-columns: 1fr 7rem; }
+  .r-agents > :nth-child(n+3) { display: none; }
+  .rows-head { display: none; }
+  .r-jobs { grid-template-columns: 1fr; gap: 8px; }
+  .readout { border-right: 0; }
+  .spec > div, .r-spec { grid-template-columns: 1fr; gap: 4px; }
+  .masthead .shell { gap: 18px; overflow-x: auto; }
+  .masthead nav { gap: 16px; }
+  .masthead nav .nav-sep { padding-left: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* ── colophon ───────────────────────────────────────────────────────── */
+.colophon { border-top: 1px solid var(--rule); padding: 40px 0 64px; }
+.colophon-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 56px;
+}
+.colophon p { color: var(--fg-3); font-size: 13.5px; max-width: 52ch; margin: 0 0 14px; }
+.colophon .spec dd { font-family: var(--mono); font-size: 12.5px; }
+@media (max-width: 900px) { .colophon-grid { grid-template-columns: 1fr; gap: 28px; } }

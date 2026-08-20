@@ -1,0 +1,46 @@
+# Secrets â€” never commit
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Bun
+bun.lockb
+
+# Runtime / logs
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Drizzle
+drizzle/meta/_journal.json.bak
+
+# Local scratch
+tmp/
+scratch/
+
+# Census output — regenerable, 144MB+, far past GitHub's limits
+data/*.ndjson
+data/*.json
+
+
+# TS incremental build cache
+tsconfig.tsbuildinfo
+
