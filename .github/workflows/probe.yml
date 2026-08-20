@@ -1,0 +1,55 @@
+name: probe
+
+# Keeps GEBO's liveness data current. Vercel Hobby caps cron at once per day,
+# which cannot sustain a 15-minute probe cadence, so scheduling lives here.
+# Running the script directly also avoids the serverless timeout, so a run can
+# probe hundreds of endpoints instead of the ~45 a request handler manages.
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub may delay scheduled runs under load; the tiered
+    # next_probe_at means a late run simply picks up whatever is due.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "due = only endpoints past next_probe_at; full = whole capped sweep"
+        required: false
+        default: "due"
+        type: choice
+        options: [due, full]
+
+# Never let two sweeps overlap — they would double-count probe_daily and hammer
+# the same hosts twice.
+concurrency:
+  group: probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Probe agent endpoints
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BSC_MAINNET_RPC: ${{ secrets.BSC_MAINNET_RPC }}
+          PROBE_CONCURRENCY: "16"
+          HOST_GAP_MS: "300"
+          PER_OPERATOR_CAP: "60"
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "full" ]; then
+            npx tsx scripts/probe-agents.ts
+          else
+            npx tsx scripts/probe-agents.ts --due
+          fi

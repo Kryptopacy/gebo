@@ -1,0 +1,49 @@
+name: resolve-registrations
+
+# Second-pass registration resolution.
+#
+# The registry sync resolves `data:` URIs inline because they decode from
+# calldata with no network call. Remote pointers (https:, ipfs:) are deferred —
+# fetching ~100k of them is slow and must be paced per host, since one operator
+# accounts for around 80% of all metadata URLs.
+#
+# This job works through whatever is still unresolved, a bounded slice at a time,
+# so progress accumulates across runs instead of needing one very long job.
+
+on:
+  schedule:
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Maximum registrations to fetch this run"
+        required: false
+        default: "8000"
+        type: string
+
+concurrency:
+  group: resolve-registrations
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Resolve pending registrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BSC_MAINNET_RPC: ${{ secrets.BSC_MAINNET_RPC }}
+          RESOLVE_CONCURRENCY: "20"
+          HOST_GAP_MS: "250"
+        run: npx tsx scripts/resolve-pending.ts --limit ${{ github.event.inputs.limit || '8000' }}
