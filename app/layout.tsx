@@ -88,6 +88,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="shell">
             <div className="colophon-grid">
               <div>
+                <a href="/" className="wordmark" style={{ marginBottom: 14 }} aria-label="GEBO home">
+                  <Image src="/gebo-mark.png" alt="" width={22} height={22} className="wordmark-mark" />
+                  <span className="wordmark-text" style={{ fontSize: 17 }}>GEBO</span>
+                </a>
                 <p>
                   Every figure in GEBO is measured by this project and reproducible from
                   the scripts in it. Definitions and known defects are published rather

@@ -18,6 +18,26 @@ export default async function Home() {
   const judgedTotal = sumOf(JUDGED_CATEGORIES);
   const otherTotal = sumOf(OTHER_CATEGORIES);
 
+  /**
+   * Everything below is derived, never asserted.
+   *
+   * An earlier version wrote "mean 1.2 agents each" and "three mentions of
+   * rebalancing" into the copy. Both were true when typed and would silently
+   * become false as the chain moved - the same failure as hardcoding the funnel.
+   * For a registry whose whole claim is measurement, stale prose is worse than
+   * no prose.
+   */
+  const meanPerOwner = CENSUS.owners > 0
+    ? (CENSUS.censused / CENSUS.owners).toFixed(1)
+    : "0";
+
+  const judgedBreakdown = JUDGED_CATEGORIES
+    .map((c) => ({ slug: c.slug, n: agg.categories[c.slug] ?? 0 }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n)
+    .map((x) => `${x.slug} ${x.n}`)
+    .join(", ");
+
   const steps = [
     {
       n: CENSUS.tokensMinted,
@@ -128,7 +148,9 @@ export default async function Home() {
             <div className="readout">
               <dt>Distinct owners</dt>
               <dd>{(CENSUS.owners / 1000).toFixed(0)}k</dd>
-              <div className="qualifier">Mean 1.2 agents each — no ownership concentration</div>
+              <div className="qualifier">
+                Mean {meanPerOwner} agents each, so ownership is not concentrated
+              </div>
             </div>
             <div className="readout">
               <dt>Endpoint operators</dt>
@@ -210,11 +232,11 @@ export default async function Home() {
           </div>
 
           <div className="notice mt-l">
-            Only <strong>{judgedTotal}</strong> agents in the whole registry verifiably do one
-            of these four jobs. That is the measured reality, not a gap in our matching: the
-            corpus contains three mentions of rebalancing and one of health factor. The
-            opportunity surface below each category is indexed from PancakeSwap and Venus
-            regardless, so the work is visible even where nobody is serving it.
+            Only <strong>{judgedTotal}</strong> agents in the whole registry verifiably do one of
+            these four jobs{judgedBreakdown ? ` (${judgedBreakdown})` : ""}. That is the measured
+            reality rather than a gap in our matching, and it is why each category also carries an
+            opportunity surface indexed from PancakeSwap and Venus: the work stays visible even
+            where nobody is serving it.
           </div>
         </div>
       </section>
