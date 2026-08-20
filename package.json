@@ -1,42 +1,61 @@
 ﻿{
-    "name":  "gebo",
-    "version":  "0.1.0",
-    "private":  true,
-    "type":  "module",
-    "description":  "GEBO â€” verification-first agent registry for BNB Smart Chain",
-    "scripts":  {
-                    "dev":  "next dev",
-                    "build":  "next build",
-                    "start":  "next start",
-                    "keys:gen":  "tsx scripts/gen-keys.ts",
-                    "census:registry":  "tsx scripts/registry-census.ts",
-                    "funnel":  "tsx scripts/funnel.ts",
-                    "tier":  "tsx scripts/check-tier.ts",
-                    "typecheck":  "tsc --noEmit",
-                    "test":  "vitest run",
-                    "test:watch":  "vitest",
-                    "docs:measurements":  "tsx scripts/write-measurements.ts",
-                    "classify":  "tsx scripts/classify-agents.ts",
-                    "categories:emerging":  "tsx scripts/emerging-categories.ts",
-                    "verify":  "tsc --noEmit \u0026\u0026 vitest run \u0026\u0026 next build"
-                },
-    "dependencies":  {
-                         "@altananetwork/sdk":  "^0.8.0",
-                         "dotenv":  "^17.4.2",
-                         "drizzle-orm":  "^0.45.2",
-                         "next":  "^15.5.0",
-                         "postgres":  "^3.4.9",
-                         "react":  "^19.0.0",
-                         "react-dom":  "^19.0.0",
-                         "viem":  "^2.55.18"
-                     },
-    "devDependencies":  {
-                            "@types/node":  "^24.0.0",
-                            "@types/react":  "^19.0.0",
-                            "@types/react-dom":  "^19.0.0",
-                            "drizzle-kit":  "^0.31.10",
-                            "tsx":  "^4.19.0",
-                            "typescript":  "^5.7.0",
-                            "vitest":  "^4.1.11"
-                        }
+  "name": "gebo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GEBO — verification-first agent registry for BNB Smart Chain",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "verify": "tsc --noEmit && vitest run && next build",
+
+    "migrate": "tsx scripts/migrate.ts",
+    "db:check": "tsx scripts/db-check.ts",
+
+    "sync": "tsx scripts/sync-registry.ts",
+    "sync:backfill": "tsx scripts/sync-registry.ts --backfill",
+    "resolve": "tsx scripts/resolve-pending.ts",
+    "probe": "tsx scripts/probe-agents.ts",
+    "probe:due": "tsx scripts/probe-agents.ts --due",
+    "opportunities": "tsx scripts/index-opportunities.ts",
+    "classify": "tsx scripts/classify-agents.ts",
+
+    "stats": "tsx scripts/show-stats.ts",
+    "cron:status": "tsx scripts/cron-status.ts",
+    "cron:fingerprint": "tsx scripts/cron-fingerprint.ts",
+    "classify:drift": "tsx scripts/check-classify-drift.ts",
+    "categories:emerging": "tsx scripts/emerging-categories.ts",
+    "docs:measurements": "tsx scripts/write-measurements.ts",
+
+    "keys:gen": "tsx scripts/gen-keys.ts",
+    "spike:altana": "tsx scripts/spike-altana.ts",
+    "preflight": "tsx scripts/preflight.ts",
+    "logo": "tsx scripts/build-logo.ts"
+  },
+  "dependencies": {
+    "@altananetwork/sdk": "^0.8.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "next": "^15.5.0",
+    "postgres": "^3.4.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "viem": "^2.55.18"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11"
+  }
 }
