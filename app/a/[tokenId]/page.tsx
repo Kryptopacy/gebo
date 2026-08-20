@@ -44,6 +44,12 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             {a.x402 && <span className="chip chip-flat">x402</span>}
           </div>
           <p className="standfirst sm">{st.reason}</p>
+          <div className="inline-list mt-m">
+            <a href={`/a/${a.token_id}/hire`} className="cta">
+              {fatal.length ? "Inspect authority scope" : "Authorise this agent"}
+            </a>
+            <span className="xs t-4">Nothing is signed. Scope, simulate, then review the grant.</span>
+          </div>
         </div>
       </section>
 
