@@ -1,35 +1,38 @@
-{
-  "name": "gebo",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "GEBO — verification-first agent registry for BNB Smart Chain",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "keys:gen": "tsx scripts/gen-keys.ts",
-    "census:registry": "tsx scripts/registry-census.ts",
-    "funnel": "tsx scripts/funnel.ts",
-    "tier": "tsx scripts/check-tier.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@altananetwork/sdk": "^0.8.0",
-    "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2",
-    "next": "^15.5.0",
-    "postgres": "^3.4.9",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "viem": "^2.55.18"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "drizzle-kit": "^0.31.10",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
-  }
+﻿{
+    "name":  "gebo",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "description":  "GEBO â€” verification-first agent registry for BNB Smart Chain",
+    "scripts":  {
+                    "dev":  "next dev",
+                    "build":  "next build",
+                    "start":  "next start",
+                    "keys:gen":  "tsx scripts/gen-keys.ts",
+                    "census:registry":  "tsx scripts/registry-census.ts",
+                    "funnel":  "tsx scripts/funnel.ts",
+                    "tier":  "tsx scripts/check-tier.ts",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run",
+                    "test:watch":  "vitest"
+                },
+    "dependencies":  {
+                         "@altananetwork/sdk":  "^0.8.0",
+                         "dotenv":  "^17.4.2",
+                         "drizzle-orm":  "^0.45.2",
+                         "next":  "^15.5.0",
+                         "postgres":  "^3.4.9",
+                         "react":  "^19.0.0",
+                         "react-dom":  "^19.0.0",
+                         "viem":  "^2.55.18"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^24.0.0",
+                            "@types/react":  "^19.0.0",
+                            "@types/react-dom":  "^19.0.0",
+                            "drizzle-kit":  "^0.31.10",
+                            "tsx":  "^4.19.0",
+                            "typescript":  "^5.7.0",
+                            "vitest":  "^4.1.11"
+                        }
 }
