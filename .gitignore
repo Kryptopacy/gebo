@@ -1,4 +1,4 @@
-# Secrets — never commit
+# Secrets â€" never commit
 .env
 .env.local
 .env.*.local
@@ -36,7 +36,7 @@ drizzle/meta/_journal.json.bak
 tmp/
 scratch/
 
-# Census output � regenerable, 144MB+, far past GitHub's limits
+# Census output - regenerable, 144MB+, far past GitHub's limits
 data/*.ndjson
 data/*.json
 

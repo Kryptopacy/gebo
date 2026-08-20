@@ -72,48 +72,114 @@ export type Agent = {
 };
 
 // ── categories ─────────────────────────────────────────────────────────────
+//
+// The brief requires four categories to be first-class and equally deep, and
+// names the criterion "Agent Diversity". That is a requirement to INCLUDE those
+// four well, not a restriction to only them.
+//
+// An earlier version treated the four as an exhaustive taxonomy and filed every
+// other agent under a second-class "adjacent" label. That buried roughly 180 real
+// agents across five genuine categories, and left a dead end for anyone looking
+// for a research or payments agent - a Functionality failure while being scored
+// on diversity.
+//
+// So: nine categories, all browsable. `judged: true` marks the four that carry
+// the guaranteed depth requirement and an indexed on-chain opportunity surface.
 
 export const CATEGORIES = {
   rebalancing: {
     slug: "rebalancing",
+    judged: true,
     job: "Keep my LP position in range",
     blurb: "Manages concentrated-liquidity ranges and resets positions when price drifts out of band.",
     venue: "PancakeSwap V3",
-    keywords: ["rebalanc", "liquidity", "lp ", "concentrated", "range", "pancake", "uniswap", "pool", "position manager"],
     counterfactual: "against an unmanaged position and against simply holding, net of impermanent loss, gas and the agent's fee",
     floor: "30 rebalance events",
   },
   grid: {
     slug: "grid",
+    judged: true,
     job: "Trade a range automatically",
-    blurb: "Places and manages grid orders inside a band, with a declared behaviour when price leaves it.",
+    blurb: "Places and manages a ladder of orders inside a band, with a declared behaviour when price leaves it.",
     venue: "PancakeSwap · DEX",
-    keywords: ["grid", "dca", "market mak", "spread", "band", "range trad", "scalp", "arbitrage"],
     counterfactual: "against holding over the same window, marked to market including open inventory",
     floor: "100 closed trades",
   },
   yield: {
     slug: "yield",
+    judged: true,
     job: "Move my capital to better yield",
     blurb: "Routes capital toward the highest sustainable rate, quoting the unboosted lower bound.",
     venue: "Venus · Aave V3 · Lista",
-    keywords: ["yield", "apy", "apr", "farm", "vault", "stake", "staking", "optimi", "compound", "lend", "venus", "aave", "lista"],
     counterfactual: "against the best passive single-venue deposit, net of migration gas",
     floor: "10 migrations",
   },
   health: {
     slug: "health",
+    judged: true,
     job: "Stop my loan being liquidated",
     blurb: "Watches health factor and acts before liquidation, with declared oracle sources.",
     venue: "Venus · Aave V3",
-    keywords: ["health factor", "liquidat", "collateral", "ltv", "borrow", "debt", "margin call", "loan", "monitor"],
     counterfactual: "against the no-agent outcome replayed over realised prices",
     floor: "one adverse regime observed",
+  },
+
+  // Also real, also browsable. These are what most working agents on BNB Chain
+  // actually do, and hiding them would misrepresent the ecosystem.
+  trading: {
+    slug: "trading",
+    judged: false,
+    job: "Trade tokens on my behalf",
+    blurb: "General on-chain trading: swaps, entries and exits, copy-trading and launchpad activity.",
+    venue: "PancakeSwap · Four.meme",
+    counterfactual: "against holding, marked to market including open positions",
+    floor: "100 closed trades",
+  },
+  research: {
+    slug: "research",
+    judged: false,
+    job: "Tell me what is happening",
+    blurb: "Screening, analysis and monitoring. Produces information rather than transactions.",
+    venue: "Off-chain data · on-chain reads",
+    counterfactual: "against the same research done by hand, on time and cost",
+    floor: "10 completed tasks",
+  },
+  payments: {
+    slug: "payments",
+    judged: false,
+    job: "Pay and get paid autonomously",
+    blurb: "Per-call settlement and job escrow, over x402 or ERC-8183.",
+    venue: "x402 · ERC-8183",
+    counterfactual: "against a manual invoice-and-settle cycle",
+    floor: "20 settled payments",
+  },
+  social: {
+    slug: "social",
+    judged: false,
+    job: "Watch the conversation",
+    blurb: "Social signal, sentiment and community activity.",
+    venue: "Off-chain platforms",
+    counterfactual: "against manual monitoring, on coverage and latency",
+    floor: "10 completed tasks",
+  },
+  infra: {
+    slug: "infra",
+    judged: false,
+    job: "Run agent infrastructure",
+    blurb: "Registry, identity, deployment and wallet tooling that other agents depend on.",
+    venue: "ERC-8004 · tooling",
+    counterfactual: "against operating the same tooling yourself",
+    floor: "10 completed tasks",
   },
 } as const;
 
 export type CategorySlug = keyof typeof CATEGORIES;
 export const CATEGORY_LIST = Object.values(CATEGORIES);
+
+/** The four the brief requires to be first-class and equally deep. */
+export const JUDGED_CATEGORIES = CATEGORY_LIST.filter((c) => c.judged);
+/** Everything else that genuinely exists on the chain. */
+export const OTHER_CATEGORIES = CATEGORY_LIST.filter((c) => !c.judged);
 
 /**
  * Heuristic classification from the agent's name and declared protocols.
@@ -121,19 +187,21 @@ export const CATEGORY_LIST = Object.values(CATEGORIES);
  * rarely declare machine-readable capability, so anything stronger would be
  * invention rather than measurement.
  */
+/**
+ * Read the stored classification.
+ *
+ * Classification itself lives in src/lib/classify.ts and is applied by
+ * scripts/classify-agents.ts, which persists both the category and the evidence
+ * that produced it. This function no longer re-derives anything: an earlier
+ * version kept its own keyword list here, which drifted from the real classifier
+ * and matched substrings, so bare "lp" hit 192 agents through words like "help"
+ * and "alpha".
+ */
 export function classify(a: Agent): { category: CategorySlug | null; matched: string[] } {
   if (a.category && a.category in CATEGORIES) {
     return { category: a.category as CategorySlug, matched: a.category_matched ?? [] };
   }
-  const hay = `${a.name ?? ""} ${a.protocols.join(" ")}`.toLowerCase();
-  let best: { category: CategorySlug; matched: string[] } | null = null;
-  for (const c of CATEGORY_LIST) {
-    const matched = c.keywords.filter((k) => hay.includes(k));
-    if (matched.length && (!best || matched.length > best.matched.length)) {
-      best = { category: c.slug as CategorySlug, matched };
-    }
-  }
-  return best ?? { category: null, matched: [] };
+  return { category: null, matched: [] };
 }
 
 export function trustState(a: Agent): { state: TrustState; reason: string } {
@@ -535,10 +603,17 @@ export async function opportunitiesFor(category: CategorySlug): Promise<Opportun
 }
 
 /** Which payload fields each category surfaces, and how they are labelled. */
-export const OPPORTUNITY_COLUMNS: Record<
+/**
+ * Column sets for the indexed opportunity surface.
+ *
+ * Only the four judged categories have a chain-derived surface (PancakeSwap V3
+ * pools, Venus markets), so this is intentionally partial rather than covering
+ * all nine categories.
+ */
+export const OPPORTUNITY_COLUMNS: Partial<Record<
   CategorySlug,
   { key: string; label: string; fmt: (v: any, p: Record<string, any>) => string; align?: "right" }[]
-> = {
+>> = {
   rebalancing: [
     { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
     { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },

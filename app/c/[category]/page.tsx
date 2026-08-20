@@ -28,7 +28,7 @@ export default async function CategoryPage({
   const opps = await opportunitiesFor(slug);
   const eligible = opps.filter((o) => o.eligible);
   const ineligible = opps.filter((o) => !o.eligible);
-  const cols = OPPORTUNITY_COLUMNS[slug];
+  const cols = OPPORTUNITY_COLUMNS[slug] ?? [];
   const oppGrid = `minmax(0,1.6fr) ${cols.map(() => "7.5rem").join(" ")}`;
 
   const tally = (s: string) => inCat.filter((a) => trustState(a).state === s).length;
@@ -47,6 +47,7 @@ export default async function CategoryPage({
           </div>
           <div className="inline-list mt-m">
             <span className="chip chip-flat">{cat.venue}</span>
+            {cat.judged && <span className="chip chip-flat">indexed surface</span>}
             <span className="chip chip-flat">{eligible.length} live opportunities</span>
             <span className="chip chip-flat">{inCat.length} agents audited</span>
             <span className="chip chip-flat">{operators} operators</span>
@@ -69,7 +70,11 @@ export default async function CategoryPage({
           {opps.length === 0 ? (
             <div className="rows mt-m">
               <div className="row" style={{ gridTemplateColumns: "1fr" }}>
-                <div className="sm t-3">Opportunity indexing has not run for this category yet.</div>
+                <div className="sm t-3">
+                  {cat.judged
+                    ? "Opportunity indexing has not run for this category yet."
+                    : "This category has no chain-derived opportunity surface. Rebalancing, grid, yield and health factor map onto specific PancakeSwap and Venus state that can be indexed; the work here is not expressible as an on-chain position, so agents are listed on their measured behaviour instead."}
+                </div>
               </div>
             </div>
           ) : (

@@ -175,6 +175,32 @@ async function flush() {
       where chain_id = 56 and token_id = ${b.target.token_id}
         and trust_state <> 'SHADOWED'
     `;
+
+    /**
+     * Persist what the agent says it can do.
+     *
+     * The A2A card's `skills` array is the only capability signal here that is
+     * neither a name nor marketing copy - it is the agent's own account of its
+     * abilities. Names are useless for classification ("premium", "ala",
+     * "Professor", "bubbleaiagent" eleven times), so this is the material that
+     * makes categorisation possible at all. Earlier versions counted the skills
+     * and discarded the text, which left the classifier matching on names.
+     */
+    const ev = b.outcome.evidence as
+      | { description?: string | null; skills?: string[] | null }
+      | null;
+    if (ev && (ev.description || (ev.skills && ev.skills.length))) {
+      const desc = ev.description ? String(ev.description).slice(0, 2000) : null;
+      const skills = (ev.skills ?? []).map((s) => String(s).slice(0, 200)).slice(0, 40);
+      await sql`
+        update agents set
+          description = coalesce(${desc}, description),
+          skills = ${skills.length ? skills : null},
+          card_fetched_at = now(),
+          updated_at = now()
+        where chain_id = 56 and token_id = ${b.target.token_id}
+      `;
+    }
   }
 
   // Transitions only. A row per probe would swamp the table; a change is news.

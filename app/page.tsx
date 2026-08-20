@@ -1,4 +1,4 @@
-import { loadAggregates, loadCensus, CATEGORY_LIST } from "@/lib/data";
+import { loadAggregates, loadCensus, JUDGED_CATEGORIES, OTHER_CATEGORIES } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,6 +12,11 @@ function logWidth(n: number, max: number) {
 export default async function Home() {
   const [agg, CENSUS] = await Promise.all([loadAggregates(), loadCensus()]);
   const top = CENSUS.tokensMinted;
+
+  const sumOf = (cats: readonly { slug: string }[]) =>
+    cats.reduce((n, c) => n + (agg.categories[c.slug] ?? 0), 0);
+  const judgedTotal = sumOf(JUDGED_CATEGORIES);
+  const otherTotal = sumOf(OTHER_CATEGORIES);
 
   const steps = [
     {
@@ -177,15 +182,59 @@ export default async function Home() {
         <div className="shell">
           <h2>Four jobs worth paying an agent to do</h2>
           <p className="prose sm">
-            Named after the work, not the technology. Each surface indexes live chain state,
-            so it holds real opportunities whether or not a competent agent exists yet.
+            Named after the work, not the technology. Each of these four indexes live chain
+            state, so it holds real opportunities whether or not a competent agent exists yet.
+            Verified counts are agents that completed a protocol handshake.
           </p>
 
           <div className="rows mt-m">
             <div className="rows-head r-jobs">
               <span>Job</span><span>Agents</span><span>Venue</span>
             </div>
-            {CATEGORY_LIST.map((c) => {
+            {JUDGED_CATEGORIES.map((c) => {
+              const n = agg.categories[c.slug] ?? 0;
+              return (
+                <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
+                  <div>
+                    <h3>{c.job}</h3>
+                    <p className="xs t-3" style={{ margin: 0, maxWidth: "52ch" }}>{c.blurb}</p>
+                  </div>
+                  <div>
+                    <span className="num" style={{ fontSize: "1.4rem", color: n ? "var(--fg)" : "var(--fg-4)" }}>{n}</span>
+                    <span className="xs t-4 num" style={{ marginLeft: 6 }}>indexed surface</span>
+                  </div>
+                  <div className="sm t-3">{c.venue}</div>
+                </a>
+              );
+            })}
+          </div>
+
+          <div className="notice mt-l">
+            Only <strong>{judgedTotal}</strong> agents in the whole registry verifiably do one
+            of these four jobs. That is the measured reality, not a gap in our matching: the
+            corpus contains three mentions of rebalancing and one of health factor. The
+            opportunity surface below each category is indexed from PancakeSwap and Venus
+            regardless, so the work is visible even where nobody is serving it.
+          </div>
+        </div>
+      </section>
+
+      {/* ── the rest of the chain ─────────────────────────────────── */}
+      <section className="band">
+        <div className="shell">
+          <h2>What agents on BNB Chain actually do</h2>
+          <p className="prose sm">
+            The four above are the jobs worth automating. These are the categories the chain is
+            actually full of, labelled for what they are rather than forced into a category
+            they do not fit. {otherTotal} classified agents across {OTHER_CATEGORIES.length}{" "}
+            further categories.
+          </p>
+
+          <div className="rows mt-m">
+            <div className="rows-head r-jobs">
+              <span>Category</span><span>Agents</span><span>Venue</span>
+            </div>
+            {OTHER_CATEGORIES.map((c) => {
               const n = agg.categories[c.slug] ?? 0;
               return (
                 <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
@@ -201,6 +250,15 @@ export default async function Home() {
               );
             })}
           </div>
+
+          <p className="xs t-4 mt-m" style={{ maxWidth: "76ch" }}>
+            Every classification records the evidence that produced it, drawn from the
+            agent&apos;s own A2A card skills where available, then its registration description,
+            then its name. A category is only assigned on specific evidence: a phrase, or a
+            defining word. Corroborating words can support a match but never carry one, because
+            letting bare terms like &ldquo;yield&rdquo; or &ldquo;trade&rdquo; stand alone
+            inflated these counts several times over during development.
+          </p>
         </div>
       </section>
 

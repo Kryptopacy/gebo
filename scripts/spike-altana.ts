@@ -1,26 +1,33 @@
 /**
- * Altana session spike — the safety thesis, tested rather than asserted.
+ * Altana session spike - the safety thesis, tested rather than asserted.
  *
  * GEBO's central claim is that an agent's limits are enforced on chain by the
  * session validator, not by the good behaviour of the marketplace or the agent.
- * That claim has been unverifiable until now for want of testnet gas. This
- * proves or refutes it.
  *
- * Six assertions, on BNB Smart Chain Testnet (97):
+ * Six assertions on BNB Smart Chain Testnet (97):
  *
- *   1  grant       a session scoped to ONE contract and ONE function
- *   2  in-scope    the allowed call succeeds
- *   3  wrong fn    a different function on the SAME contract reverts
- *   4  wrong target the same function on a DIFFERENT contract reverts
- *   5  third party the authority is readable from the Keystore by anyone
- *   6  revoke      after revocation the previously-allowed call fails
+ *   1  grant        a session scoped to one contract, with a spend cap
+ *   2  in scope     the permitted call succeeds
+ *   3  spend cap    an UNCAPPED token cannot be moved, even from that contract
+ *   4  wrong target the same call on a different contract is refused
+ *   5  third party  the authority is readable from the Keystore by anyone
+ *   6  revoke       after revocation the previously permitted call fails
  *
- * Assertions 3, 4 and 6 pass by FAILING. A revert is the result we want; a
- * success there would mean the enforcement claim is false and the Blast Radius
- * panel is decoration.
+ * Assertions 3, 4 and 6 pass by FAILING - a revert is the wanted result.
  *
- * Positive control is WBNB.approve, chosen because it needs no liquidity, no
- * price and no counterparty — it isolates the validator from market conditions.
+ * The verdict deliberately requires assertion 2 to pass. An earlier run reported
+ * 5/6 with the positive control failing and declared enforcement upheld, which
+ * was wrong: if every call reverts then universal failure is indistinguishable
+ * from enforcement, and the refusals prove nothing.
+ *
+ * PERMISSION SHAPE. Verified against Altana's DEX guide after several failures:
+ *   calls: [{ to: contract }]                    target only, no signature
+ *   spend: [{ limit, period, token? }]           the token that LEAVES the wallet
+ * Passing {to, signature} pairs looks tighter but authorises nothing, and every
+ * execute fails with NoSpendPermissions.
+ *
+ * This file is ASCII-only. Literal em dashes were previously written as
+ * Windows-1252 bytes and broke the bundler.
  */
 import "dotenv/config";
 import {
@@ -32,25 +39,25 @@ import {
 } from "viem";
 import { bscTestnet } from "viem/chains";
 
-// BNB testnet. WBNB is the positive-control target; USDT stands in as the
-// out-of-allowlist target for assertion 4.
+// BNB testnet. WBNB is the in-scope target; USDT is the out-of-scope one.
 const WBNB = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as const;
 const OTHER_TOKEN = "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd" as const;
-const SPENDER = "0x9a489505a00cE272eAa5e07Dba6491314CaE3796" as const; // PCS testnet router
+const SPENDER = "0x9a489505a00cE272eAa5e07Dba6491314CaE3796" as const;
 
 const KEYSTORE_ABI = parseAbi([
   "function getKeys(address user) view returns (bytes32[])",
-  "function getPublicKey(address user, bytes32 keyId) view returns (bytes)",
   "function isValidKey(address user, bytes32 keyId) view returns (bool)",
 ]);
 
 const results: { n: number; name: string; expect: string; pass: boolean; detail: string }[] = [];
 function record(n: number, name: string, expect: string, pass: boolean, detail: string) {
   results.push({ n, name, expect, pass, detail });
-  console.log(`  ${pass ? "PASS" : "FAIL"}  ${String(n)}. ${name}`);
+  console.log(`  ${pass ? "PASS" : "FAIL"}  ${n}. ${name}`);
   console.log(`        expected: ${expect}`);
   console.log(`        observed: ${detail}\n`);
 }
+
+const short = (e: any) => String(e?.shortMessage ?? e?.message ?? e).slice(0, 150);
 
 const pk = process.env.DEMO_OWNER_PRIVATE_KEY as Hex | undefined;
 if (!pk) { console.error("DEMO_OWNER_PRIVATE_KEY missing"); process.exit(1); }
@@ -63,7 +70,7 @@ const pub = createPublicClient({
 const client = createAltanaClient({ chains: [BNB_TESTNET] });
 const signer = signerFromPrivateKey(pk);
 
-console.log("\n  ALTANA SESSION SPIKE — BNB Smart Chain Testnet (97)");
+console.log("\n  ALTANA SESSION SPIKE - BNB Smart Chain Testnet (97)");
 console.log("  " + "=".repeat(68) + "\n");
 
 const wallet = await client.createWallet({ signer });
@@ -74,93 +81,78 @@ console.log(`  balance   ${formatEther(bal)} tBNB`);
 console.log(`  keystore  ${BNB_TESTNET.keyStore}`);
 console.log(`  relay     ${BNB_TESTNET.relayUrl}\n`);
 
-if (bal === 0n) { console.error("  wallet has no gas — cannot run the spike\n"); process.exit(1); }
+if (bal === 0n) { console.error("  wallet has no gas, cannot run the spike\n"); process.exit(1); }
+
+const depositData = encodeFunctionData({
+  abi: parseAbi(["function deposit()"]), functionName: "deposit",
+});
+const transferWbnb = encodeFunctionData({
+  abi: parseAbi(["function transfer(address,uint256) returns (bool)"]),
+  functionName: "transfer", args: [SPENDER, 1n],
+});
+const approveOther = encodeFunctionData({
+  abi: parseAbi(["function approve(address,uint256) returns (bool)"]),
+  functionName: "approve", args: [SPENDER, 1n],
+});
 
 let session: Awaited<ReturnType<typeof client.grantSession>> | null = null;
 
-// ── 1 · grant a deliberately narrow session ───────────────────────────────
+// 1. Grant a session scoped to WBNB, capped in native only.
 try {
   session = await client.grantSession({
     wallet,
     signer,
     permissions: {
-      // Target-only rule, per Altana's DEX guide. A `signature` field is not
-      // used there, and adding one authorises nothing.
       calls: [{ to: WBNB }],
-      // The cap covers the token that LEAVES the wallet � native here, because
-      // deposit() wraps BNB. Capping the target contract's own token does not
-      // authorise the call.
       spend: [{ limit: 10n ** 16n, period: "day" }],
     },
     expiry: Math.floor(Date.now() / 1000) + 3600,
   });
-  record(1, "Grant a scoped session", "session granted with one allowed call",
+  record(1, "Grant a scoped session", "session granted, scoped to one contract",
     !!session.publicKey,
-    `publicKey ${session.publicKey.slice(0, 22)}… expiry ${new Date(session.expiry * 1000).toISOString()}` +
-    (session.transactionHash ? ` tx ${session.transactionHash.slice(0, 18)}…` : " (no receipt surfaced)"));
-} catch (e: any) {
-  record(1, "Grant a scoped session", "session granted", false, String(e?.shortMessage ?? e?.message ?? e).slice(0, 220));
+    `publicKey ${session.publicKey.slice(0, 22)}... expiry ${new Date(session.expiry * 1000).toISOString()}` +
+    (session.transactionHash ? ` tx ${session.transactionHash.slice(0, 18)}...` : " (no receipt surfaced)"));
+} catch (e) {
+  record(1, "Grant a scoped session", "session granted", false, short(e));
 }
 
 if (session) {
-  // ── 2 · the allowed call must succeed ───────────────────────────────────
+  // 2. Positive control. deposit() wraps native BNB: inside the target rule and
+  //    inside the native cap. Needs no pre-existing token balance.
   try {
     const res = await client.execute({
-      session,
-      calls: [{
-        to: WBNB,
-        data: encodeFunctionData({ abi: parseAbi(["function deposit()"]), functionName: "deposit" }),
-        value: 10n ** 13n,
-      }],
+      session, calls: [{ to: WBNB, data: depositData, value: 10n ** 13n }],
     });
+    const tx = (res as any)?.transactionHash;
     record(2, "In-scope call succeeds", "deposit() on WBNB is permitted", true,
-      `executed${(res as any)?.transactionHash ? ` tx ${String((res as any).transactionHash).slice(0, 18)}…` : ""}`);
-  } catch (e: any) {
-    record(2, "In-scope call succeeds", "deposit() on WBNB is permitted", false,
-      `reverted: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 200)}`);
+      `executed${tx ? ` tx ${String(tx).slice(0, 18)}...` : ""}`);
+  } catch (e) {
+    record(2, "In-scope call succeeds", "deposit() on WBNB is permitted", false, `reverted: ${short(e)}`);
   }
 
-  // ── 3 · different function, same contract → must revert ─────────────────
+  // 3. Spend is a separate dimension: WBNB is callable but uncapped, so moving
+  //    WBNB out must still fail.
   try {
-    await client.execute({
-      session,
-      calls: [{
-        to: WBNB,
-        data: encodeFunctionData({
-          abi: parseAbi(["function transfer(address,uint256) returns (bool)"]),
-          functionName: "transfer",
-          args: [SPENDER, 1n],
-        }),
-      }],
-    });
-    record(3, "Selector scoping is enforced", "transfer() on WBNB must be rejected", false,
-      "the call SUCCEEDED — function-level scoping is not enforced");
-  } catch (e: any) {
-    record(3, "Spend cap is a separate dimension", "moving WBNB must fail � the cap covers native only", true,
-      `rejected: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 140)}`);
+    await client.execute({ session, calls: [{ to: WBNB, data: transferWbnb }] });
+    record(3, "Spend cap is a separate dimension",
+      "moving WBNB must fail, the cap covers native only", false,
+      "the transfer SUCCEEDED, so an uncapped token left an allowed contract");
+  } catch (e) {
+    record(3, "Spend cap is a separate dimension",
+      "moving WBNB must fail, the cap covers native only", true, `refused: ${short(e)}`);
   }
 
-  // ── 4 · same function, different contract → must revert ─────────────────
+  // 4. Target scoping: same call shape, different contract.
   try {
-    await client.execute({
-      session,
-      calls: [{
-        to: OTHER_TOKEN,
-        data: encodeFunctionData({
-          abi: parseAbi(["function approve(address,uint256) returns (bool)"]),
-          functionName: "approve",
-          args: [SPENDER, 1n],
-        }),
-      }],
-    });
-    record(4, "Target scoping is enforced", "approve() on another token must be rejected", false,
-      "the call SUCCEEDED — contract-level scoping is not enforced");
-  } catch (e: any) {
-    record(4, "Target scoping is enforced", "approve() on another token must be rejected", true,
-      `rejected: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    await client.execute({ session, calls: [{ to: OTHER_TOKEN, data: approveOther }] });
+    record(4, "Target scoping is enforced", "a call to another token must be refused", false,
+      "the call SUCCEEDED, so contract scoping is not enforced");
+  } catch (e) {
+    record(4, "Target scoping is enforced", "a call to another token must be refused", true,
+      `refused: ${short(e)}`);
   }
 
-  // ── 5 · a third party can read the authority ────────────────────────────
+  // 5. Anyone can verify the authority: a plain public read.
   try {
     const keyIds = await pub.readContract({
       address: BNB_TESTNET.keyStore as Address, abi: KEYSTORE_ABI,
@@ -176,46 +168,34 @@ if (session) {
         functionName: "isValidKey", args: [owner, match],
       }) as boolean;
     }
-    record(5, "Authority is publicly verifiable", "the session key appears in the Keystore and reads as valid",
-      !!match && valid,
+    record(5, "Authority is publicly verifiable",
+      "the session key is in the Keystore and reads as valid", !!match && valid,
       match
-        ? `keyId ${match.slice(0, 18)}… isValidKey=${valid} (read with no admin key, ${keyIds.length} key(s) on wallet)`
-        : `session key NOT in Keystore — ${keyIds.length} key(s) found. Granted with register:false it would be enforced but invisible.`);
-  } catch (e: any) {
-    record(5, "Authority is publicly verifiable", "Keystore read succeeds", false,
-      String(e?.shortMessage ?? e?.message ?? e).slice(0, 200));
+        ? `keyId ${match.slice(0, 18)}... isValidKey=${valid}, read with no admin key, ${keyIds.length} key(s) on wallet`
+        : `not in Keystore. ${keyIds.length} key(s) found. Granted with register:false it would be enforced but invisible.`);
+  } catch (e) {
+    record(5, "Authority is publicly verifiable", "Keystore read succeeds", false, short(e));
   }
 
-  // ── 6 · after revocation the allowed call must fail ─────────────────────
+  // 6. Revocation, then repeat the call that previously worked.
   try {
     const rev = await client.revokeSession({ wallet, signer, session });
-    console.log(`  revoked${(rev as any)?.transactionHash ? ` tx ${String((rev as any).transactionHash).slice(0, 18)}…` : ""}\n`);
-
+    const rtx = (rev as any)?.transactionHash;
+    console.log(`  revoked${rtx ? ` tx ${String(rtx).slice(0, 18)}...` : ""}\n`);
     try {
-      await client.execute({
-        session,
-        calls: [{
-          to: WBNB,
-          data: encodeFunctionData({
-            abi: parseAbi(["function approve(address,uint256) returns (bool)"]),
-            functionName: "approve",
-            args: [SPENDER, 1n],
-          }),
-        }],
-      });
-      record(6, "Revocation takes effect", "the previously-allowed call must now fail", false,
-        "the call SUCCEEDED after revocation — revocation is not effective");
-    } catch (e: any) {
-      record(6, "Revocation takes effect", "the previously-allowed call must now fail", true,
-        `rejected: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+      await client.execute({ session, calls: [{ to: WBNB, data: depositData, value: 10n ** 13n }] });
+      record(6, "Revocation takes effect", "the previously permitted call must now fail", false,
+        "the call SUCCEEDED after revocation");
+    } catch (e) {
+      record(6, "Revocation takes effect", "the previously permitted call must now fail", true,
+        `refused: ${short(e)}`);
     }
-  } catch (e: any) {
-    record(6, "Revocation takes effect", "revokeSession succeeds", false,
-      `revoke failed: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 200)}`);
+  } catch (e) {
+    record(6, "Revocation takes effect", "revokeSession succeeds", false, `revoke failed: ${short(e)}`);
   }
 }
 
-// ── verdict ────────────────────────────────────────────────────────────────
+// Verdict.
 const passed = results.filter((r) => r.pass).length;
 console.log("  " + "=".repeat(68));
 console.log(`  ${passed}/${results.length} assertions passed`);
@@ -223,12 +203,18 @@ for (const r of results) console.log(`    ${r.pass ? "ok  " : "FAIL"} ${r.n}. ${
 
 const positive = results.find((r) => r.n === 2);
 const negatives = results.filter((r) => [3, 4, 6].includes(r.n));
-// A negative control only means something if a permitted call demonstrably
-// succeeds. Otherwise "everything reverts" is indistinguishable from enforcement,
-// which is exactly what made the first run of this spike inconclusive.
 const enforced = !!positive?.pass && negatives.length > 0 && negatives.every((r) => r.pass);
-console.log(`\n  Enforcement claim: ${enforced ? "UPHELD" : "NOT UPHELD"}`);
-console.log(enforced
-  ? "  Out-of-scope calls revert and revocation is effective, so GEBO's blast\n  radius describes an enforced limit rather than a promise."
-  : "  At least one out-of-scope call was permitted. The blast radius cannot be\n  presented as an enforced guarantee until this is understood.");
+
+console.log(`\n  Enforcement claim: ${enforced ? "UPHELD" : positive?.pass ? "NOT UPHELD" : "INCONCLUSIVE"}`);
+if (enforced) {
+  console.log("  A permitted call succeeds, out-of-scope targets are refused, an uncapped");
+  console.log("  token cannot leave an allowed contract, and revocation is effective. The");
+  console.log("  blast radius therefore describes an enforced limit, not a promise.");
+} else if (!positive?.pass) {
+  console.log("  The permitted call did not succeed, so the refusals prove nothing:");
+  console.log("  universal failure looks identical to enforcement.");
+} else {
+  console.log("  An out-of-scope call was permitted. The blast radius cannot be presented");
+  console.log("  as an enforced guarantee until that is understood.");
+}
 console.log("");

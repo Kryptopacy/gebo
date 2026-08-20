@@ -74,6 +74,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/c/grid">Grid</a>
               <a href="/c/yield">Yield</a>
               <a href="/c/health">Health factor</a>
+              <a href="/c/trading" className="nav-sep">Trading</a>
+              <a href="/c/research">Research</a>
+              <a href="/c/payments">Payments</a>
               <a href="/methodology" className="nav-sep">Methodology</a>
             </nav>
           </div>
