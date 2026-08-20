@@ -235,18 +235,28 @@ export type BlastRadius = {
 export function buildPermissions(preset: ScopePreset): SessionPermissions {
   const calls: CallPermission[] = [];
 
-  // AND semantics: {to, signature} restricts to that function on that contract.
+  /**
+   * Target-only rules, verified on BNB testnet.
+   *
+   * An earlier version emitted `{ to, signature }` pairs, which looks tighter but
+   * authorises nothing: every execute failed with NoSpendPermissions. Altana's
+   * own DEX guide uses `{ to: router }` alone, and that is what the validator
+   * matches. Spike transaction 0x06be3407dc746356… is the first call that
+   * succeeded after switching to this shape.
+   *
+   * Narrowing is still real, and comes from two independent dimensions:
+   *   calls  restricts WHICH contracts may be touched
+   *   spend  restricts WHICH tokens may leave, and how much per period
+   *
+   * Verified separately: a target-only rule permits calling WBNB, yet moving
+   * WBNB out is still refused when the cap covers native only. Selector-level
+   * detail is retained on the preset for display, because users deserve to see
+   * which functions an agent intends to call even though the validator scopes by
+   * contract.
+   */
   for (const c of preset.contracts) {
     const contract = CONTRACTS[c];
-    if (!contract) continue;
-    if (!preset.selectors.length) {
-      calls.push({ to: contract.address });
-      continue;
-    }
-    for (const s of preset.selectors) {
-      const sel = SELECTORS[s];
-      if (sel) calls.push({ to: contract.address, signature: sel.signature });
-    }
+    if (contract) calls.push({ to: contract.address });
   }
 
   return { calls, spend: preset.caps.map((c) => spendCap(c.symbol, c.amount, c.period)) };
@@ -268,7 +278,18 @@ export function blastRadius(preset: ScopePreset): BlastRadius {
 
   if (preset.selectors.includes("approve")) {
     warnings.push(
-      "Includes approve(). That grants a third party ongoing spending rights, which outlives any single transaction and is far broader than a swap.",
+      "This agent intends to call approve(). That grants a third party ongoing spending rights which outlive any single transaction. Note that the session scopes by contract, not by function, so an allowlisted contract can be called in other ways too.",
+    );
+  }
+
+  /**
+   * A scope with no spend cap cannot move value, verified on testnet: a
+   * target-only rule permits the call but an uncapped token is still refused.
+   * Worth stating positively rather than leaving the field empty.
+   */
+  if (preset.caps.length === 0 && preset.contracts.length > 0) {
+    warnings.push(
+      "No spend cap is granted, so this session cannot move tokens or native value even on the contracts it may call.",
     );
   }
 

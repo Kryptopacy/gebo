@@ -91,7 +91,7 @@ export default function ScopePicker({ presets, radii, agentName }: Props) {
             </div>
 
             <div>
-              <dt>Functions</dt>
+              <dt>Intended functions</dt>
               <dd>
                 {radius.selectors.length === 0 ? (
                   <span className="t-4">
@@ -155,6 +155,13 @@ export default function ScopePicker({ presets, radii, agentName }: Props) {
         </div>
       </div>
 
+      <p className="xs t-4 mt-m">
+        The session scopes by <strong>contract</strong>, not by function — verified on BNB
+        testnet. The functions listed above are what the agent intends to call, shown for
+        transparency; an allowlisted contract can be reached in other ways. Spending is
+        constrained separately, and an uncapped token cannot be moved even on a permitted
+        contract.
+      </p>
       <p className="xs t-4 mt-m">
         Base units are shown because the same stablecoin uses 6 decimals on some chains and
         18 on BNB Chain. A cap built against the wrong assumption is out by a factor of a

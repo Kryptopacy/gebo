@@ -69,14 +69,40 @@ function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, u
   const hasVersion = typeof json.version === "string" || typeof json.protocolVersion === "string";
   // Require a name plus at least one structural A2A field.
   const ok = hasName && (hasSkills || hasCaps || hasUrl);
+
+  /**
+   * Capture the skill text, not merely its count.
+   *
+   * This is the agent's own statement of what it can do, and it is the only
+   * capability signal in the ecosystem that is neither a name nor marketing
+   * copy. Discarding it — as an earlier version did — left classification
+   * matching against names like "premium" and "Professor".
+   */
+  const skillNames: string[] = [];
+  if (hasSkills) {
+    for (const s of json.skills.slice(0, 40)) {
+      if (typeof s === "string") { skillNames.push(s.slice(0, 120)); continue; }
+      if (s && typeof s === "object") {
+        const parts = [s.name, s.id, s.description].filter((x) => typeof x === "string" && x.length);
+        if (parts.length) skillNames.push(parts.join(" — ").slice(0, 200));
+        if (Array.isArray(s.tags)) {
+          for (const t of s.tags.slice(0, 8)) if (typeof t === "string") skillNames.push(t.slice(0, 60));
+        }
+      }
+    }
+  }
+
   return {
     ok,
     evidence: {
-      name: hasName ? String(json.name).slice(0, 80) : null,
-      skills: hasSkills ? json.skills.length : null,
+      name: hasName ? String(json.name).slice(0, 120) : null,
+      description: typeof json.description === "string" ? json.description.slice(0, 1200) : null,
+      skillCount: hasSkills ? json.skills.length : null,
+      skills: skillNames.length ? skillNames : null,
       hasCapabilities: hasCaps,
       hasUrl,
       hasVersion,
+      version: typeof json.version === "string" ? json.version : (json.protocolVersion ?? null),
     },
   };
 }

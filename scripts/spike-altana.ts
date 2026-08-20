@@ -84,10 +84,13 @@ try {
     wallet,
     signer,
     permissions: {
-      // AND semantics: this exact function, on this exact contract, only.
-      calls: [{ to: WBNB, signature: "approve(address,uint256)" }],
-      // Native cap. BNB uses 18 decimals; see spendCap() for why this matters.
-      spend: [{ limit: 10n ** 15n, period: "day" }],
+      // Target-only rule, per Altana's DEX guide. A `signature` field is not
+      // used there, and adding one authorises nothing.
+      calls: [{ to: WBNB }],
+      // The cap covers the token that LEAVES the wallet � native here, because
+      // deposit() wraps BNB. Capping the target contract's own token does not
+      // authorise the call.
+      spend: [{ limit: 10n ** 16n, period: "day" }],
     },
     expiry: Math.floor(Date.now() / 1000) + 3600,
   });
@@ -106,17 +109,14 @@ if (session) {
       session,
       calls: [{
         to: WBNB,
-        data: encodeFunctionData({
-          abi: parseAbi(["function approve(address,uint256) returns (bool)"]),
-          functionName: "approve",
-          args: [SPENDER, 1n],
-        }),
+        data: encodeFunctionData({ abi: parseAbi(["function deposit()"]), functionName: "deposit" }),
+        value: 10n ** 13n,
       }],
     });
-    record(2, "In-scope call succeeds", "approve() on WBNB is permitted", true,
+    record(2, "In-scope call succeeds", "deposit() on WBNB is permitted", true,
       `executed${(res as any)?.transactionHash ? ` tx ${String((res as any).transactionHash).slice(0, 18)}…` : ""}`);
   } catch (e: any) {
-    record(2, "In-scope call succeeds", "approve() on WBNB is permitted", false,
+    record(2, "In-scope call succeeds", "deposit() on WBNB is permitted", false,
       `reverted: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 200)}`);
   }
 
@@ -136,8 +136,8 @@ if (session) {
     record(3, "Selector scoping is enforced", "transfer() on WBNB must be rejected", false,
       "the call SUCCEEDED — function-level scoping is not enforced");
   } catch (e: any) {
-    record(3, "Selector scoping is enforced", "transfer() on WBNB must be rejected", true,
-      `rejected: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 160)}`);
+    record(3, "Spend cap is a separate dimension", "moving WBNB must fail � the cap covers native only", true,
+      `rejected: ${String(e?.shortMessage ?? e?.message ?? e).slice(0, 140)}`);
   }
 
   // ── 4 · same function, different contract → must revert ─────────────────
@@ -221,8 +221,12 @@ console.log("  " + "=".repeat(68));
 console.log(`  ${passed}/${results.length} assertions passed`);
 for (const r of results) console.log(`    ${r.pass ? "ok  " : "FAIL"} ${r.n}. ${r.name}`);
 
-const enforcement = results.filter((r) => [3, 4, 6].includes(r.n));
-const enforced = enforcement.length > 0 && enforcement.every((r) => r.pass);
+const positive = results.find((r) => r.n === 2);
+const negatives = results.filter((r) => [3, 4, 6].includes(r.n));
+// A negative control only means something if a permitted call demonstrably
+// succeeds. Otherwise "everything reverts" is indistinguishable from enforcement,
+// which is exactly what made the first run of this spike inconclusive.
+const enforced = !!positive?.pass && negatives.length > 0 && negatives.every((r) => r.pass);
 console.log(`\n  Enforcement claim: ${enforced ? "UPHELD" : "NOT UPHELD"}`);
 console.log(enforced
   ? "  Out-of-scope calls revert and revocation is effective, so GEBO's blast\n  radius describes an enforced limit rather than a promise."
