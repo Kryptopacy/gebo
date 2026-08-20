@@ -29,12 +29,18 @@ export type Agent = {
   x402: boolean;
   created_at: string;
   uri_scheme: string | null;
+  token_uri: string | null;
+  registration_resolved: boolean | null;
+  registration_error: string | null;
+  self_declared_active: boolean | null;
+  supported_trust: string[] | null;
   operator: {
     key: string;
     kind: "host" | "owner" | "unknown";
     host: string | null;
     registrableDomain: string | null;
     owner: string | null;
+    agentCount: number | null;
   };
   endpoints: { kind: "a2a" | "mcp" | "web"; url: string }[];
   lint: { defects: Defect[]; usable: boolean };
@@ -157,11 +163,29 @@ function db() {
       prepare: false,
       max: 3,
       idle_timeout: 20,
-      connect_timeout: 15,
+      // Fail fast rather than hanging a request. A slow pooler should degrade
+      // the page to its fallback, never stall it past a serverless timeout.
+      connect_timeout: 8,
       onnotice: () => {},
     });
   }
   return client;
+}
+
+/**
+ * Bound any database read. Without this a cold or saturated pooler stalls the
+ * whole render; the build already failed once at 60s for exactly this reason.
+ */
+async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), ms); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 let cache: Agent[] | null = null;
@@ -214,91 +238,119 @@ function fromFiles(): Agent[] {
   return [...byId.values()];
 }
 
-export async function loadAgents(): Promise<Agent[]> {
+/**
+ * One SELECT shared by every agent read, with the WHERE supplied by the caller.
+ * Parameterised through sql.unsafe so the shape stays in a single place instead
+ * of drifting across three near-identical queries.
+ */
+const AGENT_SELECT = `
+  select
+    a.token_id::text                             as token_id,
+    a.agent_id,
+    a.name,
+    coalesce(a.owner, '')                        as owner_address,
+    coalesce(a.protocols, '{}')                  as protocols,
+    coalesce(a.x402_supported, false)            as x402,
+    coalesce(a.registered_at, a.first_seen_at)   as created_at,
+    a.uri_scheme,
+    a.trust_state,
+    a.trust_reason,
+    a.category,
+    a.category_matched,
+    a.self_declared_active,
+    a.supported_trust,
+    a.token_uri,
+    a.registration_resolved,
+    a.registration_error,
+    coalesce(a.lint_usable, false)               as lint_usable,
+    coalesce(a.lint_defects, '[]'::jsonb)        as lint_defects,
+    o.key                                        as op_key,
+    o.kind                                       as op_kind,
+    o.registrable_domain                         as op_domain,
+    o.agent_count                                as op_agent_count,
+    (
+      select coalesce(json_agg(json_build_object('kind', e.kind, 'url', e.url) order by e.id), '[]'::json)
+      from agent_endpoints e
+      where e.chain_id = a.chain_id and e.token_id = a.token_id
+    )                                            as endpoints,
+    (
+      select json_build_object(
+        'kind', e.kind, 'url', e.url, 'grade', p.grade,
+        'httpStatus', p.http_status, 'rttMs', p.rtt_ms,
+        'errClass', p.err_class, 'errDetail', null, 'evidence', p.evidence
+      )
+      from probes_raw p
+      join agent_endpoints e on e.id = p.endpoint_id
+      where e.chain_id = a.chain_id and e.token_id = a.token_id
+      order by p.at desc limit 1
+    )                                            as probe,
+    (
+      select e.host from agent_endpoints e
+      where e.chain_id = a.chain_id and e.token_id = a.token_id
+      order by e.id limit 1
+    )                                            as op_host
+  from agents a
+  left join operators o on o.key = a.operator_key
+`;
+
+function mapAgentRow(r: any): Agent {
+  return {
+    token_id: r.token_id,
+    agent_id: r.agent_id,
+    name: r.name,
+    owner_address: r.owner_address,
+    protocols: r.protocols ?? [],
+    x402: r.x402,
+    created_at: typeof r.created_at === "string" ? r.created_at : new Date(r.created_at).toISOString(),
+    uri_scheme: r.uri_scheme,
+    token_uri: r.token_uri ?? null,
+    registration_resolved: r.registration_resolved ?? null,
+    registration_error: r.registration_error ?? null,
+    self_declared_active: r.self_declared_active ?? null,
+    supported_trust: r.supported_trust ?? null,
+    operator: {
+      key: r.op_key ?? "unknown",
+      kind: (r.op_kind ?? "unknown") as Agent["operator"]["kind"],
+      host: r.op_host ?? null,
+      registrableDomain: r.op_domain ?? null,
+      owner: r.owner_address || null,
+      agentCount: r.op_agent_count ?? null,
+    },
+    endpoints: asArray(r.endpoints),
+    lint: { defects: asArray<Defect>(r.lint_defects), usable: r.lint_usable },
+    probe: r.probe ? { ...(r.probe as any), evidence: asObject((r.probe as any).evidence) } : null,
+    scan: {
+      health_score: null, health_status: null, is_active: null,
+      endpoint_verified: null, total_score: 0, total_feedbacks: 0,
+      quality: null, freshness: null,
+    },
+    trust_state: r.trust_state ?? null,
+    trust_reason: r.trust_reason ?? null,
+    category: r.category ?? null,
+    category_matched: r.category_matched ?? null,
+    probed_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Bounded agent read. Used only where a list is genuinely rendered — counts and
+ * shares come from loadAggregates() instead of pulling rows.
+ */
+export async function loadAgents(limit = 400): Promise<Agent[]> {
   if (cache) return cache;
   const sql = db();
   if (!sql) { cache = fromFiles(); return cache; }
-
   try {
-    const rows = await sql<any[]>`
-      select
-        a.token_id::text                             as token_id,
-        a.agent_id,
-        a.name,
-        coalesce(a.owner, '')                        as owner_address,
-        coalesce(a.protocols, '{}')                  as protocols,
-        coalesce(a.x402_supported, false)            as x402,
-        coalesce(a.registered_at, a.first_seen_at)   as created_at,
-        a.uri_scheme,
-        a.trust_state,
-        a.trust_reason,
-        a.category,
-        a.category_matched,
-        coalesce(a.lint_usable, false)               as lint_usable,
-        coalesce(a.lint_defects, '[]'::jsonb)        as lint_defects,
-        o.key                                        as op_key,
-        o.kind                                       as op_kind,
-        o.registrable_domain                         as op_domain,
-        (
-          select coalesce(json_agg(json_build_object('kind', e.kind, 'url', e.url) order by e.id), '[]'::json)
-          from agent_endpoints e
-          where e.chain_id = a.chain_id and e.token_id = a.token_id
-        )                                            as endpoints,
-        (
-          select json_build_object(
-            'kind', e.kind, 'url', e.url, 'grade', p.grade,
-            'httpStatus', p.http_status, 'rttMs', p.rtt_ms,
-            'errClass', p.err_class, 'errDetail', null, 'evidence', p.evidence
-          )
-          from probes_raw p
-          join agent_endpoints e on e.id = p.endpoint_id
-          where e.chain_id = a.chain_id and e.token_id = a.token_id
-          order by p.at desc limit 1
-        )                                            as probe,
-        (
-          select e.host from agent_endpoints e
-          where e.chain_id = a.chain_id and e.token_id = a.token_id
-          order by e.id limit 1
-        )                                            as op_host
-      from agents a
-      left join operators o on o.key = a.operator_key
-      where a.chain_id = 56
-      order by a.token_id desc
-      limit 5000
-    `;
-
-    cache = rows.map((r) => ({
-      token_id: r.token_id,
-      agent_id: r.agent_id,
-      name: r.name,
-      owner_address: r.owner_address,
-      protocols: r.protocols ?? [],
-      x402: r.x402,
-      created_at: typeof r.created_at === "string" ? r.created_at : new Date(r.created_at).toISOString(),
-      uri_scheme: r.uri_scheme,
-      operator: {
-        key: r.op_key ?? "unknown",
-        kind: (r.op_kind ?? "unknown") as Agent["operator"]["kind"],
-        host: r.op_host ?? null,
-        registrableDomain: r.op_domain ?? null,
-        owner: r.owner_address || null,
-      },
-      endpoints: asArray(r.endpoints),
-      lint: { defects: asArray<Defect>(r.lint_defects), usable: r.lint_usable },
-      probe: r.probe
-        ? { ...(r.probe as any), evidence: asObject((r.probe as any).evidence) }
-        : null,
-      scan: {
-        health_score: null, health_status: null, is_active: null,
-        endpoint_verified: null, total_score: 0, total_feedbacks: 0,
-        quality: null, freshness: null,
-      },
-      trust_state: r.trust_state ?? null,
-      trust_reason: r.trust_reason ?? null,
-      category: r.category ?? null,
-      category_matched: r.category_matched ?? null,
-      probed_at: new Date().toISOString(),
-    }));
+    const rows = await sql.unsafe(
+      `${AGENT_SELECT}
+       where a.chain_id = 56
+       order by
+         case a.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
+         a.token_id desc
+       limit $1`,
+      [limit],
+    );
+    cache = (rows as any[]).map(mapAgentRow);
     return cache;
   } catch (err) {
     console.warn(`[data] database read failed, falling back to files: ${String(err).slice(0, 160)}`);
@@ -307,8 +359,125 @@ export async function loadAgents(): Promise<Agent[]> {
   }
 }
 
+// ── aggregates ─────────────────────────────────────────────────────────────
+// Computed in SQL rather than by loading rows. The registry holds 21k+
+// endpoint-bearing agents; pulling them all into memory to count them would be
+// wasteful locally and untenable on a serverless request.
+
+export type Aggregates = {
+  agents: number;
+  states: Record<TrustState, number>;
+  categories: Record<string, number>;
+  operators: number;
+  topOperators: { key: string; label: string; count: number; validated: number; broken: number }[];
+  topOperatorShare: number;
+};
+
+let aggCache: Aggregates | null = null;
+
+export async function loadAggregates(): Promise<Aggregates> {
+  if (aggCache) return aggCache;
+  const empty: Aggregates = {
+    agents: 0,
+    states: { VERIFIED: 0, LISTED: 0, DORMANT: 0, SHADOWED: 0 },
+    categories: {}, operators: 0, topOperators: [], topOperatorShare: 0,
+  };
+
+  const sql = db();
+  if (!sql) {
+    // File fallback: derive from whatever rows we have.
+    const rows = await loadAgents();
+    const f = funnel(rows);
+    aggCache = {
+      agents: rows.length,
+      states: {
+        VERIFIED: f.validated, LISTED: f.responded,
+        DORMANT: f.failed, SHADOWED: f.fatalDefects,
+      },
+      categories: {}, operators: f.distinctOperators,
+      topOperators: f.topOperators.map((o) => ({ ...o, broken: 0 })),
+      topOperatorShare: f.topOperatorShare,
+    };
+    return aggCache;
+  }
+
+  try {
+    const results = await withTimeout(Promise.all([
+      sql<{ n: number }[]>`select count(*)::int as n from agents where chain_id = 56`,
+      sql<{ trust_state: string; n: number }[]>`
+        select trust_state, count(*)::int as n from agents where chain_id = 56 group by trust_state`,
+      sql<{ category: string | null; n: number }[]>`
+        select category, count(*)::int as n from agents
+        where chain_id = 56 and category is not null group by category`,
+      sql<{ key: string; label: string; agent_count: number; validated_count: number; fatal_defect_count: number }[]>`
+        select key, label, agent_count, validated_count, fatal_defect_count
+        from operators where agent_count > 0 order by agent_count desc limit 10`,
+      sql<{ n: number }[]>`select count(*)::int as n from operators where agent_count > 0`,
+    ]), 9000, null as any);
+    if (!results) { aggCache = empty; return aggCache; }
+    const [counts, states, cats, ops, opCount] = results;
+
+    const total = counts[0]?.n ?? 0;
+    const st = { ...empty.states };
+    for (const s of states) {
+      if (s.trust_state in st) st[s.trust_state as TrustState] = s.n;
+    }
+
+    aggCache = {
+      agents: total,
+      states: st,
+      categories: Object.fromEntries((cats as { category: string | null; n: number }[]).map((c) => [c.category!, c.n])),
+      operators: opCount[0]?.n ?? 0,
+      topOperators: (ops as { key: string; label: string; agent_count: number; validated_count: number; fatal_defect_count: number }[]).map((o) => ({
+        key: o.key, label: o.label, count: o.agent_count,
+        validated: o.validated_count, broken: o.fatal_defect_count,
+      })),
+      topOperatorShare: total && ops[0] ? (ops[0].agent_count / total) * 100 : 0,
+    };
+    return aggCache;
+  } catch (err) {
+    console.warn(`[data] aggregate read failed: ${String(err).slice(0, 140)}`);
+    aggCache = empty;
+    return aggCache;
+  }
+}
+
+/** Agents for one category, ranked and operator-capped, without loading the rest. */
+export async function agentsInCategory(category: CategorySlug, limit = 60): Promise<Agent[]> {
+  const sql = db();
+  if (!sql) {
+    const all = await loadAgents();
+    return diversify(rankAgents((agentsByCategory(all).get(category) ?? [])), 3).slice(0, limit);
+  }
+  try {
+    const rows = (await sql.unsafe(
+      `${AGENT_SELECT}
+       where a.chain_id = 56 and a.category = $1
+       order by
+         case a.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
+         a.token_id desc
+       limit $2`,
+      [category, limit],
+    )) as unknown as any[];
+    return diversify(rows.map(mapAgentRow), 3);
+  } catch (err) {
+    console.warn(`[data] category read failed: ${String(err).slice(0, 140)}`);
+    return [];
+  }
+}
+
 export async function findAgent(tokenId: string): Promise<Agent | undefined> {
-  return (await loadAgents()).find((a) => a.token_id === tokenId);
+  const sql = db();
+  if (!sql) return (await loadAgents()).find((a) => a.token_id === tokenId);
+  try {
+    const rows = (await sql.unsafe(
+      `${AGENT_SELECT} where a.chain_id = 56 and a.token_id = $1 limit 1`,
+      [tokenId],
+    )) as unknown as any[];
+    return rows[0] ? mapAgentRow(rows[0]) : undefined;
+  } catch {
+    return (await loadAgents()).find((a) => a.token_id === tokenId);
+  }
 }
 
 // ── opportunity surface ────────────────────────────────────────────────────
@@ -401,37 +570,120 @@ export const OPPORTUNITY_COLUMNS: Record<
 // directly from the ERC-8004 Identity Registry rather than sampled through an
 // API. CENSUS.* is measured; POPULATION.* cross-references the 8004scan API.
 
-export const CENSUS = {
-  /** Highest tokenId minted in the registry. Full coverage achieved. */
+export const CENSUS_FALLBACK = {
   tokensMinted: 270_200,
-  /** Tokens read — the entire registry. */
   censused: 270_200,
-  /** Registration file successfully resolved (data: URIs; remote deferred). */
   resolved: 155_304,
-  /** Of resolved: carry a name. */
   named: 155_297,
-  /** Of resolved: self-declare "active": true — unverified. */
   claimActive: 153_454,
-  /** Of resolved: declare any service endpoint at all. */
   withEndpoint: 759,
-  /** Of resolved: callable (A2A or MCP) and free of fatal URL defects. */
   callable: 362,
-  /** Distinct endpoint-hosting operators across the whole registry. */
-  operators: 70,
-  /** Distinct owner addresses. */
+  operators: 76,
   owners: 228_421,
   ownersWithOneAgent: 216_931,
-  largestOperatorShare: 56.0,
+  largestOperatorShare: 55.7,
   top5OperatorShare: 87.0,
-  top20OperatorShare: 93.63,
   top10OwnerShare: 7.44,
   declaresReputationTrust: 146_271,
   emptyTokenUri: 9_917,
   x402Supported: 13_702,
-  endpointKinds: { web: 661, a2a: 330, mcp: 288 },
+  fatalDefects: 12,
+  uriSchemes: {} as Record<string, number>,
+  endpointKinds: { web: 661, a2a: 330, mcp: 288 } as Record<string, number>,
+  topOperators: [] as { domain: string; endpoints: number; callable: number }[],
   measuredAt: "2026-08-19",
   registry: "0x8004a169fb4a3325136eb29fa0ceb6d2e539a432",
 } as const;
+
+export type Census = {
+  tokensMinted: number; censused: number; resolved: number; named: number;
+  claimActive: number; withEndpoint: number; callable: number;
+  operators: number; owners: number; ownersWithOneAgent: number;
+  largestOperatorShare: number; top5OperatorShare: number; top10OwnerShare: number;
+  declaresReputationTrust: number; emptyTokenUri: number; x402Supported: number;
+  fatalDefects: number;
+  uriSchemes: Record<string, number>;
+  endpointKinds: Record<string, number>;
+  topOperators: { domain: string; endpoints: number; callable: number }[];
+  measuredAt: string;
+  registry: string;
+  /** True when the figures came from the database rather than the fallback. */
+  live: boolean;
+};
+
+let censusCache: Census | null = null;
+
+/**
+ * Census figures, read from the database at request time.
+ *
+ * These were previously hardcoded in three places plus the page metadata, which
+ * meant every re-run of the census left stale numbers on a site whose whole
+ * claim is that its figures are measured. scripts/analyse-census.ts writes the
+ * row; nothing here is transcribed by hand.
+ */
+export async function loadCensus(): Promise<Census> {
+  if (censusCache) return censusCache;
+
+  const fallback: Census = {
+    ...CENSUS_FALLBACK,
+    uriSchemes: { ...CENSUS_FALLBACK.uriSchemes },
+    endpointKinds: { ...CENSUS_FALLBACK.endpointKinds },
+    topOperators: [...CENSUS_FALLBACK.topOperators],
+    live: false,
+  };
+
+  const sql = db();
+  if (!sql) { censusCache = fallback; return censusCache; }
+
+  try {
+    const rows = await withTimeout(
+      sql<any[]>`
+        select tokens_minted, censused, resolved, named, claim_active, with_endpoint,
+               callable, operators, owners, owners_with_one_agent,
+               largest_operator_share, top5_operator_share, top10_owner_share,
+               declares_reputation, empty_token_uri, x402_supported, fatal_defects,
+               uri_schemes, endpoint_kinds, top_operators, registry, measured_at
+        from census_stats where id = 'bsc' limit 1
+      `,
+      7000,
+      null as any,
+    );
+    const r = rows?.[0];
+    if (!r) { censusCache = fallback; return censusCache; }
+
+    const num = (v: any, d: number) => (v == null ? d : Number(v));
+    censusCache = {
+      tokensMinted: num(r.tokens_minted, fallback.tokensMinted),
+      censused: num(r.censused, fallback.censused),
+      resolved: num(r.resolved, fallback.resolved),
+      named: num(r.named, fallback.named),
+      claimActive: num(r.claim_active, fallback.claimActive),
+      withEndpoint: num(r.with_endpoint, fallback.withEndpoint),
+      callable: num(r.callable, fallback.callable),
+      operators: num(r.operators, fallback.operators),
+      owners: num(r.owners, fallback.owners),
+      ownersWithOneAgent: num(r.owners_with_one_agent, fallback.ownersWithOneAgent),
+      largestOperatorShare: num(r.largest_operator_share, fallback.largestOperatorShare),
+      top5OperatorShare: num(r.top5_operator_share, fallback.top5OperatorShare),
+      top10OwnerShare: num(r.top10_owner_share, fallback.top10OwnerShare),
+      declaresReputationTrust: num(r.declares_reputation, fallback.declaresReputationTrust),
+      emptyTokenUri: num(r.empty_token_uri, fallback.emptyTokenUri),
+      x402Supported: num(r.x402_supported, fallback.x402Supported),
+      fatalDefects: num(r.fatal_defects, fallback.fatalDefects),
+      uriSchemes: (asObject(r.uri_schemes) ?? {}) as Record<string, number>,
+      endpointKinds: (asObject(r.endpoint_kinds) ?? fallback.endpointKinds) as Record<string, number>,
+      topOperators: asArray(r.top_operators),
+      measuredAt: r.measured_at ? new Date(r.measured_at).toISOString().slice(0, 10) : fallback.measuredAt,
+      registry: r.registry ?? fallback.registry,
+      live: true,
+    };
+    return censusCache;
+  } catch (err) {
+    console.warn(`[data] census read failed, using fallback: ${String(err).slice(0, 140)}`);
+    censusCache = fallback;
+    return censusCache;
+  }
+}
 
 export const POPULATION = {
   registeredBsc: 257_891,
@@ -443,8 +695,8 @@ export const POPULATION = {
   newAgentsToday: 263,
   validationsEverAllChains: 0,
   measuredAt: "2026-08-18",
-  registry: CENSUS.registry,
-  maxTokenId: CENSUS.tokensMinted,
+  registry: CENSUS_FALLBACK.registry,
+  maxTokenId: CENSUS_FALLBACK.tokensMinted,
 } as const;
 
 export type Funnel = {

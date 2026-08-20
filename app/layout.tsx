@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
+import { loadCensus } from "@/lib/data";
 import "./globals.css";
 
 const sans = Geist({
@@ -15,11 +16,41 @@ const mono = Geist_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "GEBO · Agent registry for BNB Smart Chain",
-  description:
-    "257,891 agents are registered on BSC. Eight of the ones we audited can actually be hired. GEBO measures which.",
-};
+/**
+ * Metadata is generated per request from the persisted census, not hardcoded.
+ * Hardcoding meant the title, the headline, and the docs each carried their own
+ * copy of the same figure, and a re-run of the census silently made all three
+ * wrong. generateMetadata reads the same source the page does.
+ *
+ * metadataBase resolves relative OG image URLs; without it Next falls back to
+ * localhost and social previews break in production.
+ */
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3100");
+
+export async function generateMetadata(): Promise<Metadata> {
+  const c = await loadCensus();
+  const minted = c.tokensMinted.toLocaleString();
+  const callable = c.callable.toLocaleString();
+
+  const title = "GEBO · Agent registry for BNB Smart Chain";
+  const description =
+    `${minted} agents are registered on BNB Chain. ${callable} can actually be hired. ` +
+    `GEBO reads the registry directly, audits what each agent declares, and shows what ` +
+    `it is permitted to do to your wallet before you authorise anything.`;
+  const short = `${minted} agents registered. ${callable} callable. GEBO measures which.`;
+
+  return {
+    metadataBase: new URL(siteUrl),
+    title,
+    description,
+    openGraph: { title, description: short, url: siteUrl, siteName: "GEBO", type: "website" },
+    twitter: { card: "summary_large_image", title, description: short },
+  };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

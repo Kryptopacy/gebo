@@ -7,6 +7,7 @@
  * These figures replace the 120-agent sample in docs/MEASUREMENTS.md with
  * near-complete coverage of the ERC-8004 Identity Registry on BSC.
  */
+import "dotenv/config";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 
@@ -173,5 +174,88 @@ if (own.length) {
   console.log(`    owners with 1 agent  ${own.filter(([, n]) => n === 1).length.toLocaleString()}`);
   console.log(`\n    ${"owner".padEnd(44)} ${"agents".padStart(8)}`);
   for (const [o, n] of own.slice(0, 8)) console.log(`    ${o.padEnd(44)} ${String(n).padStart(8)}`);
+}
+
+// ── persist ────────────────────────────────────────────────────────────────
+// The app reads these figures at request time. Writing them here is what stops
+// the funnel, the headline, and the page metadata from drifting out of sync.
+{
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.log(`\n  DATABASE_URL not set — figures not persisted, app will use its fallback\n`);
+  } else {
+    const postgres = (await import("postgres")).default;
+    const sql = postgres(url, { prepare: false, max: 1, onnotice: () => {} });
+    try {
+      const share = (n: number, d: number) => (d ? Number(((n / d) * 100).toFixed(2)) : 0);
+      const totalEndpoints = ops.reduce((s, [, n]) => s + n, 0);
+      const topOps = ops.slice(0, 15).map(([domain, endpoints]) => ({
+        domain, endpoints, callable: operatorCallable.get(domain) ?? 0,
+      }));
+
+      await sql`
+        insert into census_stats ${sql({
+          id: "bsc",
+          chain_id: 56,
+          registry: "0x8004a169fb4a3325136eb29fa0ceb6d2e539a432",
+          tokens_minted: maxToken,
+          censused: rows,
+          resolved,
+          named: namedAgents,
+          claim_active: declaredActive,
+          with_endpoint: withEndpoints,
+          callable,
+          operators: ops.length,
+          owners: owners.size,
+          owners_with_one_agent: own.filter(([, n]) => n === 1).length,
+          largest_operator_share: ops.length ? share(ops[0]![1], totalEndpoints) : 0,
+          top5_operator_share: share(ops.slice(0, 5).reduce((s, [, n]) => s + n, 0), totalEndpoints),
+          top20_operator_share: share(ops.slice(0, 20).reduce((s, [, n]) => s + n, 0), totalEndpoints),
+          top10_owner_share: share(own.slice(0, 10).reduce((s, [, n]) => s + n, 0), rows),
+          declares_reputation: trustModels.get("reputation") ?? 0,
+          empty_token_uri: uriScheme.get("empty") ?? 0,
+          x402_supported: x402,
+          fatal_defects: withFatal,
+          uri_schemes: sql.json(Object.fromEntries(uriScheme)),
+          endpoint_kinds: sql.json(Object.fromEntries(endpointKinds)),
+          trust_models: sql.json(Object.fromEntries([...trustModels].slice(0, 12))),
+          top_operators: sql.json(topOps),
+          measured_at: new Date(),
+          updated_at: new Date(),
+        } as any)}
+        on conflict (id) do update set
+          tokens_minted = excluded.tokens_minted,
+          censused = excluded.censused,
+          resolved = excluded.resolved,
+          named = excluded.named,
+          claim_active = excluded.claim_active,
+          with_endpoint = excluded.with_endpoint,
+          callable = excluded.callable,
+          operators = excluded.operators,
+          owners = excluded.owners,
+          owners_with_one_agent = excluded.owners_with_one_agent,
+          largest_operator_share = excluded.largest_operator_share,
+          top5_operator_share = excluded.top5_operator_share,
+          top20_operator_share = excluded.top20_operator_share,
+          top10_owner_share = excluded.top10_owner_share,
+          declares_reputation = excluded.declares_reputation,
+          empty_token_uri = excluded.empty_token_uri,
+          x402_supported = excluded.x402_supported,
+          fatal_defects = excluded.fatal_defects,
+          uri_schemes = excluded.uri_schemes,
+          endpoint_kinds = excluded.endpoint_kinds,
+          trust_models = excluded.trust_models,
+          top_operators = excluded.top_operators,
+          measured_at = excluded.measured_at,
+          updated_at = now()
+      `;
+      console.log(`\n  PERSISTED to census_stats — the app now reads these figures live`);
+    } catch (e: any) {
+      console.error(`\n  persist failed: ${String(e?.message ?? e).slice(0, 240)}`);
+      process.exitCode = 1;
+    } finally {
+      await sql.end({ timeout: 6 });
+    }
+  }
 }
 console.log("");

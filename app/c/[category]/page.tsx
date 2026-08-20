@@ -4,11 +4,8 @@ import {
   diversify, trustState, classify, opportunitiesFor, OPPORTUNITY_COLUMNS,
 } from "@/lib/data";
 
-export const dynamic = "force-static";
-
-export function generateStaticParams() {
-  return Object.keys(CATEGORIES).map((category) => ({ category }));
-}
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const VENUE_LABEL: Record<string, string> = {
   "pancakeswap-v3": "PancakeSwap V3",

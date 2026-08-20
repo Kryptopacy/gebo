@@ -1,12 +1,8 @@
 import { notFound } from "next/navigation";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
 
-export const dynamic = "force-static";
-
-export async function generateStaticParams() {
-  const agents = await loadAgents();
-  return agents.slice(0, 400).map((a) => ({ tokenId: a.token_id }));
-}
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 /** Renders a URL with unsubstituted template placeholders marked. */
 function Uri({ url }: { url: string }) {

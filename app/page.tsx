@@ -1,19 +1,16 @@
-import {
-  loadAgents, funnel, POPULATION, CENSUS, CATEGORY_LIST, agentsByCategory, trustState,
-} from "@/lib/data";
+import { loadAggregates, loadCensus, CATEGORY_LIST } from "@/lib/data";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-/** Log scale, so a 269,726 → 345 collapse stays legible instead of vanishing. */
+/** Log scale, so a 270,200 → 362 collapse stays legible instead of vanishing. */
 function logWidth(n: number, max: number) {
   if (n <= 0) return 0.6;
   return Math.max((Math.log10(n + 1) / Math.log10(max + 1)) * 100, 0.6);
 }
 
 export default async function Home() {
-  const agents = await loadAgents();
-  const f = funnel(agents);
-  const byCat = agentsByCategory(agents);
+  const [agg, CENSUS] = await Promise.all([loadAggregates(), loadCensus()]);
   const top = CENSUS.tokensMinted;
 
   const steps = [
@@ -57,7 +54,7 @@ export default async function Home() {
       <section className="band">
         <div className="shell">
           <div className="headline-pair">
-            <h1>270,200 agents. 362 you could actually hire.</h1>
+            <h1>{CENSUS.tokensMinted.toLocaleString()} agents. {CENSUS.callable.toLocaleString()} you could actually hire.</h1>
             <p className="standfirst">
               GEBO reads every identity in the ERC-8004 registry on BNB Chain, audits what it
               declares, probes what it exposes, and shows exactly what it is permitted to do
@@ -78,7 +75,7 @@ export default async function Home() {
               <div key={s.caption} className="collapse-step" data-terminal={s.terminal ? "true" : "false"}>
                 <div>
                   <div className="collapse-figure" style={s.warn ? { color: "var(--hold)" } : undefined}>
-                    {s.n.toLocaleString()}
+                    {(s.n ?? 0).toLocaleString()}
                   </div>
                   <div className="collapse-caption">{s.caption}</div>
                 </div>
@@ -110,7 +107,7 @@ export default async function Home() {
       {/* ── concentration ────────────────────────────────────────── */}
       <section className="band">
         <div className="shell">
-          <h2>228,421 owners. 70 operators.</h2>
+          <h2>{CENSUS.owners.toLocaleString()} owners. {CENSUS.operators} operators.</h2>
           <p className="prose sm">
             Almost every identity belongs to a different wallet — {CENSUS.ownersWithOneAgent.toLocaleString()}{" "}
             addresses hold exactly one, and the ten largest owners together hold only{" "}
@@ -118,7 +115,7 @@ export default async function Home() {
             crowd registering one identity each. But only <strong>{CENSUS.operators}</strong>{" "}
             organisations actually run an endpoint, and the largest of them accounts for{" "}
             <strong>{CENSUS.largestOperatorShare}%</strong> of every endpoint on the chain.
-            Rank by owner and you appear to have 228,421 suppliers. Rank by infrastructure and
+            Rank by owner and you appear to have {CENSUS.owners.toLocaleString()} suppliers. Rank by infrastructure and
             you have {CENSUS.operators}.
           </p>
 
@@ -147,25 +144,25 @@ export default async function Home() {
             </div>
           </dl>
 
-          {f.topOperators.length > 0 && (
+          {agg.topOperators.length > 0 && (
             <div className="rows mt-l">
               <div className="rows-head r-operators">
                 <span>Operator</span><span style={{ textAlign: "right" }}>Agents</span>
-                <span style={{ textAlign: "right" }}>Answered</span><span>Assessment</span>
+                <span style={{ textAlign: "right" }}>Broken</span><span>Assessment</span>
               </div>
-              {f.topOperators.map((o) => {
-                const dead = o.validated === 0;
+              {agg.topOperators.map((o) => {
+                const broken = o.broken > 0;
                 return (
                   <div key={o.key} className="row r-operators">
                     <div className="num sm">{o.label}</div>
-                    <div className="num sm" style={{ textAlign: "right" }}>{o.count}</div>
-                    <div className="num sm" style={{ textAlign: "right", color: dead ? "var(--fail)" : "var(--pass)" }}>
-                      {o.validated}
+                    <div className="num sm" style={{ textAlign: "right" }}>{(o.count ?? 0).toLocaleString()}</div>
+                    <div className="num sm" style={{ textAlign: "right", color: broken ? "var(--fail)" : "var(--fg-4)" }}>
+                      {(o.broken ?? 0).toLocaleString()}
                     </div>
                     <div className="xs t-3">
-                      {dead
-                        ? `none of ${o.count} completed a handshake`
-                        : `${o.validated} of ${o.count} completed a handshake`}
+                      {broken
+                        ? `every one of its ${(o.broken ?? 0).toLocaleString()} listings is structurally uncallable`
+                        : `no fatal registration defect found`}
                     </div>
                   </div>
                 );
@@ -186,11 +183,10 @@ export default async function Home() {
 
           <div className="rows mt-m">
             <div className="rows-head r-jobs">
-              <span>Job</span><span>Verified</span><span>Venue</span>
+              <span>Job</span><span>Agents</span><span>Venue</span>
             </div>
             {CATEGORY_LIST.map((c) => {
-              const list = byCat.get(c.slug as never) ?? [];
-              const verified = list.filter((a) => trustState(a).state === "VERIFIED").length;
+              const n = agg.categories[c.slug] ?? 0;
               return (
                 <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
                   <div>
@@ -198,10 +194,7 @@ export default async function Home() {
                     <p className="xs t-3" style={{ margin: 0, maxWidth: "52ch" }}>{c.blurb}</p>
                   </div>
                   <div>
-                    <span className="num" style={{ fontSize: "1.4rem", color: verified ? "var(--pass)" : "var(--fg-4)" }}>
-                      {verified}
-                    </span>
-                    <span className="xs t-4 num" style={{ marginLeft: 7 }}>/ {list.length}</span>
+                    <span className="num" style={{ fontSize: "1.4rem", color: n ? "var(--fg)" : "var(--fg-4)" }}>{n}</span>
                   </div>
                   <div className="sm t-3">{c.venue}</div>
                 </a>
