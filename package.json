@@ -4,9 +4,7 @@
   "private": true,
   "type": "module",
   "description": "GEBO — verification-first agent registry for BNB Smart Chain",
-  "engines": {
-    "node": "22.x"
-  },
+
   "scripts": {
     "dev": "next dev",
     "build": "next build",
