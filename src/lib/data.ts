@@ -9,7 +9,7 @@ import postgres from "postgres";
  * in data/ when it is not, so the app stays runnable without a database.
  *
  * Connections go through the Supavisor transaction pooler, which does not
- * support prepared statements — hence `prepare: false`. Omitting that produces
+ * support prepared statements â€” hence `prepare: false`. Omitting that produces
  * intermittent "prepared statement already exists" errors that look like
  * random flakiness rather than a configuration mistake.
  */
@@ -34,6 +34,16 @@ export type Agent = {
   registration_error: string | null;
   self_declared_active: boolean | null;
   supported_trust: string[] | null;
+  /** Registration description, when the file carried one. */
+  description: string | null;
+  /**
+   * Skills the agent declares in its own A2A card.
+   *
+   * The best capability signal in this ecosystem: neither a name nor marketing
+   * copy, but the agent's own account of what it does. It supplies most of the
+   * classification evidence and drives search relevance.
+   */
+  skills: string[] | null;
   operator: {
     key: string;
     kind: "host" | "owner" | "unknown";
@@ -71,7 +81,7 @@ export type Agent = {
   probed_at: string;
 };
 
-// ── categories ─────────────────────────────────────────────────────────────
+// â”€â”€ categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // The brief requires four categories to be first-class and equally deep, and
 // names the criterion "Agent Diversity". That is a requirement to INCLUDE those
@@ -101,7 +111,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Trade a range automatically",
     blurb: "Places and manages a ladder of orders inside a band, with a declared behaviour when price leaves it.",
-    venue: "PancakeSwap · DEX",
+    venue: "PancakeSwap Â· DEX",
     counterfactual: "against holding over the same window, marked to market including open inventory",
     floor: "100 closed trades",
   },
@@ -110,7 +120,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Move my capital to better yield",
     blurb: "Routes capital toward the highest sustainable rate, quoting the unboosted lower bound.",
-    venue: "Venus · Aave V3 · Lista",
+    venue: "Venus Â· Aave V3 Â· Lista",
     counterfactual: "against the best passive single-venue deposit, net of migration gas",
     floor: "10 migrations",
   },
@@ -119,7 +129,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Stop my loan being liquidated",
     blurb: "Watches health factor and acts before liquidation, with declared oracle sources.",
-    venue: "Venus · Aave V3",
+    venue: "Venus Â· Aave V3",
     counterfactual: "against the no-agent outcome replayed over realised prices",
     floor: "one adverse regime observed",
   },
@@ -131,7 +141,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Trade tokens on my behalf",
     blurb: "General on-chain trading: swaps, entries and exits, copy-trading and launchpad activity.",
-    venue: "PancakeSwap · Four.meme",
+    venue: "PancakeSwap Â· Four.meme",
     counterfactual: "against holding, marked to market including open positions",
     floor: "100 closed trades",
   },
@@ -140,7 +150,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Tell me what is happening",
     blurb: "Screening, analysis and monitoring. Produces information rather than transactions.",
-    venue: "Off-chain data · on-chain reads",
+    venue: "Off-chain data Â· on-chain reads",
     counterfactual: "against the same research done by hand, on time and cost",
     floor: "10 completed tasks",
   },
@@ -149,7 +159,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Pay and get paid autonomously",
     blurb: "Per-call settlement and job escrow, over x402 or ERC-8183.",
-    venue: "x402 · ERC-8183",
+    venue: "x402 Â· ERC-8183",
     counterfactual: "against a manual invoice-and-settle cycle",
     floor: "20 settled payments",
   },
@@ -167,7 +177,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Run agent infrastructure",
     blurb: "Registry, identity, deployment and wallet tooling that other agents depend on.",
-    venue: "ERC-8004 · tooling",
+    venue: "ERC-8004 Â· tooling",
     counterfactual: "against operating the same tooling yourself",
     floor: "10 completed tasks",
   },
@@ -211,7 +221,7 @@ export function trustState(a: Agent): { state: TrustState; reason: string } {
     return {
       state: "SHADOWED",
       reason: fatal[0]!.code === "template_var"
-        ? "registration contains an unsubstituted template variable — uncallable by any client"
+        ? "registration contains an unsubstituted template variable â€” uncallable by any client"
         : fatal[0]!.detail,
     };
   }
@@ -220,7 +230,7 @@ export function trustState(a: Agent): { state: TrustState; reason: string } {
   return { state: "DORMANT", reason: a.probe?.errDetail ?? "no response" };
 }
 
-// ── loading ────────────────────────────────────────────────────────────────
+// â”€â”€ loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 let client: ReturnType<typeof postgres> | null = null;
 function db() {
@@ -327,6 +337,8 @@ const AGENT_SELECT = `
     a.category_matched,
     a.self_declared_active,
     a.supported_trust,
+    a.description,
+    a.skills,
     a.token_uri,
     a.registration_resolved,
     a.registration_error,
@@ -376,6 +388,8 @@ function mapAgentRow(r: any): Agent {
     registration_error: r.registration_error ?? null,
     self_declared_active: r.self_declared_active ?? null,
     supported_trust: r.supported_trust ?? null,
+    description: r.description ?? null,
+    skills: r.skills ? asArray<string>(r.skills) : null,
     operator: {
       key: r.op_key ?? "unknown",
       kind: (r.op_kind ?? "unknown") as Agent["operator"]["kind"],
@@ -401,7 +415,7 @@ function mapAgentRow(r: any): Agent {
 }
 
 /**
- * Bounded agent read. Used only where a list is genuinely rendered — counts and
+ * Bounded agent read. Used only where a list is genuinely rendered â€” counts and
  * shares come from loadAggregates() instead of pulling rows.
  */
 export async function loadAgents(limit = 400): Promise<Agent[]> {
@@ -427,7 +441,7 @@ export async function loadAgents(limit = 400): Promise<Agent[]> {
   }
 }
 
-// ── aggregates ─────────────────────────────────────────────────────────────
+// â”€â”€ aggregates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Computed in SQL rather than by loading rows. The registry holds 21k+
 // endpoint-bearing agents; pulling them all into memory to count them would be
 // wasteful locally and untenable on a serverless request.
@@ -548,7 +562,102 @@ export async function findAgent(tokenId: string): Promise<Agent | undefined> {
   }
 }
 
-// ── opportunity surface ────────────────────────────────────────────────────
+// â”€â”€ search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export type SearchHit = {
+  agent: Agent;
+  rank: number;
+  /** Why this matched, so a result is explicable rather than magical. */
+  why: string;
+};
+
+/**
+ * Full-text search over what an agent says it can do.
+ *
+ * "Find an agent" is a judged criterion and, until now, the only way in was
+ * category browsing - a user who already knew what they wanted had nowhere to
+ * type it.
+ *
+ * Ranking deliberately does not use popularity. Relevance orders the candidate
+ * set, then trust state decides, because a highly relevant agent that fails a
+ * protocol handshake is worse than a slightly less relevant one that answers.
+ * That is the same principle as the category listings: evidence over prominence.
+ *
+ * Falls back to ILIKE when the tsquery cannot be parsed, so an odd query returns
+ * results instead of an error.
+ */
+export async function searchAgents(query: string, limit = 40): Promise<SearchHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const sql = db();
+  if (!sql) return [];
+
+  // websearch_to_tsquery tolerates human input: quotes, OR, and minus signs.
+  try {
+    const rows = (await sql.unsafe(
+      `${AGENT_SELECT}
+       , ts_rank(a.capability_doc, websearch_to_tsquery('english', $1)) as rank
+       where a.chain_id = 56
+         and (
+           a.capability_doc @@ websearch_to_tsquery('english', $1)
+           or a.name ilike '%' || $1 || '%'
+           or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
+         )
+       order by
+         case a.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
+         rank desc nulls last,
+         a.token_id desc
+       limit $2`,
+      [q, limit],
+    )) as unknown as any[];
+
+    return rows.map((r) => {
+      const agent = mapAgentRow(r);
+      const needle = q.toLowerCase();
+      const skillHit = agent.skills?.find((s) => s.toLowerCase().includes(needle));
+      const nameHit = agent.name?.toLowerCase().includes(needle);
+      const why = skillHit
+        ? `skill: ${skillHit.slice(0, 90)}`
+        : nameHit
+          ? "name match"
+          : agent.description?.toLowerCase().includes(needle)
+            ? "description match"
+            : "capability text match";
+      return { agent, rank: Number(r.rank ?? 0), why };
+    });
+  } catch (err) {
+    console.warn(`[data] search failed: ${String(err).slice(0, 140)}`);
+    return [];
+  }
+}
+
+/** Category counts for a query, so the result page can offer a narrowing. */
+export async function searchFacets(query: string): Promise<{ category: string; n: number }[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const sql = db();
+  if (!sql) return [];
+  try {
+    const rows = (await sql.unsafe(
+      `select a.category, count(*)::int as n
+       from agents a
+       where a.chain_id = 56 and a.category is not null
+         and (
+           a.capability_doc @@ websearch_to_tsquery('english', $1)
+           or a.name ilike '%' || $1 || '%'
+           or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
+         )
+       group by a.category order by n desc`,
+      [q],
+    )) as unknown as any[];
+    return rows.map((r) => ({ category: r.category, n: Number(r.n) }));
+  } catch {
+    return [];
+  }
+}
+
+// â”€â”€ opportunity surface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Indexed from live chain state by scripts/index-opportunities.ts. This is the
 // cold-start answer: a category page holds real work whether or not any
 // competent agent exists to do it.
@@ -615,33 +724,33 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
   { key: string; label: string; fmt: (v: any, p: Record<string, any>) => string; align?: "right" }[]
 >> = {
   rebalancing: [
-    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
-    { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
-    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
+    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "â€”" : `${v}%`), align: "right" },
+    { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "â€”" : String(v)), align: "right" },
+    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "â€”" : Number(v).toLocaleString()), align: "right" },
     { key: "liquidity", label: "Active liquidity", fmt: (v) => (!v || v === "0" ? "none" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
   ],
   grid: [
-    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
-    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
-    { key: "observationCardinality", label: "Oracle slots", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
+    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "â€”" : `${v}%`), align: "right" },
+    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "â€”" : Number(v).toLocaleString()), align: "right" },
+    { key: "observationCardinality", label: "Oracle slots", fmt: (v) => (v == null ? "â€”" : String(v)), align: "right" },
     { key: "unlocked", label: "Pool state", fmt: (v) => (v === false ? "locked" : "unlocked") },
   ],
   yield: [
-    { key: "supplyAprPct", label: "Supply APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
-    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
-    { key: "utilisation", label: "Utilisation", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
-    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    { key: "supplyAprPct", label: "Supply APR", fmt: (v) => (v == null ? "â€”" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "â€”" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "utilisation", label: "Utilisation", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
+    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
   ],
   health: [
-    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
-    { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
-    { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null ? "—" : `${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
-    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null ? "â€”" : `${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
+    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "â€”" : `${Number(v).toFixed(2)}%`), align: "right" },
   ],
 };
 
-// ── population ─────────────────────────────────────────────────────────────
-// Chain-wide figures from the registry census (docs/MEASUREMENTS.md §0), read
+// â”€â”€ population â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Chain-wide figures from the registry census (docs/MEASUREMENTS.md Â§0), read
 // directly from the ERC-8004 Identity Registry rather than sampled through an
 // API. CENSUS.* is measured; POPULATION.* cross-references the 8004scan API.
 
@@ -825,7 +934,7 @@ export function agentsByCategory(agents: Agent[]) {
   return map;
 }
 
-/** Tiered, never popularity. See docs/PRODUCT_SPEC.md §5. */
+/** Tiered, never popularity. See docs/PRODUCT_SPEC.md Â§5. */
 export function rankAgents(agents: Agent[]): Agent[] {
   const tier = (a: Agent) => {
     const { state } = trustState(a);
@@ -840,7 +949,7 @@ export function rankAgents(agents: Agent[]): Agent[] {
   });
 }
 
-/** Cap slots per operator — concentration is the central finding. */
+/** Cap slots per operator â€” concentration is the central finding. */
 export function diversify<T extends Agent>(agents: T[], maxPerOperator = 3): T[] {
   const seen = new Map<string, number>();
   const head: T[] = [];
