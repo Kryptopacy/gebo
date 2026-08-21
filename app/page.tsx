@@ -79,7 +79,10 @@ export default async function Home() {
       <section className="band">
         <div className="shell">
           <div className="headline-pair">
-            <h1>{CENSUS.tokensMinted.toLocaleString()} agents. {CENSUS.callable.toLocaleString()} you could actually hire.</h1>
+            <h1>
+              <span style={{ color: "var(--accent)" }}>{CENSUS.tokensMinted.toLocaleString()}</span> agents.{" "}
+              <span style={{ color: "var(--accent)" }}>{CENSUS.callable.toLocaleString()}</span> you could actually hire.
+            </h1>
             <p className="standfirst">
               GEBO reads every identity in the ERC-8004 registry on BNB Chain, audits what it
               declares, probes what it exposes, and shows exactly what it is permitted to do
