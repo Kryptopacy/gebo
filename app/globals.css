@@ -544,3 +544,23 @@ a.row-hover:focus-visible { outline-offset: -2px; }
   .readout { padding: 14px 16px 16px; }
   .readout dd { font-size: 1.4rem; }
 }
+
+/* ── authority lookup ───────────────────────────────────────────────── */
+.lookup { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.lookup-input {
+  flex: 1 1 380px; min-width: 0;
+  background: var(--ink-850); color: var(--fg);
+  border: 1px solid var(--rule); padding: 10px 14px;
+  font-size: 13.5px; letter-spacing: 0.01em;
+  transition: border-color .14s ease;
+}
+.lookup-input::placeholder { color: var(--fg-4); }
+.lookup-input:focus { border-color: var(--accent); outline: none; }
+.lookup-select {
+  background: var(--ink-850); color: var(--fg-2);
+  border: 1px solid var(--rule); padding: 10px 12px;
+  font-family: var(--sans); font-size: 13px;
+}
+.lookup-select:focus { border-color: var(--accent); outline: none; }
+.lookup .cta { border-radius: 0; }
+@media (max-width: 620px) { .lookup-input { flex-basis: 100%; } }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
 import { loadCensus } from "@/lib/data";
@@ -36,7 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const minted = c.tokensMinted.toLocaleString();
   const callable = c.callable.toLocaleString();
 
-  const title = "GEBO · Agent registry for BNB Smart Chain";
+  const title = "GEBO Â· Agent registry for BNB Smart Chain";
   const description =
     `${minted} agents are registered on BNB Chain. ${callable} can actually be hired. ` +
     `GEBO reads the registry directly, audits what each agent declares, and shows what ` +
@@ -77,7 +77,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/c/trading" className="nav-sep">Trading</a>
               <a href="/c/research">Research</a>
               <a href="/c/payments">Payments</a>
-              <a href="/methodology" className="nav-sep">Methodology</a>
+              <a href="/authority" className="nav-sep">Authority</a>
+              <a href="/methodology">Methodology</a>
             </nav>
           </div>
         </header>
@@ -100,9 +101,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <a href="/methodology" className="link">Read the methodology</a>
               </div>
               <dl className="spec">
-                <div><dt>Identity registry</dt><dd>0x8004a169…a432</dd></div>
-                <div><dt>Chain</dt><dd>BNB Smart Chain · 56</dd></div>
-                <div><dt>Keystore</dt><dd>0x6572427E…7E0a</dd></div>
+                <div><dt>Identity registry</dt><dd>0x8004a169â€¦a432</dd></div>
+                <div><dt>Chain</dt><dd>BNB Smart Chain Â· 56</dd></div>
+                <div><dt>Keystore</dt><dd>0x6572427Eâ€¦7E0a</dd></div>
               </dl>
             </div>
           </div>
