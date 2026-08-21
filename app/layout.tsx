@@ -1,7 +1,9 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
 import { loadCensus } from "@/lib/data";
+import { ThemeToggle } from "./theme-toggle";
+import { CategoriesDropdown } from "./categories-dropdown";
 import "./globals.css";
 
 const sans = Geist({
@@ -36,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const minted = c.tokensMinted.toLocaleString();
   const callable = c.callable.toLocaleString();
 
-  const title = "GEBO Â· Agent registry for BNB Smart Chain";
+  const title = "GEBO · Agent registry for BNB Smart Chain";
   const description =
     `${minted} agents are registered on BNB Chain. ${callable} can actually be hired. ` +
     `GEBO reads the registry directly, audits what each agent declares, and shows what ` +
@@ -52,9 +54,25 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+const themeInitScript = `
+(function() {
+  try {
+    var saved = localStorage.getItem('gebo-theme');
+    if (saved === 'light' || saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', saved);
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body>
         <header className="masthead">
           <div className="shell">
@@ -69,17 +87,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               />
               <span className="wordmark-text">GEBO</span>
             </a>
-            <nav aria-label="Categories">
-              <a href="/c/rebalancing">Rebalancing</a>
-              <a href="/c/grid">Grid</a>
-              <a href="/c/yield">Yield</a>
-              <a href="/c/health">Health factor</a>
-              <a href="/c/trading" className="nav-sep">Trading</a>
-              <a href="/c/research">Research</a>
-              <a href="/c/payments">Payments</a>
-              <a href="/authority" className="nav-sep">Authority</a>
+            <form method="get" action="/search" className="masthead-search" role="search">
+              <input
+                type="search"
+                name="q"
+                placeholder="Search agents by capability..."
+                aria-label="Search agents by capability"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </form>
+            <nav aria-label="Primary Navigation">
+              <CategoriesDropdown />
+              <a href="/live">Liveness</a>
+              <a href="/authority">Authority</a>
               <a href="/methodology">Methodology</a>
             </nav>
+            <ThemeToggle />
           </div>
         </header>
 
@@ -88,23 +112,91 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="colophon">
           <div className="shell">
             <div className="colophon-grid">
-              <div>
+              {/* Col 1: Brand & Philosophy */}
+              <div className="colophon-brand">
                 <a href="/" className="wordmark" style={{ marginBottom: 14 }} aria-label="GEBO home">
-                  <Image src="/gebo-mark.png" alt="" width={22} height={22} className="wordmark-mark" />
-                  <span className="wordmark-text" style={{ fontSize: 17 }}>GEBO</span>
+                  <Image src="/gebo-mark.png" alt="" width={24} height={24} className="wordmark-mark" />
+                  <span className="wordmark-text" style={{ fontSize: 18 }}>GEBO</span>
                 </a>
                 <p>
-                  Every figure in GEBO is measured by this project and reproducible from
-                  the scripts in it. Definitions and known defects are published rather
-                  than implied.
+                  A verification-first agent registry for BNB Smart Chain. Every figure in GEBO is measured directly from the chain and reproducible from open-source scripts.
                 </p>
-                <a href="/methodology" className="link">Read the methodology</a>
+                <div className="stack-sm mt-m">
+                  <a href="/methodology" className="link">Read the methodology →</a>
+                </div>
               </div>
-              <dl className="spec">
-                <div><dt>Identity registry</dt><dd>0x8004a169â€¦a432</dd></div>
-                <div><dt>Chain</dt><dd>BNB Smart Chain Â· 56</dd></div>
-                <div><dt>Keystore</dt><dd>0x6572427Eâ€¦7E0a</dd></div>
-              </dl>
+
+              {/* Col 2: Verified Agent Jobs */}
+              <div className="colophon-col">
+                <div className="colophon-title">Verified Jobs</div>
+                <ul className="colophon-links">
+                  <li><a href="/c/rebalancing">Rebalancing (PancakeSwap)</a></li>
+                  <li><a href="/c/grid">Grid Trading</a></li>
+                  <li><a href="/c/yield">Yield Routing</a></li>
+                  <li><a href="/c/health">Health Factor Defence</a></li>
+                  <li><a href="/c/trading">Trading & Execution</a></li>
+                  <li><a href="/c/research">Research & Screening</a></li>
+                  <li><a href="/c/payments">Payments (x402)</a></li>
+                </ul>
+              </div>
+
+              {/* Col 3: Protocol & Tools */}
+              <div className="colophon-col">
+                <div className="colophon-title">Protocol & Tools</div>
+                <ul className="colophon-links">
+                  <li><a href="/live">Live Handshake Feed</a></li>
+                  <li><a href="/authority">Authority & Keystore Console</a></li>
+                  <li><a href="/search">Capability Search</a></li>
+                  <li><a href="/methodology">Measurement & Defect Log</a></li>
+                </ul>
+              </div>
+
+              {/* Col 4: On-Chain Spec */}
+              <div className="colophon-col">
+                <div className="colophon-title">On-Chain Spec (BSC)</div>
+                <dl className="spec">
+                  <div>
+                    <dt>Identity registry</dt>
+                    <dd>
+                      <a
+                        href="https://bscscan.com/address/0x8004a169D4F11E55Fd67b1348881A25B4468a432"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="link mono"
+                        title="View contract on BscScan"
+                      >
+                        0x8004…a432 ↗
+                      </a>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Chain</dt>
+                    <dd>BNB Smart Chain · 56</dd>
+                  </div>
+                  <div>
+                    <dt>Keystore</dt>
+                    <dd>
+                      <a
+                        href="https://bscscan.com/address/0x6572427E3e0bB1F70b2c3479B48f3F108C507E0a"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="link mono"
+                        title="View contract on BscScan"
+                      >
+                        0x6572…7E0a ↗
+                      </a>
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+
+            <div className="colophon-bottom">
+              <div className="colophon-meta">
+                <span>© {new Date().getFullYear()} GEBO</span>
+                <span className="t-4">·</span>
+                <span>Verification-First Agent Registry for BNB Chain</span>
+              </div>
             </div>
           </div>
         </footer>

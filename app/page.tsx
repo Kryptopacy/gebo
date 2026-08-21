@@ -76,7 +76,7 @@ export default async function Home() {
   return (
     <>
       {/* ── hero ─────────────────────────────────────────────────── */}
-      <section className="band">
+      <section className="band animate-in delay-1">
         <div className="shell">
           <div className="headline-pair">
             <h1>
@@ -93,7 +93,7 @@ export default async function Home() {
       </section>
 
       {/* ── the collapse ─────────────────────────────────────────── */}
-      <section className="band">
+      <section className="band animate-in delay-2">
         <div className="shell">
           <p className="section-label">
             Registry census · {CENSUS.measuredAt} · {CENSUS.censused.toLocaleString()} identities read from chain
@@ -133,7 +133,7 @@ export default async function Home() {
       </section>
 
       {/* ── concentration ────────────────────────────────────────── */}
-      <section className="band">
+      <section className="band animate-in delay-3">
         <div className="shell">
           <h2>{CENSUS.owners.toLocaleString()} owners. {CENSUS.operators} operators.</h2>
           <p className="prose sm">
@@ -203,7 +203,7 @@ export default async function Home() {
       </section>
 
       {/* ── four jobs ────────────────────────────────────────────── */}
-      <section className="band">
+      <section className="band animate-in delay-4">
         <div className="shell">
           <h2>Four jobs worth paying an agent to do</h2>
           <p className="prose sm">
@@ -245,7 +245,7 @@ export default async function Home() {
       </section>
 
       {/* ── the rest of the chain ─────────────────────────────────── */}
-      <section className="band">
+      <section className="band animate-in delay-5">
         <div className="shell">
           <h2>What agents on BNB Chain actually do</h2>
           <p className="prose sm">
@@ -288,9 +288,13 @@ export default async function Home() {
       </section>
 
       {/* ── hiring model ─────────────────────────────────────────── */}
-      <section className="band band-last">
+      <section className="band band-last animate-in delay-6">
         <div className="shell">
           <h2>What authorising an agent actually means</h2>
+          <p className="prose sm">
+            GEBO models hiring as granting verifiable session authority with enforceable on-chain limits,
+            never blindly handing over your private key or signing open-ended approvals.
+          </p>
           <div className="rows mt-m">
             {[
               ["Scope and simulate",
@@ -302,7 +306,7 @@ export default async function Home() {
               ["Revoke unilaterally",
                "Revocation is a single transaction and needs no cooperation from the agent. The control is present from the moment a session exists."],
             ].map(([title, body], i) => (
-              <div key={title} className="row r-spec">
+              <div key={title} className="row r-steps">
                 <div className="num t-4 sm">0{i + 1}</div>
                 <div>
                   <h3>{title}</h3>
