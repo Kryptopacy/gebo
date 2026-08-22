@@ -7,15 +7,24 @@ export const revalidate = 0;
  * Authority console.
  *
  * The Altana track requires that a user can see what their agent may do and
- * revoke it inside the product. This is that page, and it works for ANY wallet
- * without permission, because Keystore reads need no admin key and nothing from
- * Altana.
+ * revoke it inside the product. This is that page, and it needs no permission,
+ * because Keystore reads need no admin key and nothing from Altana.
  *
- * It states plainly what the registry cannot tell us. The Keystore exposes
- * getKeys, isValidKey and getPublicKey, but no getter for the permission set, so
- * a third party's exact allowlist and spend caps are not readable from the
- * registry alone. Implying otherwise would be the failure this project exists to
- * expose.
+ * IT READS ONE AUTHORITY SYSTEM, AND SAYS SO EVERYWHERE.
+ *
+ * The page previously claimed to work "for any wallet". It does run against any
+ * address, but it only sees Altana Keystore sessions - so a wallet using another
+ * agent-wallet layer, or one carrying ordinary token approvals, returned an empty
+ * result under a heading reading "no session key has ever been registered on this
+ * wallet". On a page whose entire job is telling someone what can move their
+ * money, an unscoped negative is the most damaging thing it can render. Every
+ * claim here is now scoped to the Keystore, and the routes this query does not
+ * cover are listed rather than implied.
+ *
+ * It also states what the registry cannot tell us. The Keystore exposes getKeys,
+ * isValidKey and getPublicKey, but no getter for the permission set, so a third
+ * party's exact allowlist and spend caps are not readable from the registry alone.
+ * Implying otherwise would be the failure this project exists to expose.
  */
 export default async function AuthorityPage({
   searchParams,
@@ -38,8 +47,9 @@ export default async function AuthorityPage({
               What can an agent do to this wallet?
             </h1>
             <p className="standfirst">
-              Read straight from the Altana Keystore. Works for any wallet, needs no
-              permission, and does not depend on us: the same query runs from anywhere.
+              Read straight from the Altana Keystore. Needs no permission and does not
+              depend on us: the same query runs from anywhere. It covers Keystore
+              sessions only, and says below what it does not see.
             </p>
           </div>
 
@@ -81,13 +91,13 @@ export default async function AuthorityPage({
                     {authority.activeKeys}
                   </dd>
                   <div className="qualifier">
-                    Keys currently able to act on this wallet
+                    Keystore keys currently able to act on this wallet
                   </div>
                 </div>
                 <div className="kpi-card">
                   <dt>Keys ever registered</dt>
                   <dd>{authority.keys.length}</dd>
-                  <div className="qualifier">Including expired and revoked</div>
+                  <div className="qualifier">In this Keystore, including expired and revoked</div>
                 </div>
                 <div className="kpi-card">
                   <dt>Account</dt>
@@ -121,7 +131,7 @@ export default async function AuthorityPage({
             <div className="shell">
               <h2>
                 {authority.keys.length === 0
-                  ? "No session key has ever been registered on this wallet"
+                  ? "No session key is registered in the Altana Keystore"
                   : `${authority.keys.length} session key${authority.keys.length === 1 ? "" : "s"}`}
               </h2>
 
@@ -131,11 +141,12 @@ export default async function AuthorityPage({
                     Nothing in the Keystore grants authority over this wallet.
                   </p>
                   <div className="notice mt-m" data-tone="fail">
-                    <strong>That is not the same as being safe.</strong> A session granted with{" "}
+                    <strong>That is not the same as being safe.</strong> This reads one
+                    registry. A session granted with{" "}
                     <span className="num">register: false</span> is enforced by the account but
-                    never appears here, so it holds real authority while remaining invisible to
-                    every third party. Absence of a registered key is absence of evidence, not
-                    evidence of absence.
+                    never appears here; a different wallet layer keeps its own records; and an
+                    ordinary token approval grants spending power without any session at all.
+                    Absence of a registered key is absence of evidence, not evidence of absence.
                   </div>
                 </div>
               ) : (
@@ -194,6 +205,33 @@ export default async function AuthorityPage({
                 <span className="num">registerKey</span>, not readable state. So the exact scope
                 of a key granted by someone else is not derivable from the registry alone.
               </p>
+              <p className="prose sm">
+                It also reads <strong>one</strong> authority system. An agent can hold power over
+                a wallet through routes this query does not touch, and a clean result here says
+                nothing about them:
+              </p>
+              <ul className="prose sm" style={{ paddingLeft: "1.1rem" }}>
+                <li>
+                  <strong>Unregistered sessions.</strong> Granted with{" "}
+                  <span className="num">register: false</span>, enforced by the account, invisible
+                  to every third party including this page.
+                </li>
+                <li>
+                  <strong>Other wallet layers.</strong> Binance&apos;s Agentic Wallet and other
+                  agent-wallet providers keep their own authority records. This reads the Altana
+                  Keystore, not theirs.
+                </li>
+                <li>
+                  <strong>Plain token approvals.</strong> An{" "}
+                  <span className="num">approve</span> to a spender grants ongoing power to move a
+                  token with no session, no expiry and no registry entry.
+                </li>
+                <li>
+                  <strong>Delegations outside the Keystore.</strong> An EIP-7702 account can
+                  delegate to an implementation with its own permission model; the delegation
+                  target is shown above, but its internal rules are not read here.
+                </li>
+              </ul>
               <p className="prose sm">
                 What is verifiable here is whether a key holds authority at this block, and that
                 revoking it is possible and immediate. Both were confirmed on chain, including a
