@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Endpoint probing with protocol validation.
  *
  * The first-pass prober only checked for a 2xx, which measured "a server served
@@ -7,9 +7,9 @@
  * Card, and MCP endpoints must complete a JSON-RPC `initialize` handshake.
  *
  * Outcome is graded, not boolean:
- *   validated  — spoke the protocol correctly. This is the only real signal.
- *   responded  — 2xx, but did not validate as an agent interface.
- *   failed     — no usable response, with the reason classified.
+ *   validated  â€” spoke the protocol correctly. This is the only real signal.
+ *   responded  â€” 2xx, but did not validate as an agent interface.
+ *   failed     â€” no usable response, with the reason classified.
  *
  * Error classes are kept distinct because "DNS does not resolve" (abandoned)
  * is a different fact from "timed out" (possibly alive, unreachable from here).
@@ -59,6 +59,26 @@ function classify(e: any): { cls: ErrClass; detail: string } {
   return { cls: "other", detail: msg.slice(0, 160) };
 }
 
+/**
+ * Keep only detail worth storing.
+ *
+ * Raw transport output leaked into a human-facing column: a bare "23" from an
+ * errno, and whole Cloudflare error-page bodies from a 502. Neither means
+ * anything to a reader, and the classified outcome already carries the meaning,
+ * so anything that is not prose-shaped is dropped rather than persisted.
+ */
+function cleanDetail(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  const d = String(detail).replace(/\s+/g, " ").trim();
+  if (d.length < 8) return null;                          // bare codes
+  if (/^[\d\s.,:-]+$/.test(d)) return null;                // numbers only
+  if (/^[[{"]/.test(d)) return null;                       // JSON or quoted payload
+  if (/<\/?[a-z]+[\s>]/i.test(d)) return null;             // HTML error page
+  if (d.includes("cloudflare.com/support")) return null;   // vendor error page
+  if (!/[a-z]{3}/i.test(d)) return null;                   // no real words
+  return d.slice(0, 160);
+}
+
 /** Does this JSON look like an A2A Agent Card? */
 function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, unknown> } {
   if (!json || typeof json !== "object") return { ok: false, evidence: { reason: "not an object" } };
@@ -75,7 +95,7 @@ function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, u
    *
    * This is the agent's own statement of what it can do, and it is the only
    * capability signal in the ecosystem that is neither a name nor marketing
-   * copy. Discarding it — as an earlier version did — left classification
+   * copy. Discarding it â€” as an earlier version did â€” left classification
    * matching against names like "premium" and "Professor".
    */
   const skillNames: string[] = [];
@@ -84,7 +104,7 @@ function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, u
       if (typeof s === "string") { skillNames.push(s.slice(0, 120)); continue; }
       if (s && typeof s === "object") {
         const parts = [s.name, s.id, s.description].filter((x) => typeof x === "string" && x.length);
-        if (parts.length) skillNames.push(parts.join(" — ").slice(0, 200));
+        if (parts.length) skillNames.push(parts.join(" â€” ").slice(0, 200));
         if (Array.isArray(s.tags)) {
           for (const t of s.tags.slice(0, 8)) if (typeof t === "string") skillNames.push(t.slice(0, 60));
         }
@@ -125,7 +145,7 @@ async function probeA2A(url: string): Promise<Partial<ProbeOutcome>> {
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch {
-    return { grade: "responded", httpStatus: status, errClass: "non_json", errDetail: text.slice(0, 100), evidence: null };
+    return { grade: "responded", httpStatus: status, errClass: "non_json", errDetail: cleanDetail(text), evidence: null };
   }
   const v = validateAgentCard(json);
   return {
@@ -158,7 +178,7 @@ async function probeMCP(url: string): Promise<Partial<ProbeOutcome>> {
   const text = await res.text();
 
   if (!res.ok) {
-    return { grade: "failed", httpStatus: status, errClass: status >= 500 ? "http_5xx" : "http_4xx", errDetail: text.slice(0, 120) };
+    return { grade: "failed", httpStatus: status, errClass: status >= 500 ? "http_5xx" : "http_4xx", errDetail: cleanDetail(text) };
   }
 
   // Response may be plain JSON or an SSE frame ("data: {...}").
@@ -167,7 +187,7 @@ async function probeMCP(url: string): Promise<Partial<ProbeOutcome>> {
   try { json = JSON.parse(sse ? sse[1]! : text); } catch { /* leave null */ }
 
   if (!json) {
-    return { grade: "responded", httpStatus: status, errClass: "non_json", errDetail: text.slice(0, 100), evidence: null };
+    return { grade: "responded", httpStatus: status, errClass: "non_json", errDetail: cleanDetail(text), evidence: null };
   }
   const result = json.result;
   const ok = !!result && (typeof result.protocolVersion === "string" || !!result.serverInfo || !!result.capabilities);
@@ -190,7 +210,7 @@ async function probeMCP(url: string): Promise<Partial<ProbeOutcome>> {
 async function probeWeb(url: string): Promise<Partial<ProbeOutcome>> {
   const res = await fetchWithTimeout(url, { method: "GET", headers: { accept: "*/*" } });
   return res.ok
-    ? { grade: "responded", httpStatus: res.status, errClass: "ok", errDetail: "reachable web page — no agent protocol asserted", evidence: null }
+    ? { grade: "responded", httpStatus: res.status, errClass: "ok", errDetail: "reachable web page â€” no agent protocol asserted", evidence: null }
     : { grade: "failed", httpStatus: res.status, errClass: res.status >= 500 ? "http_5xx" : "http_4xx", errDetail: res.statusText };
 }
 
@@ -201,7 +221,7 @@ export async function probeEndpoint(ep: Endpoint): Promise<ProbeOutcome> {
   };
 
   try { new URL(ep.url); } catch {
-    return { ...base, errClass: "bad_url", errDetail: ep.url.slice(0, 120) };
+    return { ...base, errClass: "bad_url", errDetail: cleanDetail(ep.url) };
   }
 
   const t0 = performance.now();
@@ -213,6 +233,6 @@ export async function probeEndpoint(ep: Endpoint): Promise<ProbeOutcome> {
     return { ...base, ...r, rttMs: Math.round(performance.now() - t0) };
   } catch (e) {
     const { cls, detail } = classify(e);
-    return { ...base, rttMs: Math.round(performance.now() - t0), errClass: cls, errDetail: detail };
+    return { ...base, rttMs: Math.round(performance.now() - t0), errClass: cls, errDetail: cleanDetail(detail) };
   }
 }

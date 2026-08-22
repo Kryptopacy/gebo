@@ -59,7 +59,87 @@ export type Transition = {
   errClass: string | null;
   detail: string | null;
   url: string | null;
+  /** A sentence a person can read. See humanReason. */
+  reason: string;
 };
+
+/**
+ * Plain-English explanations for each classified outcome.
+ *
+ * Kept distinct because "DNS does not resolve" describes an abandoned agent while
+ * "timed out" may describe a live one we cannot reach, and collapsing them would
+ * overstate how much of the chain is dead.
+ */
+const OUTCOME_REASON: Record<string, string> = {
+  ok: "Answered correctly",
+  dns: "Its domain no longer resolves",
+  timeout: "Did not respond in time",
+  tls: "TLS or certificate failure",
+  refused: "Refused the connection",
+  reset: "Dropped the connection mid-request",
+  http_4xx: "Returned a client error, so a server exists but the endpoint does not",
+  http_5xx: "Returned a server error",
+  non_json: "Answered, but not with parseable JSON",
+  bad_url: "Its registered address is not a usable URL",
+  no_endpoint: "Declares no endpoint to reach",
+  other: "Failed for an unclassified reason",
+};
+
+/**
+ * Is this detail string worth showing a person?
+ *
+ * Probe detail is raw transport output. It has included bare error codes ("23")
+ * and whole Cloudflare error-page bodies, neither of which means anything to a
+ * reader. Only prose-shaped fragments survive.
+ */
+function usefulDetail(detail: string | null): string | null {
+  if (!detail) return null;
+  const d = detail.trim();
+  if (d.length < 8) return null;                    // bare codes like "23"
+  if (/^[\d\s.,:-]+$/.test(d)) return null;          // numbers only
+  if (/^[[{"]/.test(d)) return null;                 // JSON or a quoted payload
+  if (d.includes("cloudflare.com/support")) return null; // vendor error page
+  if (!/[a-z]{3}/i.test(d)) return null;             // no real words
+  return d.replace(/\s+/g, " ").slice(0, 110);
+}
+
+/**
+ * Turn a transition into one readable sentence.
+ *
+ * The stored detail is a fallback, not the headline: an agent's state change
+ * should be legible without knowing what an HTTP status or an errno means.
+ */
+export function humanReason(
+  to: string,
+  errClass: string | null,
+  detail: string | null,
+): string {
+  const base = errClass ? OUTCOME_REASON[errClass] : null;
+
+  if (to === "VERIFIED") return "Answered and spoke the protocol correctly";
+  if (to === "SHADOWED") return "Its registration is broken, so no client can call it";
+
+  if (to === "LISTED") {
+    /**
+     * A server replied but did not behave like an agent. The stored detail here
+     * is developer shorthand - "2xx but no MCP initialize result" - so it is
+     * translated rather than surfaced. The distinction a reader needs is that
+     * something is hosted at the address, but it is not an agent.
+     */
+    const d = (detail ?? "").toLowerCase();
+    if (d.includes("initialize")) return "Its address responds, but not as an MCP agent";
+    if (d.includes("agent card")) return "Its address responds, but not with a valid agent card";
+    if (d.includes("json")) return "Its address responds, but not with usable JSON";
+    return "A server answered, but not as an agent";
+  }
+
+  // DORMANT and anything else.
+  const d = usefulDetail(detail);
+  if (base && d && !d.toLowerCase().startsWith(base.slice(0, 10).toLowerCase())) {
+    return `${base} — ${d}`;
+  }
+  return base ?? d ?? "Stopped answering";
+}
 
 export type UptimeRow = {
   tokenId: string;
@@ -159,6 +239,7 @@ export async function recentTransitions(limit = 40): Promise<Transition[]> {
       errClass: r.err_class ?? null,
       detail: r.detail ?? null,
       url: r.url ?? null,
+      reason: humanReason(r.to_grade, r.err_class ?? null, r.detail ?? null),
     }));
   } catch {
     return [];
