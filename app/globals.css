@@ -1399,28 +1399,28 @@ a.row-hover:focus-visible { outline-offset: -2px; }
 }
 
 .surface-card-highlight {
-  background: linear-gradient(135deg, rgba(240, 185, 11, 0.065) 0%, rgba(240, 185, 11, 0.015) 45%, var(--card-bg) 100%);
-  border: 1px solid rgba(240, 185, 11, 0.28);
+  background: var(--card-bg);
+  border: 1px solid rgba(240, 185, 11, 0.42);
   border-radius: 12px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--card-shadow);
   padding: 24px;
   overflow: hidden;
   max-width: 100%;
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease;
 }
 .surface-card-highlight:hover {
-  border-color: rgba(240, 185, 11, 0.45);
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 185, 11, 0.22);
+  border-color: var(--accent);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   transform: translateY(-2px);
 }
 [data-theme="light"] .surface-card-highlight {
-  background: linear-gradient(135deg, rgba(184, 131, 0, 0.05) 0%, rgba(184, 131, 0, 0.01) 45%, #FFFFFF 100%);
-  border: 1px solid rgba(184, 131, 0, 0.28);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.05);
+  background: var(--card-bg);
+  border: 1px solid rgba(184, 131, 0, 0.42);
+  box-shadow: var(--card-shadow);
 }
 [data-theme="light"] .surface-card-highlight:hover {
-  border-color: rgba(184, 131, 0, 0.45);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(184, 131, 0, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
 
