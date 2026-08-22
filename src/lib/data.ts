@@ -111,7 +111,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Trade a range automatically",
     blurb: "Places and manages a ladder of orders inside a band, with a declared behaviour when price leaves it.",
-    venue: "PancakeSwap Â· DEX",
+    venue: "PancakeSwap · DEX",
     counterfactual: "against holding over the same window, marked to market including open inventory",
     floor: "100 closed trades",
   },
@@ -120,7 +120,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Move my capital to better yield",
     blurb: "Routes capital toward the highest sustainable rate, quoting the unboosted lower bound.",
-    venue: "Venus Â· Aave V3 Â· Lista",
+    venue: "Venus · Aave V3 · Lista",
     counterfactual: "against the best passive single-venue deposit, net of migration gas",
     floor: "10 migrations",
   },
@@ -129,7 +129,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Stop my loan being liquidated",
     blurb: "Watches health factor and acts before liquidation, with declared oracle sources.",
-    venue: "Venus Â· Aave V3",
+    venue: "Venus · Aave V3",
     counterfactual: "against the no-agent outcome replayed over realised prices",
     floor: "one adverse regime observed",
   },
@@ -141,7 +141,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Trade tokens on my behalf",
     blurb: "General on-chain trading: swaps, entries and exits, copy-trading and launchpad activity.",
-    venue: "PancakeSwap Â· Four.meme",
+    venue: "PancakeSwap · Four.meme",
     counterfactual: "against holding, marked to market including open positions",
     floor: "100 closed trades",
   },
@@ -150,7 +150,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Tell me what is happening",
     blurb: "Screening, analysis and monitoring. Produces information rather than transactions.",
-    venue: "Off-chain data Â· on-chain reads",
+    venue: "Off-chain data · on-chain reads",
     counterfactual: "against the same research done by hand, on time and cost",
     floor: "10 completed tasks",
   },
@@ -159,7 +159,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Pay and get paid autonomously",
     blurb: "Per-call settlement and job escrow, over x402 or ERC-8183.",
-    venue: "x402 Â· ERC-8183",
+    venue: "x402 · ERC-8183",
     counterfactual: "against a manual invoice-and-settle cycle",
     floor: "20 settled payments",
   },
@@ -177,7 +177,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Run agent infrastructure",
     blurb: "Registry, identity, deployment and wallet tooling that other agents depend on.",
-    venue: "ERC-8004 Â· tooling",
+    venue: "ERC-8004 · tooling",
     counterfactual: "against operating the same tooling yourself",
     floor: "10 completed tasks",
   },
@@ -724,33 +724,33 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
   { key: string; label: string; fmt: (v: any, p: Record<string, any>) => string; align?: "right" }[]
 >> = {
   rebalancing: [
-    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "â€”" : `${v}%`), align: "right" },
-    { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "â€”" : String(v)), align: "right" },
-    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "â€”" : Number(v).toLocaleString()), align: "right" },
+    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
+    { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
+    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
     { key: "liquidity", label: "Active liquidity", fmt: (v) => (!v || v === "0" ? "none" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
   ],
   grid: [
-    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "â€”" : `${v}%`), align: "right" },
-    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "â€”" : Number(v).toLocaleString()), align: "right" },
-    { key: "observationCardinality", label: "Oracle slots", fmt: (v) => (v == null ? "â€”" : String(v)), align: "right" },
+    { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
+    { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
+    { key: "observationCardinality", label: "Oracle slots", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
     { key: "unlocked", label: "Pool state", fmt: (v) => (v === false ? "locked" : "unlocked") },
   ],
   yield: [
-    { key: "supplyAprPct", label: "Supply APR", fmt: (v) => (v == null ? "â€”" : `${Number(v).toFixed(2)}%`), align: "right" },
-    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "â€”" : `${Number(v).toFixed(2)}%`), align: "right" },
-    { key: "utilisation", label: "Utilisation", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
-    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    { key: "supplyAprPct", label: "Supply APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "utilisation", label: "Utilisation", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
+    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
   ],
   health: [
-    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
-    { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "â€”" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
-    { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null ? "â€”" : `${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
-    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "â€”" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null ? "—" : `${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
+    { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
   ],
 };
 
-// â”€â”€ population â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Chain-wide figures from the registry census (docs/MEASUREMENTS.md Â§0), read
+// ── population ─────────────────────────────────────────────────────────────
+// Chain-wide figures from the registry census (docs/MEASUREMENTS.md §0), read
 // directly from the ERC-8004 Identity Registry rather than sampled through an
 // API. CENSUS.* is measured; POPULATION.* cross-references the 8004scan API.
 
@@ -934,7 +934,7 @@ export function agentsByCategory(agents: Agent[]) {
   return map;
 }
 
-/** Tiered, never popularity. See docs/PRODUCT_SPEC.md Â§5. */
+/** Tiered, never popularity. See docs/PRODUCT_SPEC.md §5. */
 export function rankAgents(agents: Agent[]): Agent[] {
   const tier = (a: Agent) => {
     const { state } = trustState(a);

@@ -68,41 +68,41 @@ export default async function CategoryPage({
           </p>
 
           {opps.length === 0 ? (
-            <div className="rows mt-m">
-              <div className="row" style={{ gridTemplateColumns: "1fr" }}>
-                <div className="sm t-3">
-                  {cat.judged
-                    ? "Opportunity indexing has not run for this category yet."
-                    : "This category has no chain-derived opportunity surface. Rebalancing, grid, yield and health factor map onto specific PancakeSwap and Venus state that can be indexed; the work here is not expressible as an on-chain position, so agents are listed on their measured behaviour instead."}
-                </div>
+            <div className="surface-card mt-m">
+              <div className="sm t-3">
+                {cat.judged
+                  ? "Opportunity indexing has not run for this category yet."
+                  : "This category has no chain-derived opportunity surface. Rebalancing, grid, yield and health factor map onto specific PancakeSwap and Venus state that can be indexed; the work here is not expressible as an on-chain position, so agents are listed on their measured behaviour instead."}
               </div>
             </div>
           ) : (
-            <div className="rows mt-m">
-              <div className="rows-head" style={{ gridTemplateColumns: oppGrid }}>
-                <span>Market</span>
-                {cols.map((c) => (
-                  <span key={c.key} style={{ textAlign: c.align === "right" ? "right" : "left" }}>
-                    {c.label}
-                  </span>
-                ))}
-              </div>
-              {eligible.slice(0, 14).map((o) => (
-                <div key={o.id} className="row" style={{ gridTemplateColumns: oppGrid }}>
-                  <div>
-                    <h3>{o.label}</h3>
-                    <div className="xs t-4 num">
-                      {VENUE_LABEL[o.venue] ?? o.venue} · {o.ref.slice(0, 10)}…
-                    </div>
-                  </div>
+            <div className="data-table-frame mt-m">
+              <div className="rows">
+                <div className="rows-head" style={{ gridTemplateColumns: oppGrid }}>
+                  <span>Market</span>
                   {cols.map((c) => (
-                    <div key={c.key} className="num sm"
-                      style={{ textAlign: c.align === "right" ? "right" : "left" }}>
-                      {c.fmt(o.payload[c.key], o.payload)}
-                    </div>
+                    <span key={c.key} style={{ textAlign: c.align === "right" ? "right" : "left" }}>
+                      {c.label}
+                    </span>
                   ))}
                 </div>
-              ))}
+                {eligible.slice(0, 14).map((o) => (
+                  <div key={o.id} className="row" style={{ gridTemplateColumns: oppGrid }}>
+                    <div>
+                      <h3>{o.label}</h3>
+                      <div className="xs t-4 num">
+                        {VENUE_LABEL[o.venue] ?? o.venue} · {o.ref.slice(0, 10)}…
+                      </div>
+                    </div>
+                    {cols.map((c) => (
+                      <div key={c.key} className="num sm"
+                        style={{ textAlign: c.align === "right" ? "right" : "left" }}>
+                        {c.fmt(o.payload[c.key], o.payload)}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -111,14 +111,16 @@ export default async function CategoryPage({
               <summary className="sm t-3" style={{ cursor: "pointer" }}>
                 {ineligible.length} excluded — shown with the reason rather than dropped
               </summary>
-              <div className="rows mt-m">
-                {ineligible.slice(0, 12).map((o) => (
-                  <div key={o.id} className="row"
-                    style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1.4fr)" }}>
-                    <div className="sm t-3">{o.label}</div>
-                    <div className="xs t-4">{o.ineligibleReason}</div>
-                  </div>
-                ))}
+              <div className="data-table-frame mt-m">
+                <div className="rows">
+                  {ineligible.slice(0, 12).map((o) => (
+                    <div key={o.id} className="row"
+                      style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1.4fr)" }}>
+                      <div className="sm t-3">{o.label}</div>
+                      <div className="xs t-4">{o.ineligibleReason}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </details>
           )}
@@ -147,23 +149,23 @@ export default async function CategoryPage({
 
       <section className="band-tight">
         <div className="shell">
-          <dl className="readouts">
-            <div className="readout">
+          <dl className="kpi-grid">
+            <div className="kpi-card">
               <dt>Verified</dt>
               <dd style={{ color: tally("VERIFIED") ? "var(--pass)" : "var(--fg-4)" }}>{tally("VERIFIED")}</dd>
               <div className="qualifier">Completed an A2A or MCP handshake</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Listed</dt>
               <dd>{tally("LISTED")}</dd>
               <div className="qualifier">Responded without speaking the protocol</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Dormant</dt>
               <dd className="t-4">{tally("DORMANT")}</dd>
               <div className="qualifier">No usable response from our probe</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Shadowed</dt>
               <dd style={{ color: tally("SHADOWED") ? "var(--fail)" : "var(--fg-4)" }}>{tally("SHADOWED")}</dd>
               <div className="qualifier">Fatal registration defect — uncallable by any client</div>
@@ -187,52 +189,55 @@ export default async function CategoryPage({
           </p>
 
           {ranked.length === 0 ? (
-            <div className="rows mt-m">
-              <div className="row" style={{ gridTemplateColumns: "1fr" }}>
-                <div>
-                  <h3>No audited agent describes this job</h3>
-                  <p className="sm t-3" style={{ margin: 0, maxWidth: "68ch" }}>
-                    That is a finding rather than an empty state. The four jobs this registry is
-                    built around are barely served on BNB Chain today. The opportunity surface
-                    for this category is indexed from chain state and does not depend on any
-                    agent existing, so the work is visible even when nobody is doing it.
-                  </p>
-                </div>
+            <div className="surface-card mt-m">
+              <div>
+                <h3>No audited agent describes this job</h3>
+                <p className="sm t-3" style={{ margin: 0, maxWidth: "68ch" }}>
+                  That is a finding rather than an empty state. The four jobs this registry is
+                  built around are barely served on BNB Chain today. The opportunity surface
+                  for this category is indexed from chain state and does not depend on any
+                  agent existing, so the work is visible even when nobody is doing it.
+                </p>
               </div>
             </div>
           ) : (
-            <div className="rows mt-m">
-              <div className="rows-head r-agents">
-                <span>Agent</span><span>State</span><span>Operator</span>
-                <span style={{ textAlign: "right" }}>Response</span><span>Reason</span>
-              </div>
-              {ranked.map((a) => {
-                const st = trustState(a);
-                const m = classify(a);
-                return (
-                  <a key={a.token_id} href={`/a/${a.token_id}`} className="row row-hover r-agents">
-                    <div>
-                      <h3>{a.name ?? `Agent ${a.token_id}`}</h3>
-                      <div className="xs t-4 num">
-                        #{a.token_id}
-                        {m.matched.length > 0 && <span> · matched “{m.matched[0]}”</span>}
+            <div className="data-table-frame mt-m">
+              <div className="rows">
+                <div className="rows-head r-agents">
+                  <span>Agent</span><span>State</span><span>Operator</span>
+                  <span style={{ textAlign: "right" }}>Response</span><span>Reason</span>
+                </div>
+                {ranked.map((a, i) => {
+                  const st = trustState(a);
+                  const m = classify(a);
+                  return (
+                    <a key={a.token_id} href={`/a/${a.token_id}`} className="row row-hover r-agents">
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                        <span className="rank-badge" data-rank={i + 1}>{i + 1}</span>
+                        <div>
+                          <h3>{a.name ?? `Agent ${a.token_id}`}</h3>
+                          <div className="xs t-4 num">
+                            #{a.token_id}
+                            {m.matched.length > 0 && <span> · matched “{m.matched[0]}”</span>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div><span className="chip" data-state={st.state}>{st.state}</span></div>
-                    <div className="num xs t-3">{a.operator?.registrableDomain ?? "—"}</div>
-                    <div className="num sm" style={{ textAlign: "right" }}>
-                      {a.probe?.grade === "validated" ? (
-                        <span style={{ color: "var(--pass)" }}>{a.probe.rttMs} ms</span>
-                      ) : a.probe?.httpStatus ? (
-                        <span className="t-4">{a.probe.httpStatus}</span>
-                      ) : (
-                        <span className="t-4">—</span>
-                      )}
-                    </div>
-                    <div className="xs t-3">{st.reason}</div>
-                  </a>
-                );
-              })}
+                      <div><span className="chip" data-state={st.state}>{st.state}</span></div>
+                      <div className="num xs t-3">{a.operator?.registrableDomain ?? "—"}</div>
+                      <div className="num sm" style={{ textAlign: "right" }}>
+                        {a.probe?.grade === "validated" ? (
+                          <span style={{ color: "var(--pass)" }}>{a.probe.rttMs} ms</span>
+                        ) : a.probe?.httpStatus ? (
+                          <span className="t-4">{a.probe.httpStatus}</span>
+                        ) : (
+                          <span className="t-4">—</span>
+                        )}
+                      </div>
+                      <div className="xs t-3">{st.reason}</div>
+                    </a>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

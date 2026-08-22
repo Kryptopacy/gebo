@@ -51,12 +51,42 @@ export default async function SearchPage({
             <button type="submit" className="cta">Search</button>
           </form>
 
+          {/* Quick capability filter shortcuts */}
+          <div className="inline-list mt-m" style={{ gap: 8 }}>
+            <span className="xs t-4">Quick scopes:</span>
+            {[
+              ["All", ""],
+              ["Rebalance & DEX", "rebalance"],
+              ["Lending Health", "loan"],
+              ["Yield Routing", "yield"],
+              ["x402 Payments", "x402"],
+              ["Market Research", "analysis"],
+            ].map(([label, term]) => {
+              const active = term ? q.toLowerCase().includes(term) : !q;
+              return (
+                <a
+                  key={label}
+                  href={term ? `/search?q=${encodeURIComponent(term)}` : "/search"}
+                  className="chip chip-flat"
+                  style={{
+                    fontSize: 11,
+                    borderColor: active ? "var(--accent)" : "var(--rule)",
+                    color: active ? "var(--accent)" : "var(--fg-3)",
+                    background: active ? "color-mix(in oklab, var(--accent) 8%, transparent)" : undefined,
+                  }}
+                >
+                  {label}
+                </a>
+              );
+            })}
+          </div>
+
           {q && (
             <p className="sm t-3 mt-m" style={{ marginBottom: 0 }}>
               {hits.length === 0
                 ? `Nothing matches "${q}".`
                 : `${hits.length} agent${hits.length === 1 ? "" : "s"} match "${q}" ` +
-                  `â€” ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
+                  `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
                   `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
             </p>
           )}
@@ -64,7 +94,7 @@ export default async function SearchPage({
       </section>
 
       {q && facets.length > 0 && (
-        <section className="band-tight">
+        <section className="band-tight" style={{ paddingTop: 0 }}>
           <div className="shell">
             <div className="inline-list">
               {facets.map((f) => {
@@ -72,7 +102,7 @@ export default async function SearchPage({
                 if (!cat) return null;
                 return (
                   <a key={f.category} href={`/c/${f.category}`} className="chip chip-flat">
-                    {cat.job} Â· {f.n}
+                    {cat.job} · {f.n}
                   </a>
                 );
               })}
@@ -84,38 +114,52 @@ export default async function SearchPage({
       {q && hits.length > 0 && (
         <section className="band band-last">
           <div className="shell">
-            <div className="rows">
-              <div className="rows-head r-agents">
-                <span>Agent</span><span>State</span><span>Operator</span>
-                <span style={{ textAlign: "right" }}>Response</span><span>Why it matched</span>
-              </div>
-              {hits.map(({ agent: a, why }) => {
-                const st = trustState(a);
-                const cat = a.category ? CATEGORIES[a.category as CategorySlug] : null;
-                return (
-                  <a key={a.token_id} href={`/a/${a.token_id}`} className="row row-hover r-agents">
-                    <div>
-                      <h3>{a.name ?? `Agent ${a.token_id}`}</h3>
-                      <div className="xs t-4 num">
-                        #{a.token_id}
-                        {cat && <span> Â· {cat.job}</span>}
+            <div className="data-table-frame">
+              <div className="rows">
+                <div className="rows-head r-agents">
+                  <span>Agent</span><span>State</span><span>Operator</span>
+                  <span style={{ textAlign: "right" }}>Response</span><span>Why it matched</span>
+                </div>
+                {hits.map(({ agent: a, why }) => {
+                  const st = trustState(a);
+                  const cat = a.category ? CATEGORIES[a.category as CategorySlug] : null;
+                  return (
+                    <a key={a.token_id} href={`/a/${a.token_id}`} className="row row-hover r-agents">
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <h3>{a.name ?? `Agent ${a.token_id}`}</h3>
+                          {a.protocols.map((p) => (
+                            <span key={p} className="chip chip-flat" style={{ fontSize: 9.5, padding: "1px 5px" }}>
+                              {p.toUpperCase()}
+                            </span>
+                          ))}
+                          {a.x402 && (
+                            <span className="chip chip-flat" style={{ fontSize: 9.5, padding: "1px 5px", color: "var(--accent)" }}>
+                              x402
+                            </span>
+                          )}
+                        </div>
+                        <div className="xs t-4 num">
+                          #{a.token_id}
+                          {cat && <span> · {cat.job}</span>}
+                        </div>
                       </div>
-                    </div>
-                    <div><span className="chip" data-state={st.state}>{st.state}</span></div>
-                    <div className="num xs t-3">{a.operator?.registrableDomain ?? "â€”"}</div>
-                    <div className="num sm" style={{ textAlign: "right" }}>
-                      {a.probe?.grade === "validated" ? (
-                        <span style={{ color: "var(--pass)" }}>{a.probe.rttMs} ms</span>
-                      ) : a.probe?.httpStatus ? (
-                        <span className="t-4">{a.probe.httpStatus}</span>
-                      ) : (
-                        <span className="t-4">â€”</span>
-                      )}
-                    </div>
-                    <div className="xs t-3">{why}</div>
-                  </a>
-                );
-              })}
+                      <div><span className="chip" data-state={st.state}>{st.state}</span></div>
+                      <div className="num xs t-3">{a.operator?.registrableDomain ?? "—"}</div>
+                      <div className="num sm" style={{ textAlign: "right" }}>
+                        {a.probe?.grade === "validated" ? (
+                          <span style={{ color: "var(--pass)" }}>{a.probe.rttMs} ms</span>
+                        ) : a.probe?.httpStatus ? (
+                          <span className="t-4">{a.probe.httpStatus}</span>
+                        ) : (
+                          <span className="t-4">—</span>
+                        )}
+                      </div>
+                      <div className="xs t-3">{why}</div>
+                    </a>
+                  );
+                })}
+              </div>
             </div>
 
             <p className="xs t-4 mt-m" style={{ maxWidth: "74ch" }}>
@@ -136,22 +180,24 @@ export default async function SearchPage({
               own A2A card. Skill text is the most precise capability signal available here, and
               the only one that is neither a name nor marketing copy.
             </p>
-            <div className="rows mt-m">
-              {(
-                [
-                  ["rebalance liquidity", "Agents that manage a concentrated-liquidity range"],
-                  ["watch my loan", "Health-factor defence on Venus and Aave"],
-                  ["grid trading", "Ladder orders across a band"],
-                  ["best rate", "Yield routing between lending venues"],
-                  ["token analysis", "Screening and research, not execution"],
-                  ["x402", "Agents that charge per call"],
-                ] as const
-              ).map(([term, note]) => (
-                <a key={term} href={`/search?q=${encodeURIComponent(term)}`} className="row row-hover" style={{ gridTemplateColumns: "14rem minmax(0,1fr)" }}>
-                  <div className="num sm" style={{ color: "var(--accent)" }}>{term}</div>
-                  <div className="sm t-3">{note}</div>
-                </a>
-              ))}
+            <div className="data-table-frame mt-m">
+              <div className="rows">
+                {(
+                  [
+                    ["rebalance liquidity", "Agents that manage a concentrated-liquidity range"],
+                    ["watch my loan", "Health-factor defence on Venus and Aave"],
+                    ["grid trading", "Ladder orders across a band"],
+                    ["best rate", "Yield routing between lending venues"],
+                    ["token analysis", "Screening and research, not execution"],
+                    ["x402", "Agents that charge per call"],
+                  ] as const
+                ).map(([term, note]) => (
+                  <a key={term} href={`/search?q=${encodeURIComponent(term)}`} className="row row-hover" style={{ gridTemplateColumns: "14rem minmax(0,1fr)" }}>
+                    <div className="num sm" style={{ color: "var(--accent)" }}>{term}</div>
+                    <div className="sm t-3">{note}</div>
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         </section>

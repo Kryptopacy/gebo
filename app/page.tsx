@@ -98,27 +98,30 @@ export default async function Home() {
           <p className="section-label">
             Registry census · {CENSUS.measuredAt} · {CENSUS.censused.toLocaleString()} identities read from chain
           </p>
-          <div className="collapse">
-            {steps.map((s) => (
-              <div key={s.caption} className="collapse-step" data-terminal={s.terminal ? "true" : "false"}>
-                <div>
-                  <div className="collapse-figure" style={s.warn ? { color: "var(--hold)" } : undefined}>
-                    {(s.n ?? 0).toLocaleString()}
+
+          <div className="surface-card">
+            <div className="collapse" style={{ borderTop: 0, marginTop: 0 }}>
+              {steps.map((s) => (
+                <div key={s.caption} className="collapse-step" data-terminal={s.terminal ? "true" : "false"}>
+                  <div>
+                    <div className="collapse-figure" style={s.warn ? { color: "var(--hold)" } : undefined}>
+                      {(s.n ?? 0).toLocaleString()}
+                    </div>
+                    <div className="collapse-caption">{s.caption}</div>
                   </div>
-                  <div className="collapse-caption">{s.caption}</div>
-                </div>
-                <div>
-                  <div className="collapse-track">
-                    <span style={{
-                      width: `${logWidth(s.n, top)}%`,
-                      background: s.terminal ? "var(--accent)" : s.warn ? "var(--hold)" : "var(--fg-4)",
-                    }} />
+                  <div>
+                    <div className="collapse-track">
+                      <span style={{
+                        width: `${logWidth(s.n, top)}%`,
+                        background: s.terminal ? "var(--accent)" : s.warn ? "var(--hold)" : "var(--fg-4)",
+                      }} />
+                    </div>
+                    <div className="collapse-pct">{s.pct}</div>
+                    <p className="collapse-note">{s.note}</p>
                   </div>
-                  <div className="collapse-pct">{s.pct}</div>
-                  <p className="collapse-note">{s.note}</p>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className="notice mt-l">
@@ -147,25 +150,25 @@ export default async function Home() {
             you have {CENSUS.operators}.
           </p>
 
-          <dl className="readouts mt-m">
-            <div className="readout">
+          <dl className="kpi-grid mt-m">
+            <div className="kpi-card">
               <dt>Distinct owners</dt>
               <dd>{(CENSUS.owners / 1000).toFixed(0)}k</dd>
               <div className="qualifier">
                 Mean {meanPerOwner} agents each, so ownership is not concentrated
               </div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Endpoint operators</dt>
               <dd style={{ color: "var(--accent)" }}>{CENSUS.operators}</dd>
               <div className="qualifier">Everyone actually serving traffic on BNB Chain</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Top 5 operators</dt>
               <dd>{CENSUS.top5OperatorShare}%</dd>
               <div className="qualifier">Share of all declared endpoints</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Claim reputation trust</dt>
               <dd>{(CENSUS.declaresReputationTrust / 1000).toFixed(0)}k</dd>
               <div className="qualifier">
@@ -175,35 +178,37 @@ export default async function Home() {
           </dl>
 
           {agg.topOperators.length > 0 && (
-            <div className="rows mt-l">
-              <div className="rows-head r-operators">
-                <span>Operator</span><span style={{ textAlign: "right" }}>Agents</span>
-                <span style={{ textAlign: "right" }}>Broken</span><span>Assessment</span>
+            <div className="data-table-frame mt-l">
+              <div className="rows">
+                <div className="rows-head r-operators">
+                  <span>Operator</span><span style={{ textAlign: "right" }}>Agents</span>
+                  <span style={{ textAlign: "right" }}>Broken</span><span>Assessment</span>
+                </div>
+                {agg.topOperators.map((o) => {
+                  const broken = o.broken > 0;
+                  return (
+                    <div key={o.key} className="row r-operators">
+                      <div className="num sm">{o.label}</div>
+                      <div className="num sm" style={{ textAlign: "right" }}>{(o.count ?? 0).toLocaleString()}</div>
+                      <div className="num sm" style={{ textAlign: "right", color: broken ? "var(--fail)" : "var(--fg-4)" }}>
+                        {(o.broken ?? 0).toLocaleString()}
+                      </div>
+                      <div className="xs t-3">
+                        {broken
+                          ? `every one of its ${(o.broken ?? 0).toLocaleString()} listings is structurally uncallable`
+                          : `no fatal registration defect found`}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              {agg.topOperators.map((o) => {
-                const broken = o.broken > 0;
-                return (
-                  <div key={o.key} className="row r-operators">
-                    <div className="num sm">{o.label}</div>
-                    <div className="num sm" style={{ textAlign: "right" }}>{(o.count ?? 0).toLocaleString()}</div>
-                    <div className="num sm" style={{ textAlign: "right", color: broken ? "var(--fail)" : "var(--fg-4)" }}>
-                      {(o.broken ?? 0).toLocaleString()}
-                    </div>
-                    <div className="xs t-3">
-                      {broken
-                        ? `every one of its ${(o.broken ?? 0).toLocaleString()} listings is structurally uncallable`
-                        : `no fatal registration defect found`}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           )}
         </div>
       </section>
 
       {/* ── four jobs ────────────────────────────────────────────── */}
-      <section className="band animate-in delay-4">
+      <section className="band animate-in delay-4" id="jobs">
         <div className="shell">
           <h2>Four jobs worth paying an agent to do</h2>
           <p className="prose sm">
@@ -212,26 +217,28 @@ export default async function Home() {
             Verified counts are agents that completed a protocol handshake.
           </p>
 
-          <div className="rows mt-m">
-            <div className="rows-head r-jobs">
-              <span>Job</span><span>Agents</span><span>Venue</span>
+          <div className="data-table-frame mt-m">
+            <div className="rows">
+              <div className="rows-head r-jobs">
+                <span>Job</span><span>Agents</span><span>Venue</span>
+              </div>
+              {JUDGED_CATEGORIES.map((c) => {
+                const n = agg.categories[c.slug] ?? 0;
+                return (
+                  <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
+                    <div>
+                      <h3>{c.job}</h3>
+                      <p className="xs t-3" style={{ margin: 0, maxWidth: "52ch" }}>{c.blurb}</p>
+                    </div>
+                    <div>
+                      <span className="num" style={{ fontSize: "1.4rem", color: n ? "var(--fg)" : "var(--fg-4)" }}>{n}</span>
+                      <span className="xs t-4 num" style={{ marginLeft: 6 }}>indexed surface</span>
+                    </div>
+                    <div className="sm t-3">{c.venue}</div>
+                  </a>
+                );
+              })}
             </div>
-            {JUDGED_CATEGORIES.map((c) => {
-              const n = agg.categories[c.slug] ?? 0;
-              return (
-                <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
-                  <div>
-                    <h3>{c.job}</h3>
-                    <p className="xs t-3" style={{ margin: 0, maxWidth: "52ch" }}>{c.blurb}</p>
-                  </div>
-                  <div>
-                    <span className="num" style={{ fontSize: "1.4rem", color: n ? "var(--fg)" : "var(--fg-4)" }}>{n}</span>
-                    <span className="xs t-4 num" style={{ marginLeft: 6 }}>indexed surface</span>
-                  </div>
-                  <div className="sm t-3">{c.venue}</div>
-                </a>
-              );
-            })}
           </div>
 
           <div className="notice mt-l">
@@ -255,25 +262,27 @@ export default async function Home() {
             further categories.
           </p>
 
-          <div className="rows mt-m">
-            <div className="rows-head r-jobs">
-              <span>Category</span><span>Agents</span><span>Venue</span>
+          <div className="data-table-frame mt-m">
+            <div className="rows">
+              <div className="rows-head r-jobs">
+                <span>Category</span><span>Agents</span><span>Venue</span>
+              </div>
+              {OTHER_CATEGORIES.map((c) => {
+                const n = agg.categories[c.slug] ?? 0;
+                return (
+                  <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
+                    <div>
+                      <h3>{c.job}</h3>
+                      <p className="xs t-3" style={{ margin: 0, maxWidth: "52ch" }}>{c.blurb}</p>
+                    </div>
+                    <div>
+                      <span className="num" style={{ fontSize: "1.4rem", color: n ? "var(--fg)" : "var(--fg-4)" }}>{n}</span>
+                    </div>
+                    <div className="sm t-3">{c.venue}</div>
+                  </a>
+                );
+              })}
             </div>
-            {OTHER_CATEGORIES.map((c) => {
-              const n = agg.categories[c.slug] ?? 0;
-              return (
-                <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
-                  <div>
-                    <h3>{c.job}</h3>
-                    <p className="xs t-3" style={{ margin: 0, maxWidth: "52ch" }}>{c.blurb}</p>
-                  </div>
-                  <div>
-                    <span className="num" style={{ fontSize: "1.4rem", color: n ? "var(--fg)" : "var(--fg-4)" }}>{n}</span>
-                  </div>
-                  <div className="sm t-3">{c.venue}</div>
-                </a>
-              );
-            })}
           </div>
 
           <p className="xs t-4 mt-m" style={{ maxWidth: "76ch" }}>
@@ -295,25 +304,27 @@ export default async function Home() {
             GEBO models hiring as granting verifiable session authority with enforceable on-chain limits,
             never blindly handing over your private key or signing open-ended approvals.
           </p>
-          <div className="rows mt-m">
-            {[
-              ["Scope and simulate",
-               "Set a spend cap and an expiry. The agent's next action is simulated against current chain state and shown as concrete calls and token movements. Nothing is signed at this stage."],
-              ["Grant a narrow key",
-               "One signature issues a session key restricted to named contracts and specific function selectors. The limits are enforced on-chain — a call outside them reverts during validation, not because we behaved well."],
-              ["See the blast radius",
-               "Each listing states what the agent may touch and the worst outcome if it misbehaves. An agent holding authority with no contract allowlist is labelled, never quietly omitted."],
-              ["Revoke unilaterally",
-               "Revocation is a single transaction and needs no cooperation from the agent. The control is present from the moment a session exists."],
-            ].map(([title, body], i) => (
-              <div key={title} className="row r-steps">
-                <div className="num t-4 sm">0{i + 1}</div>
-                <div>
-                  <h3>{title}</h3>
-                  <p className="sm t-3" style={{ margin: 0, maxWidth: "68ch" }}>{body}</p>
+          <div className="surface-card mt-m">
+            <div className="rows" style={{ borderTop: 0 }}>
+              {[
+                ["Scope and simulate",
+                 "Set a spend cap and an expiry. The agent's next action is simulated against current chain state and shown as concrete calls and token movements. Nothing is signed at this stage."],
+                ["Grant a narrow key",
+                 "One signature issues a session key restricted to named contracts and specific function selectors. The limits are enforced on-chain — a call outside them reverts during validation, not because we behaved well."],
+                ["See the blast radius",
+                 "Each listing states what the agent may touch and the worst outcome if it misbehaves. An agent holding authority with no contract allowlist is labelled, never quietly omitted."],
+                ["Revoke unilaterally",
+                 "Revocation is a single transaction and needs no cooperation from the agent. The control is present from the moment a session exists."],
+              ].map(([title, body], i) => (
+                <div key={title} className="row r-steps">
+                  <div className="step-badge">0{i + 1}</div>
+                  <div>
+                    <h3>{title}</h3>
+                    <p className="sm t-3" style={{ margin: 0, maxWidth: "68ch" }}>{body}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>

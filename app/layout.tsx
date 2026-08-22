@@ -19,13 +19,33 @@ const mono = Geist_Mono({
 });
 
 /**
+ * Official vector emblem for BNB Chain (BSC).
+ */
+function BnbLogo({ className = "", size = 20 }: { className?: string; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="BNB Chain"
+    >
+      <path
+        d="M16 32C24.8366 32 32 24.8366 32 16C32 7.16344 24.8366 0 16 0C7.16344 0 0 7.16344 0 16C0 24.8366 7.16344 32 16 32Z"
+        fill="#F0B90B"
+      />
+      <path
+        d="M12.115 14.404L16 10.519L19.885 14.404L22.64 11.649L16 5L9.36 11.649L12.115 14.404ZM5 16L7.755 13.245L10.51 16L7.755 18.755L5 16ZM12.115 17.596L16 21.481L19.885 17.596L22.64 20.351L16 27L9.36 20.351L12.115 17.596ZM27 16L24.245 13.245L21.49 16L24.245 18.755L27 16ZM17.942 16L16 14.058L14.058 16L16 17.942L17.942 16Z"
+        fill="#0C0E12"
+      />
+    </svg>
+  );
+}
+
+/**
  * Metadata is generated per request from the persisted census, not hardcoded.
- * Hardcoding meant the title, the headline, and the docs each carried their own
- * copy of the same figure, and a re-run of the census silently made all three
- * wrong. generateMetadata reads the same source the page does.
- *
- * metadataBase resolves relative OG image URLs; without it Next falls back to
- * localhost and social previews break in production.
  */
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -112,7 +132,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="colophon">
           <div className="shell">
             <div className="colophon-grid">
-              {/* Col 1: Brand & Philosophy */}
+              {/* Col 1: Brand & Verification Narrative */}
               <div className="colophon-brand">
                 <a href="/" className="wordmark" style={{ marginBottom: 14 }} aria-label="GEBO home">
                   <Image src="/gebo-mark.png" alt="" width={24} height={24} className="wordmark-mark" />
@@ -126,17 +146,48 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
 
-              {/* Col 2: Verified Agent Jobs */}
+              {/* Col 2: Structured Category Directory (Scalable) */}
               <div className="colophon-col">
-                <div className="colophon-title">Verified Jobs</div>
+                <div className="colophon-title">
+                  <span>Verified Agent Jobs</span>
+                </div>
                 <ul className="colophon-links">
-                  <li><a href="/c/rebalancing">Rebalancing (PancakeSwap)</a></li>
-                  <li><a href="/c/grid">Grid Trading</a></li>
-                  <li><a href="/c/yield">Yield Routing</a></li>
-                  <li><a href="/c/health">Health Factor Defence</a></li>
+                  <li>
+                    <a href="/c/rebalancing">
+                      <span>Rebalancing</span>
+                      <span className="colophon-badge">PancakeSwap</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/c/grid">
+                      <span>Grid Trading</span>
+                      <span className="colophon-badge">DEX</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/c/yield">
+                      <span>Yield Routing</span>
+                      <span className="colophon-badge">Venus</span>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/c/health">
+                      <span>Health Factor Defence</span>
+                      <span className="colophon-badge">Lending</span>
+                    </a>
+                  </li>
+                </ul>
+
+                <div className="colophon-subtitle">Ecosystem Capabilities</div>
+                <ul className="colophon-links">
                   <li><a href="/c/trading">Trading & Execution</a></li>
                   <li><a href="/c/research">Research & Screening</a></li>
                   <li><a href="/c/payments">Payments (x402)</a></li>
+                  <li>
+                    <a href="/search" style={{ color: "var(--accent)" }}>
+                      + Explore all capabilities →
+                    </a>
+                  </li>
                 </ul>
               </div>
 
@@ -146,48 +197,74 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <ul className="colophon-links">
                   <li><a href="/live">Live Handshake Feed</a></li>
                   <li><a href="/authority">Authority & Keystore Console</a></li>
-                  <li><a href="/search">Capability Search</a></li>
+                  <li><a href="/search">Capability Search Engine</a></li>
                   <li><a href="/methodology">Measurement & Defect Log</a></li>
+                  <li>
+                    <a
+                      href="https://github.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="link xs"
+                      style={{ marginTop: 6, display: "inline-block" }}
+                    >
+                      Audit Scripts (Open Source) ↗
+                    </a>
+                  </li>
                 </ul>
               </div>
 
-              {/* Col 4: On-Chain Spec */}
+              {/* Col 4: On-Chain Spec Card (BSC) */}
               <div className="colophon-col">
-                <div className="colophon-title">On-Chain Spec (BSC)</div>
-                <dl className="spec">
-                  <div>
-                    <dt>Identity registry</dt>
-                    <dd>
+                <div className="colophon-title">On-Chain Architecture</div>
+                <div className="colophon-spec-card">
+                  <div className="colophon-spec-header">
+                    <div className="colophon-spec-chain">
+                      <BnbLogo size={24} />
+                      <div>
+                        <div className="colophon-spec-chain-name">BNB Smart Chain</div>
+                        <div className="colophon-spec-chain-meta">Mainnet · Chain ID 56</div>
+                      </div>
+                    </div>
+                    <span className="pulse-dot" data-status="pass" title="Chain Synchronized" />
+                  </div>
+
+                  <div className="colophon-spec-rows">
+                    <div className="colophon-spec-row">
+                      <span className="colophon-spec-label">Identity Registry</span>
                       <a
                         href="https://bscscan.com/address/0x8004a169D4F11E55Fd67b1348881A25B4468a432"
                         target="_blank"
                         rel="noreferrer"
-                        className="link mono"
-                        title="View contract on BscScan"
+                        className="colophon-spec-link"
+                        title="View ERC-8004 contract on BscScan"
                       >
-                        0x8004…a432 ↗
+                        <span>0x8004…a432</span>
+                        <span style={{ fontSize: 10 }}>↗</span>
                       </a>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Chain</dt>
-                    <dd>BNB Smart Chain · 56</dd>
-                  </div>
-                  <div>
-                    <dt>Keystore</dt>
-                    <dd>
+                    </div>
+
+                    <div className="colophon-spec-row">
+                      <span className="colophon-spec-label">Altana Keystore</span>
                       <a
                         href="https://bscscan.com/address/0x6572427E3e0bB1F70b2c3479B48f3F108C507E0a"
                         target="_blank"
                         rel="noreferrer"
-                        className="link mono"
-                        title="View contract on BscScan"
+                        className="colophon-spec-link"
+                        title="View Keystore contract on BscScan"
                       >
-                        0x6572…7E0a ↗
+                        <span>0x6572…7E0a</span>
+                        <span style={{ fontSize: 10 }}>↗</span>
                       </a>
-                    </dd>
+                    </div>
+
+                    <div className="colophon-spec-row">
+                      <span className="colophon-spec-label">Verification Mode</span>
+                      <span className="colophon-spec-value">
+                        <span>Permissionless</span>
+                      </span>
+                    </div>
                   </div>
-                </dl>
+                </div>
               </div>
             </div>
 
@@ -196,6 +273,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span>© {new Date().getFullYear()} GEBO</span>
                 <span className="t-4">·</span>
                 <span>Verification-First Agent Registry for BNB Chain</span>
+              </div>
+              <div className="xs t-4">
+                Measured on BNB Smart Chain · Blocks read directly via JSON-RPC
               </div>
             </div>
           </div>

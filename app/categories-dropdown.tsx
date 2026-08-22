@@ -6,19 +6,39 @@ import Link from "next/link";
 export function CategoriesDropdown() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    timerRef.current = setTimeout(() => {
+      setOpen(false);
+    }, 220); // 220ms grace period so moving cursor never drops menu
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        if (timerRef.current) clearTimeout(timerRef.current);
         setOpen(false);
       }
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
@@ -28,13 +48,13 @@ export function CategoriesDropdown() {
     <div
       ref={dropdownRef}
       className="nav-dropdown-wrapper"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <button
         type="button"
         className={`nav-dropdown-trigger ${open ? "is-open" : ""}`}
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="true"
       >
@@ -56,7 +76,12 @@ export function CategoriesDropdown() {
       </button>
 
       {open && (
-        <div className="nav-dropdown-menu" role="menu">
+        <div
+          className="nav-dropdown-menu"
+          role="menu"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           <div className="nav-dropdown-section">
             <div className="nav-dropdown-header">Verified Jobs (Judged)</div>
             <div className="nav-dropdown-grid">
@@ -99,7 +124,7 @@ export function CategoriesDropdown() {
 
           <div className="nav-dropdown-footer">
             <Link href="/search" className="nav-dropdown-footer-link" onClick={() => setOpen(false)}>
-              Search all capabilities & skills →
+              Search capability keywords (A2A, MCP, x402) →
             </Link>
           </div>
         </div>

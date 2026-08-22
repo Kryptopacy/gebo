@@ -83,18 +83,20 @@ export default async function Methodology() {
       <section className="band">
         <div className="shell">
           <h2>What is measured</h2>
-          <div className="rows mt-m">
-            <div className="rows-head" style={{ gridTemplateColumns: "11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr)" }}>
-              <span>Measure</span><span>Definition</span><span>Window</span><span>Known defect</span>
-            </div>
-            {MEASURES.map((m) => (
-              <div key={m.name} className="row" style={{ gridTemplateColumns: "11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr)" }}>
-                <div className="num sm">{m.name}</div>
-                <div className="sm t-2">{m.definition}</div>
-                <div className="xs t-4 num">{m.window}</div>
-                <div className="xs t-3">{m.defect}</div>
+          <div className="data-table-frame mt-m">
+            <div className="rows">
+              <div className="rows-head" style={{ gridTemplateColumns: "11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr)" }}>
+                <span>Measure</span><span>Definition</span><span>Window</span><span>Known defect</span>
               </div>
-            ))}
+              {MEASURES.map((m) => (
+                <div key={m.name} className="row" style={{ gridTemplateColumns: "11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr)" }}>
+                  <div className="num sm">{m.name}</div>
+                  <div className="sm t-2">{m.definition}</div>
+                  <div className="xs t-4 num">{m.window}</div>
+                  <div className="xs t-3">{m.defect}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -102,14 +104,16 @@ export default async function Methodology() {
       <section className="band">
         <div className="shell">
           <h2>What this registry refuses to show</h2>
-          <dl className="spec mt-m">
-            {REFUSED.map(([k, v]) => (
-              <div key={k} style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
-                <dt style={{ color: "var(--fg-2)" }}>{k}</dt>
-                <dd className="t-3">{v}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="surface-card mt-m">
+            <dl className="spec">
+              {REFUSED.map(([k, v]) => (
+                <div key={k} style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                  <dt style={{ color: "var(--fg-2)" }}>{k}</dt>
+                  <dd className="t-3">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </div>
       </section>
 
@@ -120,19 +124,21 @@ export default async function Methodology() {
             Tiered rather than weighted, because a weighted score hides which input is doing
             the work and invites gaming of whichever one dominates.
           </p>
-          <div className="rows mt-m">
-            {[
-              ["01", "Verified", "Completed a protocol handshake."],
-              ["02", "Listed", "Responded, but did not speak the protocol."],
-              ["03", "Dormant", "No usable response."],
-              ["04", "Shadowed", "Fatal registration defect. Reachable by direct link, absent from discovery, never deleted."],
-            ].map(([n, tier, desc]) => (
-              <div key={n} className="row" style={{ gridTemplateColumns: "3.5rem 8rem minmax(0,1fr)" }}>
-                <div className="num t-4 sm">{n}</div>
-                <div><h3>{tier}</h3></div>
-                <div className="sm t-3">{desc}</div>
-              </div>
-            ))}
+          <div className="surface-card mt-m">
+            <div className="rows" style={{ borderTop: 0 }}>
+              {[
+                ["01", "Verified", "Completed a protocol handshake."],
+                ["02", "Listed", "Responded, but did not speak the protocol."],
+                ["03", "Dormant", "No usable response."],
+                ["04", "Shadowed", "Fatal registration defect. Reachable by direct link, absent from discovery, never deleted."],
+              ].map(([n, tier, desc]) => (
+                <div key={n} className="row" style={{ gridTemplateColumns: "3.5rem 8rem minmax(0,1fr)" }}>
+                  <div className="step-badge">{n}</div>
+                  <div><h3>{tier}</h3></div>
+                  <div className="sm t-3">{desc}</div>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="notice mt-l">
             Within a tier, no operator may take more than <strong>three places</strong>.
@@ -146,14 +152,16 @@ export default async function Methodology() {
       <section className="band band-last">
         <div className="shell">
           <h2>Defects in this dataset</h2>
-          <dl className="spec mt-m">
-            {defects.map(([k, v]) => (
-              <div key={k} style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
-                <dt style={{ color: "var(--fg-2)" }}>{k}</dt>
-                <dd className="t-3">{v}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="surface-card mt-m">
+            <dl className="spec">
+              {defects.map(([k, v]) => (
+                <div key={k} style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                  <dt style={{ color: "var(--fg-2)" }}>{k}</dt>
+                  <dd className="t-3">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
           <p className="xs t-4 mt-l">
             Liveness and audit figures are produced by this project. Reproduce with{" "}
             <span className="num">npx tsx scripts/funnel.ts</span>. Population counts come from

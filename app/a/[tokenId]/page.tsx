@@ -76,9 +76,12 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
       <section className="band-tight">
         <div className="shell">
           <p className="section-label">Liveness · measured by this registry</p>
-          <dl className="readouts">
-            <div className="readout">
-              <dt>Handshake</dt>
+          <dl className="kpi-grid">
+            <div className="kpi-card">
+              <dt style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="pulse-dot" data-status={handshake ? "pass" : "fail"} />
+                Handshake
+              </dt>
               <dd style={{ color: handshake ? "var(--pass)" : "var(--fail)" }}>
                 {handshake ? "PASS" : "FAIL"}
               </dd>
@@ -90,36 +93,38 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                     : "Reachability only — no agent protocol asserted"}
               </div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Round trip</dt>
               <dd>{a.probe?.rttMs != null ? `${a.probe.rttMs}` : "—"}
                 {a.probe?.rttMs != null && <span className="t-4" style={{ fontSize: "0.8rem" }}> ms</span>}
               </dd>
               <div className="qualifier">One observation, one region. Not an average.</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Transport</dt>
-              <dd style={{ fontSize: "1rem", letterSpacing: 0 }}>
+              <dd style={{ fontSize: "1.25rem", letterSpacing: 0 }}>
                 {a.probe?.httpStatus ?? "—"} <span className="t-4">{a.probe?.errClass}</span>
               </dd>
               <div className="qualifier">HTTP status and classified outcome</div>
             </div>
-            <div className="readout" data-empty="true">
+            <div className="kpi-card" data-empty="true">
               <dt>Uptime 7d</dt>
-              <dd>Insufficient observations</dd>
+              <dd style={{ fontSize: "1.1rem" }}>Insufficient observations</dd>
               <div className="qualifier">n=1, floor=20. Shown once a real record exists.</div>
             </div>
           </dl>
 
           {a.probe?.evidence && (
-            <dl className="spec mt-m">
-              {Object.entries(a.probe.evidence).map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd className="mono">{v === null ? "—" : String(v)}</dd>
-                </div>
-              ))}
-            </dl>
+            <div className="surface-card mt-m">
+              <dl className="spec">
+                {Object.entries(a.probe.evidence).map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{k}</dt>
+                    <dd className="mono">{v === null ? "—" : String(v)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           )}
         </div>
       </section>
@@ -128,9 +133,9 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
       <section className="band">
         <div className="shell">
           <h2>What it could do to your wallet</h2>
-          <div className="authority mt-m" data-risk="unknown">
+          <div className="authority surface-card mt-m" data-risk="unknown" style={{ padding: 0, overflow: "hidden" }}>
             <div className="authority-head">No session registered in the keystore</div>
-            <div className="authority-body">
+            <div className="authority-body" style={{ padding: "16px 24px 20px" }}>
               <dl className="spec">
                 <div>
                   <dt>Authority</dt>
@@ -163,56 +168,104 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
       <section className="band">
         <div className="shell">
           <h2>What it declares</h2>
-          <dl className="spec mt-m">
-            <div>
-              <dt>Protocols</dt>
-              <dd>{a.protocols.join(" · ") || <span className="t-4">none</span>}</dd>
-            </div>
-            <div>
-              <dt>Endpoints</dt>
-              <dd>
-                {a.endpoints.length === 0 ? (
-                  <span className="t-4">none declared</span>
-                ) : (
-                  <div className="stack-sm">
-                    {a.endpoints.map((e, i) => (
-                      <div key={i}>
-                        <span className="chip chip-flat" style={{ marginRight: 8 }}>{e.kind}</span>
-                        <Uri url={e.url} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Classification</dt>
-              <dd>
-                {cat ? cat.job : <span className="t-4">unclassified</span>}
-                {m.matched.length > 0 && (
-                  <span className="t-4"> · keyword heuristic: {m.matched.join(", ")}</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Registered</dt>
-              <dd className="mono">
-                {new Date(a.created_at).toISOString().slice(0, 16).replace("T", " ")} UTC
-              </dd>
-            </div>
-            <div>
-              <dt>Operator</dt>
-              <dd className="mono">{a.operator?.registrableDomain ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>Endpoint host</dt>
-              <dd className="mono">{a.operator?.host ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>Owner</dt>
-              <dd className="mono">{a.owner_address}</dd>
-            </div>
-          </dl>
+          <div className="surface-card mt-m">
+            <dl className="spec">
+              <div>
+                <dt>Protocols</dt>
+                <dd>{a.protocols.join(" · ") || <span className="t-4">none</span>}</dd>
+              </div>
+              <div>
+                <dt>Endpoints</dt>
+                <dd>
+                  {a.endpoints.length === 0 ? (
+                    <span className="t-4">none declared</span>
+                  ) : (
+                    <div className="stack-sm">
+                      {a.endpoints.map((e, i) => (
+                        <div key={i}>
+                          <span className="chip chip-flat" style={{ marginRight: 8 }}>{e.kind}</span>
+                          <Uri url={e.url} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </dd>
+              </div>
+              {a.skills && a.skills.length > 0 && (
+                <div>
+                  <dt>Declared Skills</dt>
+                  <dd style={{ minWidth: 0 }}>
+                    <div className="stack-sm" style={{ gap: 6, maxWidth: "100%" }}>
+                      {a.skills.map((s, idx) => {
+                        const isWrite = /trade|swap|buy|sell|rebalance|liquidat|transfer|pay|order|execut/i.test(s);
+                        return (
+                          <div
+                            key={idx}
+                            className="chip chip-flat"
+                            style={{
+                              fontSize: 11.5,
+                              lineHeight: 1.45,
+                              padding: "6px 10px",
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 8,
+                              maxWidth: "100%",
+                              wordBreak: "break-word",
+                              overflowWrap: "anywhere",
+                              whiteSpace: "normal",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: isWrite ? "var(--hold)" : "var(--pass)",
+                                flexShrink: 0,
+                                fontWeight: 650,
+                                fontFamily: "var(--mono)",
+                                fontSize: 10.5,
+                                paddingTop: 1,
+                              }}
+                            >
+                              {isWrite ? "● EXECUTE" : "● READ-ONLY"}
+                            </span>
+                            <span style={{ minWidth: 0, wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                              {s}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>Classification</dt>
+                <dd>
+                  {cat ? cat.job : <span className="t-4">unclassified</span>}
+                  {m.matched.length > 0 && (
+                    <span className="t-4"> · keyword heuristic: {m.matched.join(", ")}</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Registered</dt>
+                <dd className="mono">
+                  {new Date(a.created_at).toISOString().slice(0, 16).replace("T", " ")} UTC
+                </dd>
+              </div>
+              <div>
+                <dt>Operator</dt>
+                <dd className="mono">{a.operator?.registrableDomain ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Endpoint host</dt>
+                <dd className="mono">{a.operator?.host ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>Owner</dt>
+                <dd className="mono">{a.owner_address}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </section>
 
@@ -220,25 +273,25 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
       <section className={a.lint?.defects?.length ? "band" : "band band-last"}>
         <div className="shell">
           <p className="section-label">For comparison · what the indexer reports</p>
-          <dl className="readouts">
-            <div className="readout">
+          <dl className="kpi-grid">
+            <div className="kpi-card">
               <dt>health_score</dt>
               <dd>{a.scan.health_score ?? "—"}</dd>
               <div className="qualifier">Non-monotonic against measured reachability</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>is_active</dt>
-              <dd style={{ fontSize: "1rem", letterSpacing: 0, color: a.scan.is_active ? "var(--hold)" : "var(--fg-4)" }}>
+              <dd style={{ fontSize: "1.25rem", letterSpacing: 0, color: a.scan.is_active ? "var(--hold)" : "var(--fg-4)" }}>
                 {String(a.scan.is_active)}
               </dd>
               <div className="qualifier">Self-declared in the registration file, unverified</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>total_score</dt>
               <dd>{a.scan.total_score}</dd>
               <div className="qualifier">Their composite. We neither display nor rank on it.</div>
             </div>
-            <div className="readout">
+            <div className="kpi-card">
               <dt>Reviews</dt>
               <dd>{a.scan.total_feedbacks}</dd>
               <div className="qualifier">Unfiltered aggregation is Sybil-vulnerable by design</div>
@@ -260,18 +313,23 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
         <section className="band band-last">
           <div className="shell">
             <h2>Registration audit</h2>
-            <div className="rows mt-m">
-              {a.lint.defects.map((d, i) => (
-                <div key={i} className="row" style={{ gridTemplateColumns: "6rem 11rem minmax(0,1fr)" }}>
-                  <div>
-                    <span className="chip" data-state={d.severity === "fatal" ? "SHADOWED" : d.severity === "major" ? "LISTED" : "DORMANT"}>
-                      {d.severity}
-                    </span>
-                  </div>
-                  <div className="num xs t-2">{d.code}</div>
-                  <div className="sm t-3">{d.detail}</div>
+            <div className="data-table-frame mt-m">
+              <div className="rows">
+                <div className="rows-head" style={{ gridTemplateColumns: "6rem 11rem minmax(0,1fr)" }}>
+                  <span>Severity</span><span>Code</span><span>Detail</span>
                 </div>
-              ))}
+                {a.lint.defects.map((d, i) => (
+                  <div key={i} className="row" style={{ gridTemplateColumns: "6rem 11rem minmax(0,1fr)" }}>
+                    <div>
+                      <span className="chip" data-state={d.severity === "fatal" ? "SHADOWED" : d.severity === "major" ? "LISTED" : "DORMANT"}>
+                        {d.severity}
+                      </span>
+                    </div>
+                    <div className="num xs t-2">{d.code}</div>
+                    <div className="sm t-3">{d.detail}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
