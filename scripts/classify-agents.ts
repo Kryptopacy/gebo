@@ -4,13 +4,18 @@
  * Runs the classifier from src/lib/classify.ts over name, description and A2A
  * card skills, and records both the category and the evidence that produced it.
  *
+ * Deliberately unbounded, unlike the scheduled route: this is the tool for a full
+ * rescan after editing the rules, so it examines every agent rather than a slice.
+ * It records the same rule fingerprint the route does - otherwise a local run
+ * would leave classify_rules null and the cron would immediately redo the work.
+ *
  * Prints the distribution afterwards, because the expected result is that the
  * four judged categories stay small. That is the measured reality of BNB Chain,
  * not a defect in the rules, and the product reports it rather than padding it.
  */
 import "dotenv/config";
 import postgres from "postgres";
-import { classifyCapability, CATEGORY_LABEL, isJudged, type AnyCategory } from "../src/lib/classify.ts";
+import { classifyCapability, CATEGORY_LABEL, isJudged, RULES_FINGERPRINT, type AnyCategory } from "../src/lib/classify.ts";
 
 const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 4, onnotice: () => {} });
 
@@ -26,7 +31,7 @@ try {
     select token_id::text as token_id, name, description, skills
     from agents where chain_id = 56
   `;
-  console.log(`\n  classifying ${rows.length.toLocaleString()} agents`);
+  console.log(`\n  classifying ${rows.length.toLocaleString()} agents  (rules ${RULES_FINGERPRINT})`);
 
   let assigned = 0;
   let judged = 0;
@@ -51,6 +56,8 @@ try {
       update agents a set
         category = v.category,
         category_matched = v.matched,
+        classify_rules = ${RULES_FINGERPRINT},
+        classified_at = now(),
         updated_at = now()
       from (
         select

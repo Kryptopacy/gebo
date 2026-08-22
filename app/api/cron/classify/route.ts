@@ -9,14 +9,23 @@
  * funnel figures: correct once, then quietly wrong.
  *
  * Two passes per invocation, both bounded:
- *   1. agents with capability text and no category   (the backlog)
+ *   1. agents the current rule sets have not examined   (the backlog)
  *   2. agents whose card was refetched since they were last classified
  *      (a changed agent card can change what an agent does)
+ *
+ * The queue is keyed on the rule FINGERPRINT rather than on `category is null`.
+ * That predicate stays true for an agent which legitimately matches nothing, so
+ * roughly 21,000 unmatched agents re-qualified on every run, were rewritten with
+ * identical values, and the backlog could never drain - `stillUnclassified` was
+ * structurally incapable of falling. Recording which rules examined an agent makes
+ * an unmatched result terminal, and makes a rule edit self-propagating: the
+ * fingerprint changes, so every agent re-qualifies exactly once without anyone
+ * remembering to trigger a rescan.
  */
 import { NextResponse } from "next/server";
 import postgres from "postgres";
 import { authorizeCron } from "@/lib/cron-auth";
-import { classifyCapability } from "@/lib/classify";
+import { classifyCapability, RULES_FINGERPRINT } from "@/lib/classify";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -47,7 +56,10 @@ export async function GET(request: Request) {
       where chain_id = 56
         and (name is not null or description is not null or skills is not null)
         and (
-          category is null
+          -- Not yet examined by the rule sets currently in force. "is distinct
+          -- from" rather than "<>" so the null of a never-classified agent
+          -- qualifies: "<>" yields null there and the row would be skipped.
+          classify_rules is distinct from ${RULES_FINGERPRINT}
           -- Reclassify when the card was refetched after the last classification.
           or (card_fetched_at is not null and card_fetched_at > coalesce(classified_at, 'epoch'::timestamptz))
         )
@@ -87,6 +99,7 @@ export async function GET(request: Request) {
         update agents a set
           category = v.category,
           category_matched = v.matched,
+          classify_rules = ${RULES_FINGERPRINT},
           classified_at = now(),
           updated_at = now()
         from (
@@ -103,20 +116,40 @@ export async function GET(request: Request) {
       `;
     }
 
-    const remaining = await sql<{ n: number }[]>`
-      select count(*)::int as n from agents
+    /**
+     * Two different numbers, previously conflated into one misleading figure.
+     *
+     * `queued` is work outstanding: agents the current rules have not examined.
+     * It drains to zero and stays there until rules change or a card is refetched.
+     *
+     * `unclassified` is a finding, not a backlog: agents examined by the current
+     * rules that matched nothing. It is expected to be large, because most
+     * listings on this chain carry no usable capability text. Reporting it as
+     * remaining work implied a queue that would never empty.
+     */
+    const [counts] = await sql<{ queued: number; unclassified: number }[]>`
+      select
+        count(*) filter (
+          where classify_rules is distinct from ${RULES_FINGERPRINT}
+             or (card_fetched_at is not null and card_fetched_at > coalesce(classified_at, 'epoch'::timestamptz))
+        )::int as queued,
+        count(*) filter (where category is null and classify_rules = ${RULES_FINGERPRINT})::int as unclassified
+      from agents
       where chain_id = 56
         and (name is not null or description is not null or skills is not null)
-        and category is null
     `;
 
     return NextResponse.json({
       ok: true,
+      rules: RULES_FINGERPRINT,
       examined: rows.length,
       assigned,
       judged,
       distribution: dist,
-      stillUnclassified: remaining[0]?.n ?? 0,
+      /** Work outstanding. Drains to zero, unlike the figure this replaced. */
+      queued: counts?.queued ?? 0,
+      /** A finding, not a backlog: examined by these rules, matched nothing. */
+      unclassified: counts?.unclassified ?? 0,
       ms: Date.now() - startedAt,
     });
   } catch (err: any) {

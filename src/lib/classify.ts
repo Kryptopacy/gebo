@@ -187,6 +187,61 @@ const RULES: Rule[] = [
   },
 ];
 
+/**
+ * Fingerprint of the rule sets above, derived rather than declared.
+ *
+ * The taxonomy grows: the ecosystem will produce capabilities these nine rule
+ * sets do not name, and rules will be added and corrected. Two problems follow,
+ * and one column keyed on this value solves both.
+ *
+ * FIRST, a taxonomy change must invalidate existing labels. Reclassification
+ * previously triggered only when an agent card was refetched, so editing a rule
+ * left every already-classified agent holding a label the current rules would no
+ * longer produce - silently, and with no record of which rules produced it.
+ *
+ * SECOND, an agent that matches nothing must record that it was examined.
+ * Queueing on `category is null` re-examined every unmatched agent on every run
+ * forever, so the backlog could never drain and the same rows were rewritten
+ * every ten minutes with identical values.
+ *
+ * DERIVED, NOT DECLARED, because a hand-maintained version string is a discipline
+ * problem: whoever edits a rule at 2am will not remember to bump it, and a stale
+ * version is worse than none since it asserts freshness that does not hold. This
+ * changes whenever RULES changes, and cannot do otherwise.
+ *
+ * FNV-1a rather than node:crypto so this module stays isomorphic. A category
+ * chip in a client component must be able to import CATEGORY_LABEL without
+ * pulling a Node builtin into the browser bundle and breaking the build.
+ */
+function fingerprint(value: unknown): string {
+  const json = JSON.stringify(value);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < json.length; i++) {
+    h ^= json.charCodeAt(i);
+    // 16777619, via shifts: Math.imul keeps this exact in 32-bit space.
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/**
+ * Identifies the rule sets that produced a classification.
+ *
+ * Stored on every classified agent as `agents.classify_rules`. The classifier's
+ * work queue selects rows whose stored value differs from this one, which makes a
+ * rule edit self-propagating and an unmatched agent terminal.
+ */
+export const RULES_FINGERPRINT = fingerprint(RULES);
+
+/**
+ * The judged four are fixed externally by the BNB Agent Studio rubric, so they
+ * are pinned here and asserted in tests. Growth belongs to the adjacent set:
+ * promoting a newly detected capability into the judged tier would inflate the
+ * rubric categories with adjacent behaviour, which is the exact failure the grid
+ * and yield rules were narrowed to prevent.
+ */
+export const JUDGED_IS_CLOSED = true;
+
 /** Escape a term for safe use inside a RegExp. */
 function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -332,3 +387,22 @@ export const JUDGED: JudgedCategory[] = ["rebalancing", "grid", "yield", "health
 export function isJudged(c: string | null | undefined): c is JudgedCategory {
   return !!c && (JUDGED as string[]).includes(c);
 }
+
+/**
+ * Every word the rules already look for, as single tokens.
+ *
+ * The emerging-capability detector must ignore vocabulary a rule already covers,
+ * or it nominates terms that are by definition not missing. That exclusion list
+ * was maintained by hand next to the detector, duplicating the rules and
+ * guaranteed to drift: adding a phrase here without editing the other file would
+ * make the detector nominate the very capability just implemented.
+ *
+ * Deriving it means a new rule silences its own vocabulary automatically. Phrases
+ * are split because the detector counts single tokens, so "health factor" has to
+ * suppress both "health" and "factor".
+ */
+export const RULE_VOCABULARY: ReadonlySet<string> = new Set(
+  RULES.flatMap((r) => [...r.phrases, ...r.strongWords, ...r.weakWords])
+    .flatMap((term) => normalise(term).split(" "))
+    .filter((t) => t.length > 2),
+);

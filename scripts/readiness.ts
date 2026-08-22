@@ -12,6 +12,7 @@
 import "dotenv/config";
 import postgres from "postgres";
 import { existsSync, readFileSync } from "node:fs";
+import { RULES_FINGERPRINT } from "../src/lib/classify.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -49,7 +50,19 @@ async function tableExists(table: string): Promise<boolean> {
       select 1 from information_schema.tables
       where table_schema = 'public' and table_name = ${table}
     ) as ok`;
-  return Boolean(rows[0]?.ok);
+  return rows[0]?.ok ?? false;
+}
+
+/** Is a pg_cron job present and active? A scheduled job is the only kind that runs. */
+async function scheduled(jobname: string): Promise<boolean> {
+  try {
+    const rows = await sql<{ ok: boolean }[]>`
+      select coalesce(bool_or(active), false) as ok
+      from cron.job where jobname = ${jobname}`;
+    return rows[0]?.ok ?? false;
+  } catch {
+    return false;
+  }
 }
 
 function route(path: string): boolean {
@@ -80,6 +93,40 @@ async function main() {
     item: "Capability classification into judged categories",
     state: judged && judged > 0 ? (unclassified === 0 ? "DONE" : "PARTIAL") : "MISSING",
     evidence: `judged=${fmt(judged)}, unclassified=${fmt(unclassified)}`,
+  });
+
+  /**
+   * Can the taxonomy keep pace with the ecosystem?
+   *
+   * A hand-written taxonomy that cannot grow is a slow failure: it looks correct
+   * on the day it ships and silently stops describing the chain. Three mechanisms
+   * have to be in place, so all three are measured rather than assumed.
+   */
+  const rulesApplied = await count("agents", `classify_rules = '${RULES_FINGERPRINT}'`);
+  const queued = await count(
+    "agents",
+    `(name is not null or description is not null or skills is not null)
+       and (classify_rules is distinct from '${RULES_FINGERPRINT}'
+            or (card_fetched_at is not null and card_fetched_at > coalesce(classified_at, 'epoch'::timestamptz)))`,
+  );
+  gates.push({
+    id: "taxonomy-version",
+    item: "Rule changes invalidate stale labels automatically",
+    state: rulesApplied && rulesApplied > 0 && queued === 0 ? "DONE" : "PARTIAL",
+    evidence: `rules ${RULES_FINGERPRINT}, applied=${fmt(rulesApplied)}, queued=${fmt(queued)}`,
+  });
+
+  const emergingScheduled = await scheduled("gebo-emerging");
+  const candidates = (await tableExists("category_candidates"))
+    ? await count("category_candidates", "status = 'candidate'")
+    : null;
+  gates.push({
+    id: "taxonomy-detect",
+    item: "Emerging capabilities detected on a schedule, not by hand",
+    state: emergingScheduled ? "DONE" : "MISSING",
+    evidence: emergingScheduled
+      ? `gebo-emerging active, open candidates=${fmt(candidates)}`
+      : "no gebo-emerging cron job",
   });
 
   gates.push({
