@@ -99,7 +99,7 @@ export default async function Home() {
             Registry census · {CENSUS.measuredAt} · {CENSUS.censused.toLocaleString()} identities read from chain
           </p>
 
-          <div className="surface-card">
+          <div className="surface-card-highlight">
             <div className="collapse" style={{ borderTop: 0, marginTop: 0 }}>
               {steps.map((s) => (
                 <div key={s.caption} className="collapse-step" data-terminal={s.terminal ? "true" : "false"}>
@@ -304,7 +304,7 @@ export default async function Home() {
             GEBO models hiring as granting verifiable session authority with enforceable on-chain limits,
             never blindly handing over your private key or signing open-ended approvals.
           </p>
-          <div className="surface-card mt-m">
+          <div className="surface-card-highlight mt-m">
             <div className="rows" style={{ borderTop: 0 }}>
               {[
                 ["Scope and simulate",
