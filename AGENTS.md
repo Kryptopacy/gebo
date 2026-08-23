@@ -250,6 +250,17 @@ Recorded so nobody "fixes" a decision.
 - **Escrow only mechanically-verifiable work.** A research agent's output quality is
   not on-chain checkable; meter that per call via x402 instead of pretending to
   escrow it.
+- **Hire through APEX at ZERO budget, deliberately.** Proving that escrow custodies
+  funds would be proving BNB Chain's property, not ours, and it conflicts with
+  invariant 7: we route through APEX precisely so we are not the trusted party, and
+  demonstrating their custody quietly adopts responsibility for their contract. The
+  Agent Advantage Report asks for time, cost, output quality and attached outputs —
+  value transfer appears nowhere, and `cost = 0` is a true figure rather than a
+  missing one. A zero-budget job traverses the identical state machine
+  (`Open → Funded → Submitted → Completed`); only the two `safeTransfer` calls are
+  skipped, and `setBudget(jobId, 0)` is still required because `fund` reverts on
+  `!jobHasBudget[jobId]`. Say so in the report rather than implying value moved.
+  Cost: about **0.00023 BNB** for three jobs with headroom.
 
 ## Conventions
 
