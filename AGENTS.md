@@ -113,6 +113,20 @@ real work.
    "agent is down" from "unreachable from here". `/methodology` says so. A
    measurement whose limits are visible is evidence; one whose limits are hidden is
    marketing.
+9. **A failed measurement must never render as zero.** This has now been found
+   twice. `/live` printed "0 probes across 0 endpoints" while the database held
+   43,456, because a timeout, a thrown query and a missing `DATABASE_URL` all
+   returned an all-zero fallback the page rendered as fact. `/authority` headlined
+   an unscoped "no session key has ever been registered". Any read that can fail
+   returns an explicit `unavailable` flag with a reason, and the UI says it could
+   not measure. Grep for `return empty`, `catch {}` and `?? 0` before trusting a
+   figure on a page.
+10. **Never aggregate a `jsonb` column without `jsonb_typeof(x) = 'object'`.**
+   `coalesce(x, '{}'::jsonb)` substitutes for SQL `NULL` only and does nothing for a
+   JSON scalar. 100 double-encoded rows raised "cannot call jsonb_each_text on a
+   non-object", and because the reads sat in one `Promise.all`, that single
+   rejection blanked every counter on the page. Independent reads get
+   `Promise.allSettled`.
 
 ## Environment hazards
 
