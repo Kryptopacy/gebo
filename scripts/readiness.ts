@@ -210,6 +210,47 @@ async function main() {
     evidence: metrics === null ? "no metric_values table" : `metric_values=${fmt(metrics)}`,
   });
 
+  /**
+   * No SECURITY DEFINER function may be executable by PUBLIC.
+   *
+   * Measured rather than trusted, because the obvious fix silently did not work.
+   * Migration 0005 carried "revoke all on function gebo_secret(text) from anon,
+   * authenticated" and it changed nothing: Postgres grants EXECUTE to PUBLIC by
+   * default, anon inherits through PUBLIC, and revoking the named roles leaves the
+   * real grant in place. gebo_secret reads vault.decrypted_secrets and Supabase
+   * exposes public-schema functions over PostgREST, so that was a route to the
+   * cron bearer token from outside the database for as long as it stood.
+   *
+   * An empty grantee before "=" in the ACL is the PUBLIC grant; a null ACL is the
+   * default, which also includes PUBLIC.
+   */
+  try {
+    const secdef = await sql<{ name: string; args: string; acl: string | null }[]>`
+      select p.proname as name,
+             pg_get_function_identity_arguments(p.oid) as args,
+             array_to_string(p.proacl, ' | ') as acl
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prosecdef
+      order by p.proname`;
+    const open = secdef.filter((r) => !r.acl || /(^|\| )=/.test(r.acl));
+    gates.push({
+      id: "definer-acl",
+      item: "No SECURITY DEFINER function executable by PUBLIC",
+      state: open.length === 0 ? "DONE" : "MISSING",
+      evidence:
+        open.length === 0
+          ? `${secdef.length} definer function(s), all restricted`
+          : `EXPOSED: ${open.map((r) => `${r.name}(${r.args})`).join(", ")}`,
+    });
+  } catch (e) {
+    gates.push({
+      id: "definer-acl",
+      item: "No SECURITY DEFINER function executable by PUBLIC",
+      state: "UNKNOWN",
+      evidence: `could not read pg_proc: ${String((e as Error).message).slice(0, 60)}`,
+    });
+  }
+
   // ---------------------------------------------------------------- print
   const pad = Math.max(...gates.map((g) => g.item.length));
   const order = { MISSING: 0, PARTIAL: 1, UNKNOWN: 2, DONE: 3 };

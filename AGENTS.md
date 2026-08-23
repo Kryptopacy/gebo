@@ -127,6 +127,15 @@ real work.
    non-object", and because the reads sat in one `Promise.all`, that single
    rejection blanked every counter on the page. Independent reads get
    `Promise.allSettled`.
+11. **`revoke ... from anon, authenticated` on a function does nothing.** Postgres
+   grants `EXECUTE` to `PUBLIC` on creation and those roles inherit through it, so
+   you must `revoke ... from public`. Migration 0005 carried the useless form for
+   weeks, which left `gebo_secret` — a reader of `vault.decrypted_secrets` — callable
+   over PostgREST at `/rest/v1/rpc/gebo_secret`, i.e. a route to the cron bearer
+   token from outside the database. Read the ACL, do not trust the statement: an
+   empty grantee before `=` (`=X/postgres`) **is** the `PUBLIC` grant, and a null
+   ACL is the default, which also includes `PUBLIC`. `npm run readiness` now gates
+   on this.
 
 ## Environment hazards
 
@@ -183,6 +192,13 @@ Recorded so nobody "fixes" a decision.
   memecoin titles, and the function word `not`. Four candidates, four noise. The
   detector surfaces candidates with evidence; a person promotes.
 - **Multi-region probing** is the production answer to invariant 8 and is deferred.
+- **`pg_net` stays in the `public` schema.** The Supabase linter flags it, and it
+  cannot be moved: `alter extension pg_net set schema extensions` fails with
+  *"extension pg_net does not support SET SCHEMA"*. Measured before accepting: all
+  15 objects pg_net owns live in the `net` schema and **none** are in `public`, so
+  it exposes no callable surface there and the finding has no exploit path. The only
+  remedy is drop-and-recreate, which would take `net.http_get` away from
+  `gebo_run_cron` and stop all six cron jobs. Not worth it for a namespace nicety.
 - **PancakeSwap Infinity** is live and now their lead product; V3 is the target for
   now, with Infinity in the roadmap.
 - **Escrow only mechanically-verifiable work.** A research agent's output quality is
