@@ -128,7 +128,11 @@ export async function GET(request: Request) {
             p95_ms          = greatest(probe_daily.p95_ms, excluded.p95_ms),
             fail_streak     = case when excluded.fail_streak = 0 then 0
                                    else probe_daily.fail_streak + 1 end,
-            last_ok_at      = coalesce(excluded.last_ok_at, probe_daily.last_ok_at)
+            last_ok_at      = coalesce(excluded.last_ok_at, probe_daily.last_ok_at),
+            -- Accumulate. This was omitted, so err_counts held only the FIRST
+            -- probe of each endpoint-day while probes counted every one, and the
+            -- breakdown's totals could never match its own denominator.
+            err_counts      = public.merge_err_counts(probe_daily.err_counts, excluded.err_counts)
         `;
 
         // A change of state is news; an unchanged state is not.

@@ -47,6 +47,22 @@ export type LivenessSummary = {
   p50Ms: number | null;
   p95Ms: number | null;
   errorClasses: { cls: string; n: number }[];
+  /**
+   * Did the measurement fail, as distinct from measuring zero?
+   *
+   * This exists because the page rendered a confident "0" for every figure when
+   * the query threw, timed out, or found no DATABASE_URL. A single malformed
+   * err_counts row was enough to do it: one rejected promise in a Promise.all
+   * returned the all-zero fallback, and the ledger claimed 0 probes across 0
+   * endpoints while the database held 43,321.
+   *
+   * On a product whose entire argument is that its numbers are measured rather
+   * than asserted, a fabricated zero is the worst failure available. The caller
+   * must render this state as unavailable, never as a value.
+   */
+  unavailable: boolean;
+  /** What failed, for the reader and for the operator. Null when fine. */
+  unavailableReason: string | null;
 };
 
 export type Transition = {
@@ -157,16 +173,28 @@ export type UptimeRow = {
 };
 
 export async function livenessSummary(): Promise<LivenessSummary> {
-  const empty: LivenessSummary = {
+  const blank = {
     endpointsTracked: 0, probesRecorded: 0, probesToday: 0, answeringToday: 0,
     validatedToday: 0, daysOfHistory: 0, transitions: 0, transitionsToday: 0,
-    p50Ms: null, p95Ms: null, errorClasses: [],
+    p50Ms: null, p95Ms: null, errorClasses: [] as { cls: string; n: number }[],
   };
-  const sql = db();
-  if (!sql) return empty;
+  const down = (reason: string): LivenessSummary => ({
+    ...blank, unavailable: true, unavailableReason: reason,
+  });
 
-  try {
-    const res = await guard(Promise.all([
+  const sql = db();
+  if (!sql) return down("DATABASE_URL is not configured for this deployment");
+
+  /**
+   * Settled rather than all-or-nothing.
+   *
+   * Promise.all meant the error-class breakdown - the least important panel on
+   * the page - could blank the headline counters by rejecting. It did exactly
+   * that. Each query now degrades on its own, and only the failure of the
+   * summary itself makes the page unavailable.
+   */
+  const [summary, events, errs] = await Promise.allSettled([
+    guard(
       sql<any[]>`
         select
           count(distinct endpoint_id)::int                             as endpoints,
@@ -178,37 +206,65 @@ export async function livenessSummary(): Promise<LivenessSummary> {
           percentile_disc(0.5) within group (order by p50_ms)           as p50,
           percentile_disc(0.95) within group (order by p95_ms)          as p95
         from probe_daily`,
+      8000,
+      null as any,
+    ),
+    guard(
       sql<any[]>`
         select count(*)::int as total,
                count(*) filter (where at >= current_date)::int as today
         from probe_events`,
+      8000,
+      null as any,
+    ),
+    /**
+     * jsonb_typeof guard, not coalesce.
+     *
+     * coalesce substitutes for SQL NULL only. It does nothing for a JSON null or
+     * a scalar, and 100 rows written on the first probe day hold a jsonb STRING
+     * containing the text of the object - double-encoded by an early writer. Those
+     * reached jsonb_each_text and threw "cannot call jsonb_each_text on a
+     * non-object", which is what blanked the page.
+     */
+    guard(
       sql<any[]>`
         select key as cls, sum(value::int)::int as n
-        from probe_daily, jsonb_each_text(coalesce(err_counts, '{}'::jsonb))
+        from probe_daily, jsonb_each_text(err_counts)
+        where jsonb_typeof(err_counts) = 'object'
         group by key order by n desc limit 8`,
-    ]), 8000, null as any);
+      8000,
+      null as any,
+    ),
+  ]);
 
-    if (!res) return empty;
-    const [a, b, errs] = res;
-    const s = a[0] ?? {};
-    const t = b[0] ?? {};
-
-    return {
-      endpointsTracked: Number(s.endpoints ?? 0),
-      probesRecorded: Number(s.probes ?? 0),
-      probesToday: Number(s.probes_today ?? 0),
-      answeringToday: Number(s.ok_today ?? 0),
-      validatedToday: Number(s.validated_today ?? 0),
-      daysOfHistory: Number(s.days ?? 0),
-      transitions: Number(t.total ?? 0),
-      transitionsToday: Number(t.today ?? 0),
-      p50Ms: s.p50 == null ? null : Number(s.p50),
-      p95Ms: s.p95 == null ? null : Number(s.p95),
-      errorClasses: (errs as any[]).map((e) => ({ cls: e.cls, n: Number(e.n) })),
-    };
-  } catch {
-    return empty;
+  const s0 = summary.status === "fulfilled" ? summary.value : null;
+  if (!s0) {
+    return down(
+      summary.status === "rejected"
+        ? `probe_daily query failed: ${String((summary.reason as any)?.message ?? summary.reason).slice(0, 140)}`
+        : "probe_daily query exceeded 8s",
+    );
   }
+
+  const s = s0[0] ?? {};
+  const t = (events.status === "fulfilled" && events.value?.[0]) || {};
+  const e = (errs.status === "fulfilled" && errs.value) || [];
+
+  return {
+    endpointsTracked: Number(s.endpoints ?? 0),
+    probesRecorded: Number(s.probes ?? 0),
+    probesToday: Number(s.probes_today ?? 0),
+    answeringToday: Number(s.ok_today ?? 0),
+    validatedToday: Number(s.validated_today ?? 0),
+    daysOfHistory: Number(s.days ?? 0),
+    transitions: Number(t.total ?? 0),
+    transitionsToday: Number(t.today ?? 0),
+    p50Ms: s.p50 == null ? null : Number(s.p50),
+    p95Ms: s.p95 == null ? null : Number(s.p95),
+    errorClasses: (e as any[]).map((x) => ({ cls: x.cls, n: Number(x.n) })),
+    unavailable: false,
+    unavailableReason: null,
+  };
 }
 
 /** Recent state changes. The only place an agent going dark is recorded. */

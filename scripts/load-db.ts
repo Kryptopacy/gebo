@@ -297,9 +297,13 @@ try {
           validated_count = probe_daily.validated_count + excluded.validated_count,
           p50_ms = excluded.p50_ms,
           p95_ms = excluded.p95_ms,
-          fail_streak = excluded.fail_streak,
-          last_ok_at = coalesce(excluded.last_ok_at, probe_daily.last_ok_at)
-      `;
+        fail_streak = excluded.fail_streak,
+        last_ok_at = coalesce(excluded.last_ok_at, probe_daily.last_ok_at),
+        -- Accumulate, matching the cron route and the probe script. This loader
+        -- is also the writer that produced the 100 double-encoded err_counts rows
+        -- repaired in migration 0010; probe_daily now rejects a non-object.
+        err_counts = public.merge_err_counts(probe_daily.err_counts, excluded.err_counts)
+    `;
     }
     console.log(`  probes_raw inserted       ${raw.length}`);
     console.log(`  probe_daily rollups       ${daily.size}`);

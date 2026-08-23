@@ -154,7 +154,10 @@ async function flush() {
       p95_ms          = greatest(probe_daily.p95_ms, excluded.p95_ms),
       fail_streak     = case when excluded.fail_streak = 0 then 0
                              else probe_daily.fail_streak + 1 end,
-      last_ok_at      = coalesce(excluded.last_ok_at, probe_daily.last_ok_at)
+      last_ok_at      = coalesce(excluded.last_ok_at, probe_daily.last_ok_at),
+      -- Accumulate, matching the cron route. Omitting this left err_counts
+      -- holding only the first probe of each endpoint-day.
+      err_counts      = public.merge_err_counts(probe_daily.err_counts, excluded.err_counts)
   `;
 
   // Trust state, but never overwrite a SHADOWED verdict — a fatal registration

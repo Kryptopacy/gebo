@@ -24,22 +24,62 @@ export default async function LivePage() {
     ? ((s.answeringToday / s.probesToday) * 100).toFixed(1)
     : null;
 
-  return (
-    <>
-      <section className="band-tight">
-        <div className="shell">
-          <p className="crumb"><a href="/">GEBO</a> <span className="t-4">/</span> Liveness</p>
-          <div className="headline-pair">
-            <h1 style={{ fontSize: "clamp(1.9rem, 3.6vw, 2.6rem)" }}>
-              Which agents are actually answering
-            </h1>
-            <p className="standfirst">
-              Measured by probing every callable endpoint on a tiered schedule, not read from
-              a registry field. Published so anyone can use it.
+  const header = (
+    <section className="band-tight">
+      <div className="shell">
+        <p className="crumb"><a href="/">GEBO</a> <span className="t-4">/</span> Liveness</p>
+        <div className="headline-pair">
+          <h1 style={{ fontSize: "clamp(1.9rem, 3.6vw, 2.6rem)" }}>
+            Which agents are actually answering
+          </h1>
+          <p className="standfirst">
+            Measured by probing every callable endpoint on a tiered schedule, not read from
+            a registry field. Published so anyone can use it.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+
+  /**
+   * A failed measurement is not a measurement of zero.
+   *
+   * This page previously rendered a confident "0 probes across 0 endpoints" whenever
+   * the query failed - and a single malformed err_counts row was enough to cause it,
+   * while the database held 43,321 probes. Printing zeros there is worse than
+   * printing nothing: it is the fabricated number this whole product exists to
+   * argue against. So the page says it cannot measure, and says why.
+   */
+  if (s.unavailable) {
+    return (
+      <>
+        {header}
+        <section className="band band-last">
+          <div className="shell">
+            <div className="notice" data-tone="fail">
+              <strong>The liveness ledger could not be read.</strong> This is a failure to
+              measure, not a measurement of zero, so no figures are shown. Every number on
+              this page is computed on request from the probe rollups; when that read fails
+              there is nothing honest to display.
+            </div>
+            {s.unavailableReason && (
+              <p className="prose sm mt-m">
+                Reported cause: <span className="num">{s.unavailableReason}</span>
+              </p>
+            )}
+            <p className="prose sm">
+              The underlying data is unaffected. Probing continues on schedule and the ledger
+              returns as soon as the read succeeds.
             </p>
           </div>
-        </div>
-      </section>
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {header}
 
       <section className="band-tight">
         <div className="shell">
