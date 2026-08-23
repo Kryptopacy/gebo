@@ -28,6 +28,7 @@
     "stats": "tsx scripts/show-stats.ts",
     "readiness": "tsx scripts/readiness.ts",
     "measure:b402": "tsx scripts/measure-b402.ts",
+    "verify:pgnet": "tsx scripts/verify-pgnet.ts",
     "cron:status": "tsx scripts/cron-status.ts",
     "cron:fingerprint": "tsx scripts/cron-fingerprint.ts",
     "classify:drift": "tsx scripts/check-classify-drift.ts",

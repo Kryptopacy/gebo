@@ -158,6 +158,16 @@ file.
 - **DNS to the Supabase pooler flakes.** `getaddrinfo ENOTFOUND` is transient; retry
   before investigating.
 - **`scripts/funnel.ts` hangs.** Do not run it. Use `npm run stats`.
+- **`pg_net` cannot be moved with `SET SCHEMA`.** It is non-relocatable, so
+  `alter extension pg_net set schema extensions` always fails. Migration 0012 drops
+  and recreates it instead. That is only safe because the failure mode is
+  verifiable: `net.http_get` **queues** and returns void, so a dead worker leaves
+  every cron job reporting `succeeded` while no HTTP request is made — the pipeline
+  stops and the dashboards look healthy. Always run `npm run verify:pgnet` after
+  touching it; it queues a real request and waits for `net._http_response`.
+  `gebo_run_cron` survives the drop only because it is `plpgsql`, whose bodies are
+  not parsed at creation and so record no dependency. A SQL-language function
+  referencing `net.http_get` would be dropped by the cascade.
 - **`next build` while `next dev` is running corrupts `.next`.** They share the
   directory; the dev server then serves 500s for every route with
   `ENOENT routes-manifest.json`. Recovery is stop dev, `Remove-Item -Recurse -Force
@@ -192,13 +202,6 @@ Recorded so nobody "fixes" a decision.
   memecoin titles, and the function word `not`. Four candidates, four noise. The
   detector surfaces candidates with evidence; a person promotes.
 - **Multi-region probing** is the production answer to invariant 8 and is deferred.
-- **`pg_net` stays in the `public` schema.** The Supabase linter flags it, and it
-  cannot be moved: `alter extension pg_net set schema extensions` fails with
-  *"extension pg_net does not support SET SCHEMA"*. Measured before accepting: all
-  15 objects pg_net owns live in the `net` schema and **none** are in `public`, so
-  it exposes no callable surface there and the finding has no exploit path. The only
-  remedy is drop-and-recreate, which would take `net.http_get` away from
-  `gebo_run_cron` and stop all six cron jobs. Not worth it for a namespace nicety.
 - **PancakeSwap Infinity** is live and now their lead product; V3 is the target for
   now, with Infinity in the roadmap.
 - **Escrow only mechanically-verifiable work.** A research agent's output quality is

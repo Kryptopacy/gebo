@@ -56,37 +56,14 @@ grant execute on function public.gebo_secret(text)   to postgres;
 grant execute on function public.gebo_run_cron(text) to postgres;
 
 /**
- * Move pg_net out of the public schema.
+ * pg_net's schema is handled in 0012, not here.
  *
- * `create extension if not exists pg_net` in 0005 carried no schema, so it landed
- * in public. Its FUNCTIONS live in the separate `net` schema, which is why
- * net.http_get resolves and why nothing breaks today - this is namespace hygiene
- * rather than an exploit.
+ * This migration first attempted `alter extension pg_net set schema extensions`,
+ * which always fails: pg_net is declared non-relocatable, so Postgres refuses with
+ * "extension pg_net does not support SET SCHEMA". The attempt was left in place
+ * warning on every migrate run, which is noise rather than information.
  *
- * Attempted rather than asserted, and warned about rather than fatal. The
- * revocations above are the security-critical part of this migration and must not
- * be rolled back by a relocation that some Supabase tiers disallow. A failure here
- * is reported so it is visible, which is the same standard the scripts hold: say
- * when you could not do something rather than passing quietly.
+ * 0012 does it properly by dropping and recreating the extension, gated on an
+ * end-to-end delivery check because pg_net's send path is asynchronous and its
+ * failure mode is silence rather than an error.
  */
-do $$
-declare
-  v_schema text;
-begin
-  select n.nspname into v_schema
-  from pg_extension e join pg_namespace n on n.oid = e.extnamespace
-  where e.extname = 'pg_net';
-
-  if v_schema is null then
-    raise warning 'pg_net is not installed; nothing to relocate';
-  elsif v_schema <> 'public' then
-    raise notice 'pg_net already outside public (schema: %)', v_schema;
-  else
-    begin
-      execute 'alter extension pg_net set schema extensions';
-      raise notice 'pg_net relocated from public to extensions';
-    exception when others then
-      raise warning 'could not relocate pg_net out of public: %', sqlerrm;
-    end;
-  end if;
-end $$;
