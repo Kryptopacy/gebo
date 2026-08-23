@@ -31,6 +31,7 @@
     "verify:pgnet": "tsx scripts/verify-pgnet.ts",
     "cron:status": "tsx scripts/cron-status.ts",
     "cron:fingerprint": "tsx scripts/cron-fingerprint.ts",
+    "cron:test": "tsx scripts/cron-test.ts",
     "classify:drift": "tsx scripts/check-classify-drift.ts",
     "categories:emerging": "tsx scripts/emerging-categories.ts",
     "docs:measurements": "tsx scripts/write-measurements.ts",
