@@ -4,7 +4,7 @@
  * GEBO's central claim is that an agent's limits are enforced on chain by the
  * session validator, not by the good behaviour of the marketplace or the agent.
  *
- * Six assertions on BNB Smart Chain Testnet (97):
+ * Six assertions, on either BNB Smart Chain Testnet (97) or mainnet (56):
  *
  *   1  grant        a session scoped to one contract, with a spend cap
  *   2  in scope     the permitted call succeeds
@@ -20,6 +20,16 @@
  * was wrong: if every call reverts then universal failure is indistinguishable
  * from enforcement, and the refusals prove nothing.
  *
+ * WHICH CHAIN. Testnet by default, because these assertions move real value and
+ * three of them deliberately provoke reverts. Pass --mainnet (or GEBO_SPIKE_CHAIN
+ * =56) to run against chain 56, where the Altana track scores an integration
+ * higher: testnet counts, mainnet counts for more. Nothing else in this codebase
+ * is testnet-bound - every indexed figure is already chain 56 - so this script was
+ * the last thing pinning us to 97, and it is now a flag rather than an edit.
+ *
+ * Mainnet runs cost real BNB and move real tokens. The amounts are deliberately
+ * tiny and the script refuses to start on a zero balance rather than half-running.
+ *
  * PERMISSION SHAPE. Verified against Altana's DEX guide after several failures:
  *   calls: [{ to: contract }]                    target only, no signature
  *   spend: [{ limit, period, token? }]           the token that LEAVES the wallet
@@ -31,18 +41,57 @@
  */
 import "dotenv/config";
 import {
-  createClient as createAltanaClient, BNB_TESTNET, signerFromPrivateKey,
+  createClient as createAltanaClient, BNB, BNB_TESTNET, signerFromPrivateKey,
 } from "@altananetwork/sdk";
 import {
   createPublicClient, http, parseAbi, encodeFunctionData, formatEther, keccak256,
   type Address, type Hex,
 } from "viem";
-import { bscTestnet } from "viem/chains";
+import { bsc, bscTestnet } from "viem/chains";
 
-// BNB testnet. WBNB is the in-scope target; USDT is the out-of-scope one.
-const WBNB = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as const;
-const OTHER_TOKEN = "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd" as const;
-const SPENDER = "0x9a489505a00cE272eAa5e07Dba6491314CaE3796" as const;
+/**
+ * Per-chain targets.
+ *
+ * WBNB is the in-scope target the session is allowed to call. OTHER_TOKEN is the
+ * uncapped one assertion 3 tries and must fail to move. SPENDER is an unrelated
+ * contract for the wrong-target refusal in assertion 4.
+ *
+ * Mainnet addresses are the ones already verified in src/lib/session-scope.ts
+ * rather than retyped here, since a wrong token address would make a refusal look
+ * like enforcement when it was really a call to nothing.
+ */
+const NETWORKS = {
+  97: {
+    label: "BNB Smart Chain Testnet (97)",
+    altana: BNB_TESTNET,
+    viemChain: bscTestnet,
+    rpcEnv: "BSC_TESTNET_RPC",
+    rpcFallback: "https://bsc-testnet-rpc.publicnode.com",
+    gasLabel: "tBNB",
+    wbnb: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address,
+    otherToken: "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd" as Address,
+    spender: "0x9a489505a00cE272eAa5e07Dba6491314CaE3796" as Address,
+  },
+  56: {
+    label: "BNB Smart Chain mainnet (56)",
+    altana: BNB,
+    viemChain: bsc,
+    rpcEnv: "BSC_MAINNET_RPC",
+    rpcFallback: "https://bsc-rpc.publicnode.com",
+    gasLabel: "BNB",
+    wbnb: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c" as Address,
+    otherToken: "0x55d398326f99059fF775485246999027B3197955" as Address, // USDT
+    spender: "0x13f4EA83D0bd40E75C8222255bc855a974568Dd4" as Address,    // PCS SmartRouter
+  },
+} as const;
+
+const wantMainnet =
+  process.argv.includes("--mainnet") || process.env.GEBO_SPIKE_CHAIN === "56";
+const NET = wantMainnet ? NETWORKS[56] : NETWORKS[97];
+
+const WBNB = NET.wbnb;
+const OTHER_TOKEN = NET.otherToken;
+const SPENDER = NET.spender;
 
 const KEYSTORE_ABI = parseAbi([
   "function getKeys(address user) view returns (bytes32[])",
@@ -63,23 +112,26 @@ const pk = process.env.DEMO_OWNER_PRIVATE_KEY as Hex | undefined;
 if (!pk) { console.error("DEMO_OWNER_PRIVATE_KEY missing"); process.exit(1); }
 
 const pub = createPublicClient({
-  chain: bscTestnet,
-  transport: http(process.env.BSC_TESTNET_RPC ?? "https://bsc-testnet-rpc.publicnode.com", { timeout: 30_000 }),
+  chain: NET.viemChain,
+  transport: http(process.env[NET.rpcEnv] ?? NET.rpcFallback, { timeout: 30_000 }),
 });
 
-const client = createAltanaClient({ chains: [BNB_TESTNET] });
+const client = createAltanaClient({ chains: [NET.altana] });
 const signer = signerFromPrivateKey(pk);
 
-console.log("\n  ALTANA SESSION SPIKE - BNB Smart Chain Testnet (97)");
+console.log(`\n  ALTANA SESSION SPIKE - ${NET.label}`);
 console.log("  " + "=".repeat(68) + "\n");
+if (wantMainnet) {
+  console.log("  MAINNET: this spends real BNB and moves real tokens.\n");
+}
 
 const wallet = await client.createWallet({ signer });
 const owner = wallet.address as Address;
 const bal = await pub.getBalance({ address: owner });
 console.log(`  wallet    ${owner}`);
-console.log(`  balance   ${formatEther(bal)} tBNB`);
-console.log(`  keystore  ${BNB_TESTNET.keyStore}`);
-console.log(`  relay     ${BNB_TESTNET.relayUrl}\n`);
+console.log(`  balance   ${formatEther(bal)} ${NET.gasLabel}`);
+console.log(`  keystore  ${NET.altana.keyStore}`);
+console.log(`  relay     ${NET.altana.relayUrl}\n`);
 
 if (bal === 0n) { console.error("  wallet has no gas, cannot run the spike\n"); process.exit(1); }
 
@@ -155,8 +207,8 @@ if (session) {
   // 5. Anyone can verify the authority: a plain public read.
   try {
     const keyIds = await pub.readContract({
-      address: BNB_TESTNET.keyStore as Address, abi: KEYSTORE_ABI,
-      functionName: "getKeys", args: [owner],
+    address: NET.altana.keyStore as Address, abi: KEYSTORE_ABI,
+    functionName: "getKeys", args: [owner],
     }) as readonly Hex[];
 
     const derived = keccak256(session.publicKey);
@@ -164,8 +216,8 @@ if (session) {
     let valid = false;
     if (match) {
       valid = await pub.readContract({
-        address: BNB_TESTNET.keyStore as Address, abi: KEYSTORE_ABI,
-        functionName: "isValidKey", args: [owner, match],
+      address: NET.altana.keyStore as Address, abi: KEYSTORE_ABI,
+      functionName: "isValidKey", args: [owner, match],
       }) as boolean;
     }
     record(5, "Authority is publicly verifiable",

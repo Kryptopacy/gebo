@@ -73,14 +73,57 @@ key to wallet. Both require indexing `registerKey`/`revokeKey` logs. The
 
 ### Corrections to the record
 
-- **ERC-8183 exists** (Draft, 2026-02-25). Its reference implementation contradicts
-  its own spec: `fund()` drops the `expectedBudget` front-running check while
-  `setBudget` is provider-only, so a provider can raise the price and drain the
-  client's allowance. Do not deploy that kernel.
+- **ERC-8183 exists** (Draft, 2026-02-25), and its *reference implementation* drops
+  the `expectedBudget` front-running guard from `fund()`. Do not build against that
+  ABI. **BNB Chain's own deployment (APEX) does not have the flaw** and says so
+  deliberately: it keeps `fund(uint256,uint256,bytes)` with `expectedBudget` and
+  documents rejecting the reference form. An earlier note here also claimed
+  `setBudget` is provider-only — wrong; the normative text is client **or** provider,
+  and APEX implements that. Consequence: any SDK generated from the *reference*
+  ABI fails against APEX with "function selector not found" on `fund` and
+  `setProvider`.
 - **x402 originated at Coinbase**, not Binance. "Binance x402" is their facilitator.
   Conflating them reads as shallow.
 - BNB stablecoins are **18 decimals, not 6**. A decimals slip is a 10^12 spend-cap
   error. One helper constructs caps; it is property-tested across both.
+- **We are on mainnet, not testnet.** Every indexed figure is `chain_id = 56`, and
+  `keystore.ts` defaults to 56. `CHAIN_ID=97` in `.env` is **dead config** — no code
+  reads it; the two loaders hardcode `const CHAIN_ID = 56`. The only testnet work
+  was `scripts/spike-altana.ts`, now switchable with `npm run spike:altana:mainnet`
+  (or `GEBO_SPIKE_CHAIN=56`). The hackathon requires agents "live on BSC" and Altana
+  scores mainnet above testnet, so the mainnet run is worth the gas.
+
+### APEX (ERC-8183 escrow), verified on chain
+
+Escrow is already deployed by BNB Chain, so **do not write or deploy a kernel**.
+Its `EvaluatorRouter` is also the independent grader invariant 7 requires, which is
+what lets us publish a track record for seeded agents without grading them
+ourselves.
+
+| | mainnet (56) | testnet (97) |
+| --- | --- | --- |
+| AgenticCommerce (proxy) | `0xEa4DAa3100A767e86FDed867729ae7446476EBA6` | `0xa206c0517B6371C6638CD9e4a42Cc9f02A33B0DE` |
+| OptimisticPolicy | `0x9C01845705b3078Aa2e8cfF7520a6376FD766dE5` | `0xd6a4217588f6b1f5657a92a3e94e6422ad771cea` |
+| paymentToken | `0xcE24439F2D9C6a2289F741120FE202248B666666` | `0xc70B8741B8B07A6d61E54fd4B20f22Fa648E5565` |
+
+- **`platformFeeBP = 0` on both chains** (read at block 117,662,206 / 126,805,485).
+  Ceiling is `MAX_PLATFORM_FEE_BP = 1000` = 10%. Neither is paused.
+- The fee is **read from storage in `complete()`, not locked at `fund()`**, and
+  `setPlatformFee` is a plain `onlyOwner` call with no in-contract timelock. So the
+  owner can change the rate on jobs **already in escrow**, bounded to 10%. Mainnet
+  treasury is the burn address `0x…dEaD`, so today a raise would burn rather than
+  pay — informative, but mutable. Re-read before quoting a cost.
+- The token symbol is **`U`, 18 decimals**, on both chains. The repo README calls the
+  testnet one "USDC on testnet"; it is not. `addresses.ts` is authoritative over the
+  README, which publishes a **wrong** `OptimisticPolicy` address for testnet
+  (`0x4f4678d4…`); the address above is the one with code.
+- One job is **7 transactions** on the happy path — 5 client, 1 provider, 1
+  permissionless `settle` — or 6 if the ERC-20 allowance already covers the budget.
+  The evaluator never sends a transaction; `complete()` is an internal call from the
+  router inside `settle`.
+- Single fixed ERC-20 per deployment. **No native BNB**, no allowlist, no per-job
+  token. Fee-on-transfer and rebasing tokens are out of scope and cause silent
+  escrow drift. Zero-budget jobs are legal — a deliberate spec deviation.
 
 ## Invariants that must not be broken
 

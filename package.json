@@ -38,6 +38,7 @@
 
     "keys:gen": "tsx scripts/gen-keys.ts",
     "spike:altana": "tsx scripts/spike-altana.ts",
+    "spike:altana:mainnet": "tsx scripts/spike-altana.ts --mainnet",
     "preflight": "tsx scripts/preflight.ts",
     "logo": "tsx scripts/build-logo.ts"
   },
