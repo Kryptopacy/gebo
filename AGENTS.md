@@ -149,6 +149,11 @@ file.
 - **DNS to the Supabase pooler flakes.** `getaddrinfo ENOTFOUND` is transient; retry
   before investigating.
 - **`scripts/funnel.ts` hangs.** Do not run it. Use `npm run stats`.
+- **`next build` while `next dev` is running corrupts `.next`.** They share the
+  directory; the dev server then serves 500s for every route with
+  `ENOENT routes-manifest.json`. Recovery is stop dev, `Remove-Item -Recurse -Force
+  .next`, start dev. Deleting `.next` while a node process still holds a handle
+  leaves a partial directory and the same error, so stop first and pause a second.
 - **Recursive `Get-ChildItem` at the repo root walks `node_modules`** and will blow
   the output limit. Always scope the path.
 - Resource contention is real — builds and scripts intermittently hang when many

@@ -453,6 +453,16 @@ export type Aggregates = {
   operators: number;
   topOperators: { key: string; label: string; count: number; validated: number; broken: number }[];
   topOperatorShare: number;
+  /**
+   * True when these figures came from the database.
+   *
+   * Mirrors Census.live, and exists for the same reason. Without it, a timeout or
+   * a thrown query returned every count as 0 and the landing page rendered
+   * "0 agents registered on BSC" as measured fact - the fabricated number this
+   * product exists to argue against. The caller must treat false as
+   * "cannot measure", never as a value.
+   */
+  live: boolean;
 };
 
 let aggCache: Aggregates | null = null;
@@ -463,6 +473,7 @@ export async function loadAggregates(): Promise<Aggregates> {
     agents: 0,
     states: { VERIFIED: 0, LISTED: 0, DORMANT: 0, SHADOWED: 0 },
     categories: {}, operators: 0, topOperators: [], topOperatorShare: 0,
+    live: false,
   };
 
   const sql = db();
@@ -479,6 +490,7 @@ export async function loadAggregates(): Promise<Aggregates> {
       categories: {}, operators: f.distinctOperators,
       topOperators: f.topOperators.map((o) => ({ ...o, broken: 0 })),
       topOperatorShare: f.topOperatorShare,
+      live: false,
     };
     return aggCache;
   }
@@ -496,7 +508,16 @@ export async function loadAggregates(): Promise<Aggregates> {
         from operators where agent_count > 0 order by agent_count desc limit 10`,
       sql<{ n: number }[]>`select count(*)::int as n from operators where agent_count > 0`,
     ]), 9000, null as any);
-    if (!results) { aggCache = empty; return aggCache; }
+    /**
+     * A failed read is never cached.
+     *
+     * aggCache has no TTL, so assigning the all-zero value here froze zeros for
+     * the lifetime of the server process: one transient DNS blip against the
+     * pooler - a documented flake on this project - and the landing page served
+     * "0 agents" until the next deploy. Returning without caching means the next
+     * request retries.
+     */
+    if (!results) return empty;
     const [counts, states, cats, ops, opCount] = results;
 
     const total = counts[0]?.n ?? 0;
@@ -515,12 +536,12 @@ export async function loadAggregates(): Promise<Aggregates> {
         validated: o.validated_count, broken: o.fatal_defect_count,
       })),
       topOperatorShare: total && ops[0] ? (ops[0].agent_count / total) * 100 : 0,
+      live: true,
     };
     return aggCache;
   } catch (err) {
     console.warn(`[data] aggregate read failed: ${String(err).slice(0, 140)}`);
-    aggCache = empty;
-    return aggCache;
+    return empty;
   }
 }
 

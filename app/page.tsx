@@ -13,6 +13,17 @@ export default async function Home() {
   const [agg, CENSUS] = await Promise.all([loadAggregates(), loadCensus()]);
   const top = CENSUS.tokensMinted;
 
+  /**
+   * Did the counts come from the database, or from a failed read?
+   *
+   * loadAggregates returned every figure as 0 on a timeout or a thrown query, and
+   * cached it with no TTL - so one transient pooler blip served "0 agents" until
+   * the next deploy. It now reports live=false instead, and this banner says the
+   * counts could not be measured rather than letting zeros stand as fact. Census
+   * has always carried the same flag.
+   */
+  const countsUnavailable = !agg.live || !CENSUS.live;
+
   const sumOf = (cats: readonly { slug: string }[]) =>
     cats.reduce((n, c) => n + (agg.categories[c.slug] ?? 0), 0);
   const judgedTotal = sumOf(JUDGED_CATEGORIES);
@@ -75,6 +86,19 @@ export default async function Home() {
 
   return (
     <>
+      {countsUnavailable && (
+        <section className="band-tight">
+          <div className="shell">
+            <div className="notice" data-tone="fail">
+              <strong>Some counts on this page could not be measured.</strong> A read
+              against the registry database did not complete, so figures below may be
+              incomplete or stale. This notice exists because the alternative - printing
+              zeros - would present a failed measurement as a finding.
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── hero ─────────────────────────────────────────────────── */}
       <section className="band animate-in delay-1">
         <div className="shell">
