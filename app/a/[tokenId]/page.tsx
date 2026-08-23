@@ -1,8 +1,23 @@
 import { notFound } from "next/navigation";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
+import { attestationsFor, attestationSummary } from "@/lib/attestations";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const OUTCOME_TONE: Record<string, string> = {
+  succeeded: "pass",
+  partial: "hold",
+  failed: "fail",
+  disputed: "fail",
+};
+
+function ago(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 /** Renders a URL with unsubstituted template placeholders marked. */
 function Uri({ url }: { url: string }) {
@@ -19,6 +34,21 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
   const { tokenId } = await params;
   const a = await findAgent(tokenId);
   if (!a) notFound();
+
+  /**
+   * Attestations, read independently of the agent record.
+   *
+   * allSettled rather than all: the evidence ledger is the least critical panel on
+   * this page, and a failure there must not blank the agent card. That exact
+   * coupling once blanked every counter on /live when a single malformed row threw.
+   */
+  const [attRes, sumRes] = await Promise.allSettled([
+    attestationsFor(tokenId, 56, 12),
+    attestationSummary(tokenId, 56),
+  ]);
+  const attestations = attRes.status === "fulfilled" ? attRes.value : [];
+  const attSummary = sumRes.status === "fulfilled" ? sumRes.value : null;
+  const evidenceUnavailable = attRes.status === "rejected";
 
   const st = trustState(a);
   const m = classify(a);
@@ -310,7 +340,7 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
 
       {/* ── full lint ────────────────────────────────────────────── */}
       {a.lint?.defects?.length > 0 && (
-        <section className="band band-last">
+        <section className="band">
           <div className="shell">
             <h2>Registration audit</h2>
             <div className="data-table-frame mt-m">
@@ -334,6 +364,146 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
           </div>
         </section>
       )}
+      {/* attestations: what this agent has actually been asked to do */}
+      {/**
+        * The evidence layer existed in the database for weeks and rendered nowhere,
+        * so every task ever recorded against an agent was invisible to the person
+        * deciding whether to hire it. That is the whole product failing quietly.
+        *
+        * There is no score here and there never will be. GPT Store data measured the
+        * correlation between usage and rating at between -0.153 and +0.071, meaning
+        * ratings carry no information. What is shown instead is what was asked, what
+        * came back, and whether the evidence was verifiable - each row standing or
+        * falling on its own.
+        */}
+      <section className="band band-last">
+        <div className="shell">
+          <div className="headline-pair">
+            <h2>Track record</h2>
+            <p className="prose sm">
+              Tasks recorded against this agent, each anchored to evidence a third
+              party can check. No stars, no score: a rating compresses away the only
+              part that matters, which is what was asked and what came back.
+            </p>
+          </div>
+
+          {evidenceUnavailable ? (
+            <div className="notice mt-m" data-tone="fail">
+              <strong>The evidence ledger could not be read.</strong> This is a failure
+              to measure, not a finding that this agent has no track record.
+            </div>
+          ) : attestations.length === 0 ? (
+            <div className="surface-card mt-m">
+              <p className="prose sm" style={{ margin: 0 }}>
+                No task has been recorded against this agent yet.
+              </p>
+              <div className="notice mt-m" data-tone="hold">
+                <strong>That is not a criticism of the agent.</strong> It means nobody
+                has hired it through a route we can verify. An attestation is stored
+                only when it carries evidence &mdash; a session-key transaction, an
+                ERC-8183 job, an x402 payment, or a task we ran ourselves &mdash;
+                because a claim without evidence is an opinion, and opinions are what
+                this registry exists to replace.
+              </div>
+            </div>
+          ) : (
+            <>
+              {attSummary && (
+                <dl className="kpi-grid mt-m">
+                  <div className="kpi-card">
+                    <dt>Tasks recorded</dt>
+                    <dd>{attSummary.total}</dd>
+                    <div className="qualifier">
+                      {attSummary.verified} with evidence confirmed on chain or by us
+                    </div>
+                  </div>
+                  <div className="kpi-card">
+                    <dt>Completed as asked</dt>
+                    <dd>
+                      {attSummary.succeeded}
+                      <span className="t-4" style={{ fontSize: "0.85rem" }}>
+                        {" "}of {attSummary.total}
+                      </span>
+                    </dd>
+                    <div className="qualifier">
+                      Counted over every recorded task, failures included. A rate over a
+                      handful of tasks describes those tasks and nothing wider
+                    </div>
+                  </div>
+                </dl>
+              )}
+
+              <div className="data-table-frame mt-l">
+                <div className="rows">
+                  <div
+                    className="rows-head"
+                    style={{ gridTemplateColumns: "minmax(0,1.4fr) 7rem 7rem 6rem" }}
+                  >
+                    <span>Task and result</span>
+                    <span>Outcome</span>
+                    <span style={{ textAlign: "right" }}>Took</span>
+                    <span>When</span>
+                  </div>
+                  {attestations.map((t) => (
+                    <div
+                      key={t.id}
+                      className="row"
+                      style={{ gridTemplateColumns: "minmax(0,1.4fr) 7rem 7rem 6rem" }}
+                    >
+                      <div>
+                        <h3>{t.task ?? "(task not recorded)"}</h3>
+                        {t.result && <div className="xs t-3">{t.result.slice(0, 180)}</div>}
+                        <div className="xs t-4">
+                          {t.evidenceKind}
+                          {" \u00b7 "}
+                          {t.evidenceVerified ? (
+                            <span>evidence verified</span>
+                          ) : (
+                            <span style={{ color: "var(--fail)" }}>evidence unverified</span>
+                          )}
+                          {t.attesterTrusted && " \u00b7 trusted reviewer"}
+                          {t.baselineDurationMs != null && (
+                            <>
+                              {" \u00b7 "}
+                              <a href="/compare">compared against doing it by hand</a>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="xs">
+                        <span
+                          className="pulse-dot"
+                          data-status={OUTCOME_TONE[t.outcome] ?? "hold"}
+                        />{" "}
+                        {t.outcome}
+                      </div>
+                      <div className="num xs t-3" style={{ textAlign: "right" }}>
+                        {t.durationMs == null
+                          ? "\u2014"
+                          : t.durationMs < 1000
+                            ? `${t.durationMs} ms`
+                            : `${(t.durationMs / 1000).toFixed(1)}s`}
+                      </div>
+                      <div className="xs t-3">{ago(t.createdAt)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {attSummary && attSummary.total < 5 && (
+                <div className="notice mt-m" data-tone="hold">
+                  <strong>
+                    {attSummary.total} task{attSummary.total === 1 ? "" : "s"} is not a
+                    record.
+                  </strong>{" "}
+                  Read the rows, not the ratio. A percentage over this few observations
+                  would imply a reliability this evidence cannot support.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
     </>
   );
 }
