@@ -22,6 +22,7 @@
 import postgres from "postgres";
 import { createPublicClient, http, fallback, type Address, type Hex, type PublicClient } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
+import type { TaskRun } from "./advantage";
 
 export type EvidenceKind = "session_execution" | "erc8183_job" | "x402_payment" | "gebo_task";
 export type Outcome = "succeeded" | "partial" | "failed" | "disputed";
@@ -235,6 +236,80 @@ export async function attestationsFor(tokenId: string, chainId = 56, limit = 25)
     }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * Task runs carrying BOTH arms of the counterfactual.
+ *
+ * The Agent Advantage question - did hiring this beat doing it myself - can only
+ * be answered by a row that recorded the manual arm as well as the agent arm. Most
+ * attestations will not: a session execution proves an agent did something, not
+ * what the alternative cost. So this filters to rows with a baseline rather than
+ * inferring one, because a made-up baseline is the easiest place to manufacture an
+ * advantage.
+ *
+ * Returns an explicit `unavailable` flag instead of an empty array on failure.
+ * An empty list and a failed read look identical to a page, and this project has
+ * already shipped "0 probes" for 43,456 probes once.
+ */
+export async function taskRuns(
+  chainId = 56,
+  limit = 100,
+): Promise<{ runs: TaskRun[]; unavailable: boolean; reason: string | null }> {
+  const sql = db();
+  if (!sql) {
+    return { runs: [], unavailable: true, reason: "DATABASE_URL is not configured" };
+  }
+  try {
+    const rows = await sql<any[]>`
+      select
+        a.token_id::text as token_id,
+        ag.name          as agent_name,
+        ag.category      as category,
+        a.task, a.result, a.outcome,
+        a.duration_ms, a.cost_amount, a.cost_token,
+        a.baseline_duration_ms, a.baseline_cost_amount, a.baseline_note,
+        a.evidence_kind, a.evidence_ref, a.evidence_verified,
+        a.attester, a.created_at
+      from attestations a
+      left join agents ag
+        on ag.chain_id = a.chain_id and ag.token_id = a.token_id
+      where a.chain_id = ${chainId}
+        -- A run without a manual arm cannot answer the question being asked.
+        and (a.baseline_duration_ms is not null or a.baseline_cost_amount is not null)
+      order by a.created_at desc
+      limit ${limit}
+    `;
+
+    const runs: TaskRun[] = rows.map((r) => ({
+      tokenId: String(r.token_id),
+      agentName: r.agent_name ?? null,
+      category: r.category ?? null,
+      task: r.task ?? "(task not recorded)",
+      result: r.result ?? null,
+      outcome: r.outcome,
+      agentMs: r.duration_ms == null ? null : Number(r.duration_ms),
+      // numeric(38,0) arrives as a string; BigInt keeps 18-decimal amounts exact.
+      agentCost: r.cost_amount == null ? null : BigInt(r.cost_amount),
+      costToken: r.cost_token ?? null,
+      manualMs: r.baseline_duration_ms == null ? null : Number(r.baseline_duration_ms),
+      manualCost: r.baseline_cost_amount == null ? null : BigInt(r.baseline_cost_amount),
+      manualNote: r.baseline_note ?? null,
+      evidenceKind: r.evidence_kind,
+      evidenceRef: r.evidence_ref,
+      evidenceVerified: Boolean(r.evidence_verified),
+      attester: r.attester,
+      createdAt: new Date(r.created_at).toISOString(),
+    }));
+
+    return { runs, unavailable: false, reason: null };
+  } catch (err: any) {
+    return {
+      runs: [],
+      unavailable: true,
+      reason: String(err?.message ?? err).slice(0, 160),
+    };
   }
 }
 
