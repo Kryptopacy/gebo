@@ -179,6 +179,29 @@ if (STAGE === "settle") {
   if (!JOB_ARG) { console.error("  --job <id> required for settle\n"); process.exit(1); }
   const jobId = BigInt(JOB_ARG);
   const s = await showJob(jobId);
+
+  /**
+   * Already settled is a success, not an error.
+   *
+   * settle carries no sender check - anyone may call it - and on testnet a third
+   * party settled job 609 within about a minute of its dispute window closing,
+   * before we got there. That is worth stating plainly: permissionless settlement
+   * is not merely permitted by the contract, it is actively performed on this
+   * network, so a client who walks away still gets a terminal outcome.
+   *
+   * Reporting it as "settle would revert" made a working system look broken.
+   */
+  if (s.status === 3) {
+    console.log(`\n  Already Completed, and not by us.`);
+    console.log(`  settle is permissionless, so a third party closed this job once its`);
+    console.log(`  dispute window elapsed. The full lifecycle finished without the client`);
+    console.log(`  sending a sixth transaction.\n`);
+    process.exit(0);
+  }
+  if (s.status === 4 || s.status === 5) {
+    console.log(`\n  Terminal state ${STATUS[s.status]}; nothing left to settle.\n`);
+    process.exit(0);
+  }
   if (s.status !== 2) {
     console.error(`\n  job is ${STATUS[s.status]}, not Submitted; settle would revert\n`);
     process.exit(1);
