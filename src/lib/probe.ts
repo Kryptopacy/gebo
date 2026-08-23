@@ -21,6 +21,12 @@ export type Endpoint = { kind: EndpointKind; url: string };
 
 export type ErrClass =
   | "ok" | "http_4xx" | "http_5xx" | "dns" | "timeout" | "tls"
+  /**
+   * The card is well formed but advertises an endpoint no client can reach -
+   * loopback, RFC1918, or a non-HTTP scheme. Its own class because the operator
+   * fix is specific and the generic card-shape message would misdirect them.
+   */
+  | "unreachable_endpoint"
   | "refused" | "reset" | "bad_url" | "non_json" | "other";
 
 export type ProbeOutcome = {
@@ -79,6 +85,56 @@ function cleanDetail(detail: string | null | undefined): string | null {
   return d.slice(0, 160);
 }
 
+/**
+ * Is the endpoint the card ADVERTISES reachable by anyone other than its author?
+ *
+ * Found by measurement, not review. Two agents graded VERIFIED serve a perfectly
+ * good card from agents.chainhelix.io and declare, inside it:
+ *
+ *   "url": "http://127.0.0.1:9104/"
+ *
+ * A2A clients are supposed to send message/send to that address. No third party can
+ * reach it, so the agent is unhireable by anyone but the machine that runs it - and
+ * we graded it VERIFIED because the CARD answered.
+ *
+ * lint.ts already treats a loopback host as a FATAL registration defect, and has
+ * since the beginning. It was simply pointed at the wrong URL: the registry's
+ * declared endpoint, which is public and fine. The one that matters for hiring is
+ * this one, and nothing was checking it.
+ *
+ * So VERIFIED meant "the card is reachable" rather than "the agent is reachable",
+ * which is precisely the gap between declared and actual that this project exists
+ * to close.
+ */
+export function cardEndpointDefect(declared: unknown): string | null {
+  if (typeof declared !== "string" || !declared.trim()) return null;
+
+  let u: URL;
+  try {
+    u = new URL(declared);
+  } catch {
+    return `card declares an unparseable endpoint: ${declared.slice(0, 60)}`;
+  }
+
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return `card endpoint is not HTTP: ${u.protocol}`;
+  }
+
+  const host = u.hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") {
+    return `card endpoint is loopback, unreachable by any client: ${u.origin}`;
+  }
+  if (host.endsWith(".local") || host.endsWith(".localhost")) {
+    return `card endpoint is a local-only name: ${u.origin}`;
+  }
+  // RFC1918 and link-local. Same list as lint.ts, kept literal rather than shared
+  // because probe.ts must stay dependency-light.
+  if (/^(10\.|127\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) {
+    return `card endpoint is a private address, unreachable from outside its network: ${u.origin}`;
+  }
+  return null;
+}
+
 /** Does this JSON look like an A2A Agent Card? */
 function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, unknown> } {
   if (!json || typeof json !== "object") return { ok: false, evidence: { reason: "not an object" } };
@@ -87,8 +143,19 @@ function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, u
   const hasCaps = json.capabilities !== undefined;
   const hasUrl = typeof json.url === "string";
   const hasVersion = typeof json.version === "string" || typeof json.protocolVersion === "string";
-  // Require a name plus at least one structural A2A field.
-  const ok = hasName && (hasSkills || hasCaps || hasUrl);
+
+  /**
+   * A card advertising an endpoint nobody can call is not a valid A2A card.
+   *
+   * Treated as failing validation rather than as a warning, because the
+   * consequence is total: every hire attempt from every client fails. Grading it
+   * VERIFIED would publish a working agent that cannot be worked with.
+   */
+  const endpointDefect = cardEndpointDefect(json.url);
+
+  // Require a name plus at least one structural A2A field, and a usable endpoint
+  // if one is declared at all.
+  const ok = hasName && (hasSkills || hasCaps || hasUrl) && !endpointDefect;
 
   /**
    * Capture the skill text, not merely its count.
@@ -123,6 +190,9 @@ function validateAgentCard(json: any): { ok: boolean; evidence: Record<string, u
       hasUrl,
       hasVersion,
       version: typeof json.version === "string" ? json.version : (json.protocolVersion ?? null),
+      /** The endpoint the card tells clients to call, and why it is unusable. */
+      declaredEndpoint: typeof json.url === "string" ? json.url.slice(0, 200) : null,
+      endpointDefect,
     },
   };
 }
@@ -148,11 +218,24 @@ async function probeA2A(url: string): Promise<Partial<ProbeOutcome>> {
     return { grade: "responded", httpStatus: status, errClass: "non_json", errDetail: cleanDetail(text), evidence: null };
   }
   const v = validateAgentCard(json);
+  /**
+   * Report an unreachable declared endpoint as its own class.
+   *
+   * "2xx JSON but not a recognisable A2A Agent Card" would be actively misleading
+   * here: the card is well formed and perfectly recognisable. What is wrong is that
+   * it points clients at an address only its author can reach. The operator can act
+   * on that message; the generic one would send them hunting through their schema.
+   */
+  const defect = v.evidence.endpointDefect as string | null | undefined;
   return {
     grade: v.ok ? "validated" : "responded",
     httpStatus: status,
-    errClass: "ok",
-    errDetail: v.ok ? null : "2xx JSON but not a recognisable A2A Agent Card",
+    errClass: v.ok ? "ok" : defect ? "unreachable_endpoint" : "ok",
+    errDetail: v.ok
+      ? null
+      : defect
+        ? defect
+        : "2xx JSON but not a recognisable A2A Agent Card",
     evidence: v.evidence,
   };
 }

@@ -28,6 +28,8 @@
     "stats": "tsx scripts/show-stats.ts",
     "readiness": "tsx scripts/readiness.ts",
     "measure:b402": "tsx scripts/measure-b402.ts",
+    "audit:cards": "tsx scripts/audit-card-endpoints.ts",
+    "run:task": "tsx scripts/run-task.ts",
     "verify:pgnet": "tsx scripts/verify-pgnet.ts",
     "cron:status": "tsx scripts/cron-status.ts",
     "cron:fingerprint": "tsx scripts/cron-fingerprint.ts",
