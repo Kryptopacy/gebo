@@ -217,9 +217,14 @@ export default async function AuthorityPage({
                   to every third party including this page.
                 </li>
                 <li>
-                  <strong>Other wallet layers.</strong> Binance&apos;s Agentic Wallet and other
-                  agent-wallet providers keep their own authority records. This reads the Altana
-                  Keystore, not theirs.
+                  <strong>Other wallet layers.</strong> Binance&apos;s Agentic Wallet keeps its
+                  authority state off chain. Its own documentation says the limits you set
+                  &ldquo;constrain the Agent <em>at the API level</em>&rdquo;, the key is MPC and
+                  &ldquo;never fully reconstructed on any single device or server&rdquo;, and access
+                  is withdrawn by signing out in the Binance app rather than by a transaction.
+                  There is no contract and no getter, so no third party can verify those limits
+                  &mdash; including us. We report that as unreadable rather than implying we
+                  checked it.
                 </li>
                 <li>
                   <strong>Plain token approvals.</strong> An{" "}

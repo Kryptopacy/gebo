@@ -114,12 +114,23 @@ export default async function LivePage() {
               </div>
             </div>
             <div className="kpi-card">
-              <dt>Response p50 / p95</dt>
+              <dt>How long an answer takes</dt>
               <dd style={{ fontSize: "1.45rem" }}>
-                {s.p50Ms ?? "—"}
-                <span className="t-4" style={{ fontSize: "0.85rem" }}> / {s.p95Ms ?? "—"} ms</span>
+                {s.p50Ms == null ? "—" : `${s.p50Ms.toLocaleString()} ms`}
+                <span className="t-4" style={{ fontSize: "0.85rem" }}> typical</span>
               </dd>
-              <div className="qualifier">Single-region measurement, disclosed as a defect</div>
+              <div className="qualifier">
+                {s.p50Ms == null || s.p95Ms == null ? (
+                  <>Not enough timed probes yet to report a typical response time</>
+                ) : (
+                  <>
+                    Half of {s.probesRecorded.toLocaleString()} probes answered faster than{" "}
+                    {s.p50Ms.toLocaleString()} ms; 1 in 20 took longer than{" "}
+                    {s.p95Ms.toLocaleString()} ms. Median and 95th percentile over{" "}
+                    {s.daysOfHistory} day{s.daysOfHistory === 1 ? "" : "s"}, single region
+                  </>
+                )}
+              </div>
             </div>
           </dl>
         </div>
@@ -206,7 +217,7 @@ export default async function LivePage() {
                   <span>Agent</span><span>Operator</span>
                   <span style={{ textAlign: "right" }}>Uptime</span>
                   <span style={{ textAlign: "right" }}>Probes</span>
-                  <span style={{ textAlign: "right" }}>p50</span>
+                  <span style={{ textAlign: "right" }}>Typical</span>
                   <span>Last answer</span>
                 </div>
                 {uptime.map((u) => (

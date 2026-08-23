@@ -9,12 +9,21 @@
  * Verified on both networks. Mainnet keystore 0x6572427E..., testnet
  * 0x6b8361C2... - different addresses, which is easy to get wrong.
  *
+ * WHY EVERY KEY IS CHECKED INDIVIDUALLY. getKeys is not a list of live authority.
+ * Altana documents the asymmetry: revocation drops a key from getKeys immediately,
+ * but expiry does not, so a key can sit in that array long after it stopped being
+ * usable. Counting the array length would therefore publish phantom authority -
+ * which is what any indexer that treats getKeys as the answer will do. activeKeys
+ * is derived from an isValidKey call per key, and keys.length is labelled as
+ * "ever registered" rather than as current power.
+ *
  * WHAT CANNOT BE READ. The Keystore exposes getKeys, getPublicKey and
  * isValidKey. It exposes no getter for `metadata`, `validator` or `expiry`, which
  * are the fields carrying the permission set - they are arguments to registerKey.
  * So the precise allowlist and spend caps of a third party's session are not
  * readable from the registry alone, and this module says so rather than implying
- * a scope it cannot see.
+ * a scope it cannot see. The permissions themselves live on the account contract,
+ * granted through the relay as authorizeKeys, not in Keystore state.
  */
 import { createPublicClient, http, fallback, parseAbi, keccak256, type Address, type Hex, type PublicClient } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
