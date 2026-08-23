@@ -278,6 +278,20 @@ export async function taskRuns(
       where a.chain_id = ${chainId}
         -- A run without a manual arm cannot answer the question being asked.
         and (a.baseline_duration_ms is not null or a.baseline_cost_amount is not null)
+        /**
+         * Exclude rows nobody stands behind.
+         *
+         * The first baselined row in this table was a self-check written to prove
+         * the attestation path retained a task and its output. Honest as plumbing,
+         * but it compared a database write against an ESTIMATED manual process, and
+         * the page rendered it as "1.2s against 2m 36s, 98.7% saved" - a
+         * counterfactual finding built from a smoke test.
+         *
+         * The zero address is the structural tell: an attestation with no real
+         * attester is not evidence, whatever its numbers say. Filtering on the task
+         * wording instead would break the moment someone rephrased it.
+         */
+        and a.attester <> '0x0000000000000000000000000000000000000000'
       order by a.created_at desc
       limit ${limit}
     `;
