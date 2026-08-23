@@ -531,11 +531,34 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 }
 
 .crumb {
-  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.03em;
-  color: var(--fg-4); margin-bottom: 18px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 560;
 }
-.crumb a { transition: color .15s ease; }
-.crumb a:hover { color: var(--fg-2); }
+.crumb a {
+  color: var(--accent);
+  transition: color .15s ease, opacity .15s ease;
+  font-weight: 600;
+}
+.crumb a:hover {
+  color: var(--fg);
+  opacity: 0.85;
+}
+.crumb .t-4 {
+  color: var(--fg-4);
+  font-weight: 400;
+}
+[data-theme="light"] .crumb,
+[data-theme="light"] .crumb a {
+  color: #9A6B00;
+}
 
 .link {
   color: var(--fg-2); border-bottom: 1px solid var(--fg-4);

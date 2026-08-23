@@ -87,6 +87,7 @@ export default async function LivePage() {
 
       <section className="band">
         <div className="shell">
+          <p className="section-label">01 · Real-Time Transition Log</p>
           <h2>Agents that changed state</h2>
           <p className="prose sm">
             The moment an agent stops answering, or starts again. No other index records this,
@@ -144,6 +145,7 @@ export default async function LivePage() {
 
       <section className="band">
         <div className="shell">
+          <p className="section-label">02 · Verified Reliability</p>
           <h2>Measured uptime</h2>
           <p className="prose sm">
             Endpoints with at least {MIN_PROBES} observations. Below that threshold a percentage
