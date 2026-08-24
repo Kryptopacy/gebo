@@ -127,6 +127,37 @@ export function gradeNumericAnswer(
 }
 
 /**
+ * Protocol scaffolding, never content.
+ *
+ * `jsonrpc: "2.0"` put a bare 2 into the extracted numbers, and 2 is within 15% of a
+ * health factor of 1.7824. An agent that replied with a JSON-RPC ERROR was therefore
+ * graded as having correctly reported the ratio. A false pass manufactured entirely
+ * from the envelope.
+ */
+const PROTOCOL_KEYS = new Set(["jsonrpc", "id", "messageId", "kind", "role", "protocolVersion"]);
+
+/**
+ * Is this a JSON-RPC error rather than an answer?
+ *
+ * Checked before grading, because an error body is not a reply that happens to be
+ * wrong - it is the agent declining to answer, and grading its prose for stray digits
+ * is how "unknown skill: None negotiate notify_funded" became a correct health factor.
+ */
+export function rpcErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const err = (body as { error?: unknown }).error;
+  if (!err) return null;
+  if (typeof err === "string") return err.slice(0, 200);
+  if (typeof err === "object") {
+    const e = err as { code?: unknown; message?: unknown };
+    const code = typeof e.code === "number" ? `${e.code}: ` : "";
+    const msg = typeof e.message === "string" ? e.message : JSON.stringify(err);
+    return `${code}${msg}`.slice(0, 200);
+  }
+  return "unspecified error";
+}
+
+/**
  * Extract whatever text an agent actually sent back.
  *
  * A2A and MCP both nest the useful content, and implementations differ in where
@@ -165,11 +196,29 @@ export function replyText(body: unknown): string {
     for (const key of ["text", "content", "parts", "message", "result", "output", "data"]) {
       if (key in o) walk(o[key], depth + 1);
     }
-    // Nothing recognised: fall back to every value so evidence is not discarded.
-    if (!parts.length) for (const val of Object.values(o)) walk(val, depth + 1);
+    // Nothing recognised: fall back to every value EXCEPT protocol scaffolding, so
+    // the envelope cannot contribute digits that get graded as an answer.
+    if (!parts.length) {
+      for (const [k, val] of Object.entries(o)) {
+        if (PROTOCOL_KEYS.has(k)) continue;
+        walk(val, depth + 1);
+      }
+    }
   };
 
   walk(body, 0);
   const joined = parts.join(" ").replace(/\s+/g, " ").trim();
-  return joined || JSON.stringify(body).slice(0, 2000);
+  if (joined) return joined;
+
+  /**
+   * Last resort: the raw JSON minus the scaffolding. Stringifying the whole object
+   * reintroduced "jsonrpc":"2.0" and with it the stray 2.
+   */
+  if (typeof body === "object" && !Array.isArray(body)) {
+    const stripped = Object.fromEntries(
+      Object.entries(body as Record<string, unknown>).filter(([k]) => !PROTOCOL_KEYS.has(k)),
+    );
+    return JSON.stringify(stripped).slice(0, 2000);
+  }
+  return JSON.stringify(body).slice(0, 2000);
 }

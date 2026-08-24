@@ -70,8 +70,11 @@ export type RunComparison = {
   /**
    * Did this run beat the manual path on time?
    *
-   * A failed or disputed run never counts as a win regardless of its clock: an
-   * answer that is wrong quickly is not an advantage.
+   * Requires a SUCCEEDED outcome, not merely a non-failure. A partial result means the
+   * agent replied without producing the answer that was asked for - a health-factor
+   * question returning prose with no ratio in it - and you still have to do the work
+   * yourself afterwards. Counting that as a saving would credit the agent for the time
+   * it took to not answer, which is the same error as crediting a fast error.
    */
   fasterAndUsable: boolean;
 };
@@ -144,9 +147,9 @@ export function compareRun(run: TaskRun): RunComparison {
     run,
     timeSavedMs,
     costSaved,
-    // "Usable" is doing real work here: a failed run with a fast clock is not a win.
-    fasterAndUsable:
-      timeSavedMs != null && timeSavedMs > 0 && (run.outcome === "succeeded" || run.outcome === "partial"),
+    // "Usable" is doing real work here: neither a fast error nor a fast non-answer
+    // is a saving, because in both cases the job still has to be done afterwards.
+    fasterAndUsable: timeSavedMs != null && timeSavedMs > 0 && run.outcome === "succeeded",
   };
 }
 

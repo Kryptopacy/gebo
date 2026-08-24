@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractNumbers, gradeNumericAnswer, replyText } from "../src/lib/task-grade.ts";
+import { extractNumbers, gradeNumericAnswer, replyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
 
 /**
  * Task grading.
@@ -108,5 +108,29 @@ describe("replyText", () => {
 
   it("is empty for null", () => {
     expect(replyText(null)).toBe("");
+  });
+
+  it("never leaks the protocol envelope into the graded text", () => {
+    // The false positive this prevents: "jsonrpc":"2.0" put a bare 2 into the
+    // extracted numbers, and 2 is within 15% of a health factor of 1.7824, so an
+    // agent that returned an ERROR was graded as reporting the ratio correctly.
+    const body = { jsonrpc: "2.0", id: 7, error: { code: -32601, message: "unknown skill" } };
+    const text = replyText(body);
+    expect(text).not.toMatch(/2\.0/);
+    expect(extractNumbers(text)).not.toContain(2);
+  });
+});
+
+describe("rpcErrorMessage", () => {
+  it("identifies a JSON-RPC error so it is never graded as an answer", () => {
+    expect(rpcErrorMessage({ jsonrpc: "2.0", id: 1, error: { code: -32601, message: "unknown skill" } }))
+      .toMatch(/-32601: unknown skill/);
+    expect(rpcErrorMessage({ error: "boom" })).toBe("boom");
+  });
+
+  it("returns null for a real result", () => {
+    expect(rpcErrorMessage({ jsonrpc: "2.0", id: 1, result: { parts: [{ text: "1.78" }] } })).toBeNull();
+    expect(rpcErrorMessage(null)).toBeNull();
+    expect(rpcErrorMessage("plain text")).toBeNull();
   });
 });

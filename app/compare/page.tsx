@@ -137,24 +137,59 @@ export default async function ComparePage() {
               </div>
             </div>
 
-            <div className="kpi-card">
-              <dt>Time the agent saved</dt>
-              <dd
-                style={{
-                  fontSize: "1.45rem",
-                  color: a.netTimeSavedMs > 0 ? "var(--pass)" : a.netTimeSavedMs < 0 ? "var(--fail)" : undefined,
-                }}
-              >
-                {a.netTimeSavedMs >= 0 ? "" : "\u2212"}
-                {humanMs(Math.abs(a.netTimeSavedMs))}
-                <span className="t-4" style={{ fontSize: "0.85rem" }}> {pct(a.timeSavedPct)}</span>
-              </dd>
-              <div className="qualifier">
-                {humanMs(a.agentTotalMs)} with an agent against {humanMs(a.manualTotalMs)}{" "}
-                without, across {a.timedBoth} run{a.timedBoth === 1 ? "" : "s"} timed on
-                both arms. Failures included
-              </div>
-            </div>
+            {(() => {
+              /**
+               * Failing fast is not saving time.
+               *
+               * With 0 succeeded, 3 partial and 9 failed, this card read "Time the
+               * agent saved 47.5s (46.2%)" - because nine agents returned an error in
+               * under a second while the manual path actually did the work. The
+               * arithmetic was right and the claim was false, which is worse than a
+               * wrong number: it is the exact framing the failure-inclusion rules were
+               * written to prevent, reappearing at the aggregate level after being
+               * handled correctly per row.
+               *
+               * A duration is only a saving if something usable came back. Where
+               * nothing did, the card says so instead of reporting the gap.
+               */
+              // Only a completed task is a saving. A partial reply to "what is the
+              // health factor" that carries no ratio leaves the work undone.
+              const usable = a.succeeded;
+              if (usable === 0) {
+                return (
+                  <div className="kpi-card">
+                    <dt>Time the agent saved</dt>
+                    <dd style={{ fontSize: "1.45rem", color: "var(--fail)" }}>none</dd>
+                    <div className="qualifier">
+                      No run returned a usable answer, so no time was saved. The agents took{" "}
+                      {humanMs(a.agentTotalMs)} against {humanMs(a.manualTotalMs)} for the manual
+                      path, but they spent it failing &mdash; a fast error is not a fast answer
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div className="kpi-card">
+                  <dt>Time the agent saved</dt>
+                  <dd
+                    style={{
+                      fontSize: "1.45rem",
+                      color: a.netTimeSavedMs > 0 ? "var(--pass)" : a.netTimeSavedMs < 0 ? "var(--fail)" : undefined,
+                    }}
+                  >
+                    {a.netTimeSavedMs >= 0 ? "" : "\u2212"}
+                    {humanMs(Math.abs(a.netTimeSavedMs))}
+                    <span className="t-4" style={{ fontSize: "0.85rem" }}> {pct(a.timeSavedPct)}</span>
+                  </dd>
+                  <div className="qualifier">
+                    {humanMs(a.agentTotalMs)} with an agent against {humanMs(a.manualTotalMs)}{" "}
+                    without, across {a.timedBoth} run{a.timedBoth === 1 ? "" : "s"} timed on
+                    both arms. Failures included, and {usable} of {a.runs} returned the answer
+                    that was asked for
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="kpi-card">
               <dt>What the agent cost</dt>

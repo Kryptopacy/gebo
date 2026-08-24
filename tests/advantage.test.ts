@@ -50,6 +50,15 @@ describe("compareRun", () => {
     expect(c.fasterAndUsable).toBe(false);
   });
 
+  it("refuses to call a partial reply a saving", () => {
+    // A health-factor question answered with prose containing no ratio leaves the
+    // work undone, so the time it took is not time saved. Crediting it would be the
+    // same error as crediting a fast error, one step softer.
+    const c = compareRun(run({ outcome: "partial", agentMs: 900, result: "rates look fine" }));
+    expect(c.timeSavedMs).toBe(299_100);
+    expect(c.fasterAndUsable).toBe(false);
+  });
+
   it("returns null rather than guessing when an arm is untimed", () => {
     expect(compareRun(run({ manualMs: null })).timeSavedMs).toBeNull();
     expect(compareRun(run({ agentCost: null })).costSaved).toBeNull();

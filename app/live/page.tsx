@@ -145,6 +145,41 @@ export default async function LivePage() {
             which is why an abandoned listing looks identical to a working one everywhere else.
           </p>
 
+          {/**
+            * Correlated failure, named before the table is read.
+            *
+            * 61 of 71 transitions in one 24-hour window came from a single host returning
+            * Bad Gateway. Presented as a list, that reads as sixty-one agents degrading
+            * independently; the truth is one server went down and took its fleet with it.
+            * The count measures that operator's fleet size, not agent reliability.
+            *
+            * Invariant 6 already refuses to write on-chain reputation when a whole
+            * population fails at once, for exactly this reason. The same reasoning has to
+            * reach the page, or the page overstates what it measured.
+            */}
+          {(() => {
+            if (transitions.length < 5) return null;
+            const byOperator = new Map<string, number>();
+            for (const t of transitions) {
+              const k = t.operator ?? "(unknown operator)";
+              byOperator.set(k, (byOperator.get(k) ?? 0) + 1);
+            }
+            const [top, count] = [...byOperator.entries()].sort((a, b) => b[1] - a[1])[0]!;
+            const share = (count / transitions.length) * 100;
+            if (share < 50) return null;
+            return (
+              <div className="notice mt-m" data-tone="hold">
+                <strong>Most of these are one outage, not many.</strong>{" "}
+                {count} of {transitions.length} changes below belong to{" "}
+                <span className="num">{top}</span> ({share.toFixed(0)}%). One host failing takes
+                its whole fleet with it, so read this as {byOperator.size} operator
+                {byOperator.size === 1 ? "" : "s"} affected rather than {transitions.length}{" "}
+                agents independently degrading. The per-agent rows are still correct; the total
+                is not evidence of population-wide decline.
+              </div>
+            );
+          })()}
+
           {transitions.length === 0 ? (
             <div className="surface-card mt-m">
               <div className="sm t-3">
@@ -159,6 +194,27 @@ export default async function LivePage() {
                   <span>When</span><span>Agent</span><span>Operator</span><span>Change</span><span>Reason</span>
                 </div>
                 {transitions.map((t, i) => {
+                  /**
+                   * Colour a state by what it MEANS, on both sides of the arrow.
+                   *
+                   * Previously only the destination was coloured and the origin was
+                   * always muted, so VERIFIED rendered grey in a degradation row and
+                   * green in a recovery row - the same word in two colours for reasons
+                   * unrelated to its meaning. A reader scanning the column could not
+                   * tell direction from colour, which is the one thing colour is for.
+                   *
+                   * Now VERIFIED is always the pass tone and DORMANT or SHADOWED always
+                   * the fail tone, so green-to-red reads as a fall and red-to-green as a
+                   * recovery at a glance, without decoding which side is which.
+                   */
+                  const tone = (s: string | null) =>
+                    s == null
+                      ? undefined
+                      : s === "VERIFIED"
+                        ? "var(--pass)"
+                        : s === "DORMANT" || s === "SHADOWED"
+                          ? "var(--fail)"
+                          : undefined;
                   const worse = t.to === "DORMANT" || t.to === "SHADOWED";
                   return (
                     <div key={`${t.at}-${i}`} className="row" style={{ gridTemplateColumns: "7rem minmax(0,1.3fr) 1fr 9rem minmax(0,1fr)" }}>
@@ -175,9 +231,14 @@ export default async function LivePage() {
                       </div>
                       <div className="num xs t-3">{t.operator ?? "—"}</div>
                     <div className="xs num">
-                      <span className="t-4">{t.from ?? "new"}</span>
-                      <span className="t-4"> {"->"} </span>
-                      <span style={{ color: worse ? "var(--fail)" : "var(--pass)" }}>{t.to}</span>
+                      {/* A first sighting has no origin, so "new" stays neutral. */}
+                      <span className={t.from ? undefined : "t-4"} style={{ color: tone(t.from) }}>
+                        {t.from ?? "new"}
+                      </span>
+                      <span className="t-4" aria-label={worse ? "degraded to" : "recovered to"}>
+                        {" "}{worse ? "\u2192" : "\u2192"}{" "}
+                      </span>
+                      <span style={{ color: tone(t.to) }}>{t.to}</span>
                     </div>
                     <div className="xs t-3">
                       {t.reason}
