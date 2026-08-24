@@ -202,6 +202,61 @@ async function main() {
     ].join(", "),
   });
 
+  /**
+   * Agent Advantage runs: the counterfactual, with both arms measured.
+   *
+   * Added because it was missing, and its absence let me quote 19/21 in a status
+   * report when the script had measured 17 - counting work that existed but was not
+   * gated as though it were progress. A gate list that omits the mandatory
+   * deliverable invites exactly that.
+   */
+  const advantage = (await tableExists("attestations"))
+    ? await count(
+        "attestations",
+        `(baseline_duration_ms is not null or baseline_cost_amount is not null)
+           and attester <> '0x0000000000000000000000000000000000000000'`,
+      )
+    : null;
+  const advantageHighStakes = (await tableExists("attestations"))
+    ? await count(
+        "attestations a",
+        `(a.baseline_duration_ms is not null)
+           and a.attester <> '0x0000000000000000000000000000000000000000'
+           and exists (
+             select 1 from agents g
+             where g.chain_id = a.chain_id and g.token_id = a.token_id
+               and g.category in ('health','rebalancing','trading','grid','yield')
+           )`,
+      )
+    : null;
+  gates.push({
+    id: "advantage",
+    item: "Agent Advantage runs (>=3 tasks, both arms, high-stakes)",
+    state:
+      advantage != null && advantage >= 3 && (advantageHighStakes ?? 0) >= 1
+        ? "DONE"
+        : advantage && advantage > 0
+          ? "PARTIAL"
+          : "MISSING",
+    evidence: `runs=${fmt(advantage)}, in a high-stakes category=${fmt(advantageHighStakes)}`,
+  });
+
+  /**
+   * The reference agent has to be REACHABLE, not merely present.
+   *
+   * Five agents in this registry serve a valid card naming an endpoint only their
+   * author can reach, so "the file exists" is not the property that matters. This
+   * checks the routes are there; verify:agent checks the deployed card answers.
+   */
+  const refCard = route("app/api/agent/health/card/route.ts");
+  const refA2A = route("app/api/agent/health/a2a/route.ts");
+  gates.push({
+    id: "reference-agent",
+    item: "Reference health agent (card + A2A, publicly reachable)",
+    state: refCard && refA2A ? "DONE" : "MISSING",
+    evidence: refCard && refA2A ? "card and a2a routes present" : "missing route(s)",
+  });
+
   const metrics = (await tableExists("metric_values")) ? await count("metric_values") : null;
   gates.push({
     id: "metrics",
