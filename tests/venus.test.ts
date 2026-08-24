@@ -40,20 +40,25 @@ function report(over: Partial<HealthReport> = {}): HealthReport {
 
 describe("verdictFor", () => {
   it("classifies against published thresholds", () => {
-    expect(verdictFor(2.0, true, true)).toBe("safe");
-    expect(verdictFor(1.5, true, true)).toBe("safe");
-    expect(verdictFor(1.49, true, true)).toBe("watch");
-    expect(verdictFor(1.1, true, true)).toBe("watch");
-    expect(verdictFor(1.09, true, true)).toBe("at risk");
-    expect(verdictFor(1.0, true, true)).toBe("liquidatable");
-    expect(verdictFor(0.8, true, true)).toBe("liquidatable");
+    expect(verdictFor(2.0, true, 400)).toBe("safe");
+    expect(verdictFor(1.5, true, 400)).toBe("safe");
+    expect(verdictFor(1.49, true, 400)).toBe("watch");
+    expect(verdictFor(1.1, true, 400)).toBe("watch");
+    expect(verdictFor(1.09, true, 400)).toBe("at risk");
+    expect(verdictFor(1.0, true, 400)).toBe("liquidatable");
+    expect(verdictFor(0.8, true, 400)).toBe("liquidatable");
   });
 
-  it("distinguishes no position from no debt", () => {
+  it("distinguishes no collateral, no debt, and dust debt", () => {
     // Both are safe, but they are not the same fact, and a monitoring agent that
     // conflates them would report "safe" for a wallet it has never seen.
-    expect(verdictFor(null, false, false)).toBe("no collateral enabled");
-    expect(verdictFor(null, true, false)).toBe("no debt");
+    expect(verdictFor(null, false, 0)).toBe("no collateral enabled");
+    expect(verdictFor(null, true, 0)).toBe("no debt");
+    // Dust is its own verdict. Folding $0.000007 into "no debt" would assert
+    // something false and look like a detection failure at the same time.
+    expect(verdictFor(null, true, 0.000007)).toBe("dust debt");
+    expect(verdictFor(null, true, 0.009)).toBe("dust debt");
+    expect(verdictFor(2, true, 0.01)).toBe("safe");
   });
 });
 
@@ -79,7 +84,7 @@ describe("summarise", () => {
     // Dividing by zero borrows is undefined, not infinite. Rendering Infinity as a
     // health score would be absurd, and rendering 0 would be a lie.
     const s = summarise(report({ healthFactor: null, totalBorrowedUsd: 0, verdict: "no debt" }));
-    expect(s).toMatch(/no health factor applies/);
+    expect(s).toMatch(/no health factor is reported/);
     expect(s).not.toMatch(/Infinity|NaN/);
   });
 
@@ -93,7 +98,10 @@ describe("summarise", () => {
     // An account with $465.89 of borrowing power and a fraction of a cent of debt
     // reported a health factor of 65 million, printed as though measured. A ratio
     // against a near-zero denominator is noise wearing a number's clothes.
-    const s = summarise(report({ healthFactor: null, totalBorrowedUsd: 0.000007, verdict: "no debt" }));
+    const s = summarise(report({ healthFactor: null, totalBorrowedUsd: 0.000007, verdict: "dust debt" }));
+    // The sub-cent figure is printed, so it reads as measured and judged rather
+    // than as debt we failed to notice.
+    expect(s).toMatch(/0\.00000700 borrowed/);
     expect(s).toMatch(/below the \$0\.01 floor/);
     expect(s).not.toMatch(/65029489|NaN|Infinity/);
   });

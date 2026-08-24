@@ -102,8 +102,20 @@ export type HealthReport = {
    * that call during validation. For borrowing power that is the correct basis, since
    * un-entered supply grants none; but reporting it as "no position" told a supplier
    * they had nothing, which is false.
+   *
+   * `dust debt` is deliberately separate from `no debt`. An account carrying
+   * $0.000007 of debt does not have none, and folding it into "no debt" would state
+   * something untrue while also looking like we had failed to detect it. Naming the
+   * case says the debt was seen, measured, and judged too small for a ratio.
    */
-  verdict: "no collateral enabled" | "no debt" | "safe" | "watch" | "at risk" | "liquidatable";
+  verdict:
+    | "no collateral enabled"
+    | "no debt"
+    | "dust debt"
+    | "safe"
+    | "watch"
+    | "at risk"
+    | "liquidatable";
 };
 
 function client(): PublicClient {
@@ -128,20 +140,23 @@ function client(): PublicClient {
  * Thresholds are published rather than hidden, because a verdict without its
  * threshold is an opinion wearing a number's clothes. 1.1 is the conventional
  * danger line on Venus: a 10% adverse move puts the position underwater.
+ *
+ * Takes the debt AMOUNT rather than a boolean so zero and dust stay distinguishable.
+ * A boolean forced the caller to decide, and the caller folded dust into "no debt".
  */
-export function verdictFor(healthFactor: number | null, hasPosition: boolean, hasDebt: boolean): HealthReport["verdict"] {
+export function verdictFor(
+  healthFactor: number | null,
+  hasPosition: boolean,
+  borrowedUsd: number,
+): HealthReport["verdict"] {
   if (!hasPosition) return "no collateral enabled";
-  if (!hasDebt) return "no debt";
+  if (borrowedUsd <= 0) return "no debt";
+  if (borrowedUsd < DUST_DEBT_USD) return "dust debt";
   if (healthFactor == null) return "no debt";
   if (healthFactor <= 1) return "liquidatable";
   if (healthFactor < 1.1) return "at risk";
   if (healthFactor < 1.5) return "watch";
   return "safe";
-}
-
-/** Scale a raw integer by 10^d into a JS number. Explicit, because the traps live here. */
-function scale(raw: bigint, d: number): number {
-  return Number(raw) / 10 ** d;
 }
 
 /**
@@ -157,6 +172,11 @@ function scale(raw: bigint, d: number): number {
  * cannot be liquidated for a profit at any incentive.
  */
 const DUST_DEBT_USD = 0.01;
+
+/** Scale a raw integer by 10^d into a JS number. Explicit, because the traps live here. */
+function scale(raw: bigint, d: number): number {
+  return Number(raw) / 10 ** d;
+}
 
 export async function healthFactorFor(account: Address): Promise<HealthReport> {
   const pub = client();
@@ -249,7 +269,7 @@ export async function healthFactorFor(account: Address): Promise<HealthReport> {
     shortfallUsd: scale(liquidity[2], 18),
     closeFactor: closeF == null ? null : scale(closeF, 18),
     liquidationIncentive: incentive == null ? null : scale(incentive, 18),
-    verdict: verdictFor(healthFactor, positions.length > 0, hasRealDebt),
+    verdict: verdictFor(healthFactor, positions.length > 0, totalBorrowedUsd),
   };
 }
 
@@ -269,12 +289,18 @@ export function summarise(r: HealthReport): string {
     );
   }
   if (r.healthFactor == null) {
+    /**
+     * Say which case it is. Folding dust into "no debt" would assert something false
+     * and simultaneously look like a detection failure, so the sub-cent amount is
+     * printed to show it was seen, measured, and judged too small to divide by.
+     */
+    const debtClause =
+      r.totalBorrowedUsd > 0
+        ? `\$${r.totalBorrowedUsd.toFixed(8)} borrowed, which is below the \$${DUST_DEBT_USD.toFixed(2)} floor where a ratio carries information`
+        : `no debt`;
     return (
-      `${r.account} has $${r.totalSuppliedUsd.toFixed(2)} supplied and ` +
-      (r.totalBorrowedUsd > 0
-        ? `only $${r.totalBorrowedUsd.toFixed(6)} borrowed - below the $0.01 floor where a ratio means anything - `
-        : `no debt `) +
-      `at block ${r.blockNumber}, so no health factor applies. Liquidation is impossible without borrows.`
+      `${r.account} has \$${r.totalSuppliedUsd.toFixed(2)} supplied and ${debtClause} ` +
+      `at block ${r.blockNumber}, so no health factor is reported. Liquidation needs debt worth taking.`
     );
   }
   /**
