@@ -89,6 +89,15 @@ describe("summarise", () => {
     expect(s).toMatch(/block 117700000/);
   });
 
+  it("refuses a ratio against dust debt, which produced 65,029,489 on a live position", () => {
+    // An account with $465.89 of borrowing power and a fraction of a cent of debt
+    // reported a health factor of 65 million, printed as though measured. A ratio
+    // against a near-zero denominator is noise wearing a number's clothes.
+    const s = summarise(report({ healthFactor: null, totalBorrowedUsd: 0.000007, verdict: "no debt" }));
+    expect(s).toMatch(/below the \$0\.01 floor/);
+    expect(s).not.toMatch(/65029489|NaN|Infinity/);
+  });
+
   it("never emits NaN or Infinity for any verdict", () => {
     for (const hf of [null, 0, 0.5, 1, 1.05, 1.3, 99]) {
       const s = summarise(report({ healthFactor: hf, totalBorrowedUsd: hf == null ? 0 : 400 }));

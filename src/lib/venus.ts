@@ -144,6 +144,20 @@ function scale(raw: bigint, d: number): number {
   return Number(raw) / 10 ** d;
 }
 
+/**
+ * Below this, debt is dust and the ratio stops being informative.
+ *
+ * Found against a live position: an account with $465.89 of borrowing power and a
+ * fraction of a cent of debt produced a health factor of 65,029,489, printed as
+ * though it were a measurement. A ratio against a near-zero denominator is noise
+ * wearing a number's clothes - the same failure as dividing by zero, only quieter
+ * because it does not raise.
+ *
+ * One cent, because Venus positions are denominated in USD and a sub-cent balance
+ * cannot be liquidated for a profit at any incentive.
+ */
+const DUST_DEBT_USD = 0.01;
+
 export async function healthFactorFor(account: Address): Promise<HealthReport> {
   const pub = client();
 
@@ -219,7 +233,9 @@ export async function healthFactorFor(account: Address): Promise<HealthReport> {
     }
   }
 
-  const healthFactor = totalBorrowedUsd > 0 ? borrowingPowerUsd / totalBorrowedUsd : null;
+  // Dust debt is treated as no debt, so the ratio is never taken against noise.
+  const hasRealDebt = totalBorrowedUsd >= DUST_DEBT_USD;
+  const healthFactor = hasRealDebt ? borrowingPowerUsd / totalBorrowedUsd : null;
 
   return {
     account,
@@ -233,7 +249,7 @@ export async function healthFactorFor(account: Address): Promise<HealthReport> {
     shortfallUsd: scale(liquidity[2], 18),
     closeFactor: closeF == null ? null : scale(closeF, 18),
     liquidationIncentive: incentive == null ? null : scale(incentive, 18),
-    verdict: verdictFor(healthFactor, positions.length > 0, totalBorrowedUsd > 0),
+    verdict: verdictFor(healthFactor, positions.length > 0, hasRealDebt),
   };
 }
 
@@ -254,8 +270,11 @@ export function summarise(r: HealthReport): string {
   }
   if (r.healthFactor == null) {
     return (
-      `${r.account} has $${r.totalSuppliedUsd.toFixed(2)} supplied and no debt at block ` +
-      `${r.blockNumber}, so no health factor applies. Liquidation is impossible without borrows.`
+      `${r.account} has $${r.totalSuppliedUsd.toFixed(2)} supplied and ` +
+      (r.totalBorrowedUsd > 0
+        ? `only $${r.totalBorrowedUsd.toFixed(6)} borrowed - below the $0.01 floor where a ratio means anything - `
+        : `no debt `) +
+      `at block ${r.blockNumber}, so no health factor applies. Liquidation is impossible without borrows.`
     );
   }
   /**
