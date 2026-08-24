@@ -1,0 +1,98 @@
+import { describe, it, expect } from "vitest";
+import { verdictFor, summarise, type HealthReport } from "../src/lib/venus.ts";
+
+/**
+ * Venus health factor.
+ *
+ * The seeded reference agent's output has to be checkable, which is the whole reason
+ * this question was chosen over something like "is this a good trade". These tests
+ * pin the classification thresholds and the refusal to render a ratio that has no
+ * denominator.
+ */
+
+function report(over: Partial<HealthReport> = {}): HealthReport {
+  return {
+    account: "0x1111111111111111111111111111111111111111",
+    blockNumber: 117_700_000n,
+    positions: [
+      {
+        vToken: "0x2222222222222222222222222222222222222222",
+        symbol: "vUSDT",
+        supplied: 1000,
+        borrowed: 400,
+        suppliedUsd: 1000,
+        borrowedUsd: 400,
+        collateralFactor: 0.8,
+      },
+    ],
+    borrowingPowerUsd: 800,
+    totalBorrowedUsd: 400,
+    totalSuppliedUsd: 1000,
+    healthFactor: 2,
+    liquidityUsd: 400,
+    shortfallUsd: 0,
+    closeFactor: 0.5,
+    liquidationIncentive: 1.1,
+    verdict: "safe",
+    ...over,
+  };
+}
+
+describe("verdictFor", () => {
+  it("classifies against published thresholds", () => {
+    expect(verdictFor(2.0, true, true)).toBe("safe");
+    expect(verdictFor(1.5, true, true)).toBe("safe");
+    expect(verdictFor(1.49, true, true)).toBe("watch");
+    expect(verdictFor(1.1, true, true)).toBe("watch");
+    expect(verdictFor(1.09, true, true)).toBe("at risk");
+    expect(verdictFor(1.0, true, true)).toBe("liquidatable");
+    expect(verdictFor(0.8, true, true)).toBe("liquidatable");
+  });
+
+  it("distinguishes no position from no debt", () => {
+    // Both are safe, but they are not the same fact, and a monitoring agent that
+    // conflates them would report "safe" for a wallet it has never seen.
+    expect(verdictFor(null, false, false)).toBe("no collateral enabled");
+    expect(verdictFor(null, true, false)).toBe("no debt");
+  });
+});
+
+describe("summarise", () => {
+  it("carries the denominator with the ratio", () => {
+    // Design law L2: a health factor without the collateral and debt behind it is a
+    // bare number. The deliverable is this string, so it has to be self-contained.
+    const s = summarise(report());
+    expect(s).toMatch(/Health factor 2\.0000/);
+    expect(s).toMatch(/\$800\.00 of borrowing power/);
+    expect(s).toMatch(/\$400\.00 borrowed/);
+    expect(s).toMatch(/block 117700000/);
+    expect(s).toMatch(/Liquidatable at or below 1\.0/);
+  });
+
+  it("states the liquidation terms, since they decide the loss", () => {
+    const s = summarise(report());
+    expect(s).toMatch(/close 50% of the debt/);
+    expect(s).toMatch(/10% incentive/);
+  });
+
+  it("refuses to invent a ratio when there is no debt", () => {
+    // Dividing by zero borrows is undefined, not infinite. Rendering Infinity as a
+    // health score would be absurd, and rendering 0 would be a lie.
+    const s = summarise(report({ healthFactor: null, totalBorrowedUsd: 0, verdict: "no debt" }));
+    expect(s).toMatch(/no health factor applies/);
+    expect(s).not.toMatch(/Infinity|NaN/);
+  });
+
+  it("distinguishes un-entered supply from having nothing", () => {
+    const s = summarise(report({ positions: [], verdict: "no collateral enabled", healthFactor: null }));
+    expect(s).toMatch(/No Venus market is enabled as collateral/);
+    expect(s).toMatch(/block 117700000/);
+  });
+
+  it("never emits NaN or Infinity for any verdict", () => {
+    for (const hf of [null, 0, 0.5, 1, 1.05, 1.3, 99]) {
+      const s = summarise(report({ healthFactor: hf, totalBorrowedUsd: hf == null ? 0 : 400 }));
+      expect(s).not.toMatch(/NaN|Infinity|undefined/);
+    }
+  });
+});
