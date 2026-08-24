@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "GEBO — verification-first agent registry for BNB Smart Chain",
+  "description": "GEBO â€” verification-first agent registry for BNB Smart Chain",
 
   "scripts": {
     "dev": "next dev",
@@ -30,6 +30,7 @@
     "measure:b402": "tsx scripts/measure-b402.ts",
     "audit:cards": "tsx scripts/audit-card-endpoints.ts",
     "run:task": "tsx scripts/run-task.ts",
+    "verify:prod": "tsx scripts/verify-prod.ts",
     "verify:pgnet": "tsx scripts/verify-pgnet.ts",
     "cron:status": "tsx scripts/cron-status.ts",
     "cron:fingerprint": "tsx scripts/cron-fingerprint.ts",

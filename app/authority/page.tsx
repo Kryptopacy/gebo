@@ -193,91 +193,11 @@ export default async function AuthorityPage({
               )}
             </div>
           </section>
-
-          <section className="band">
-            <div className="shell">
-              <h2>What this page cannot tell you</h2>
-              <p className="prose sm">
-                The Keystore exposes <span className="num">getKeys</span>,{" "}
-                <span className="num">isValidKey</span> and{" "}
-                <span className="num">getPublicKey</span>. It exposes no getter for the
-                permission set: the contract allowlist, spend caps and expiry are arguments to{" "}
-                <span className="num">registerKey</span>, not readable state. So the exact scope
-                of a key granted by someone else is not derivable from the registry alone.
-              </p>
-              <p className="prose sm">
-                It also reads <strong>one</strong> authority system. An agent can hold power over
-                a wallet through routes this query does not touch, and a clean result here says
-                nothing about them:
-              </p>
-              <ul className="prose sm" style={{ paddingLeft: "1.1rem" }}>
-                <li>
-                  <strong>Unregistered sessions.</strong> Granted with{" "}
-                  <span className="num">register: false</span>, enforced by the account, invisible
-                  to every third party including this page.
-                </li>
-                <li>
-                  <strong>Other wallet layers.</strong> Binance&apos;s Agentic Wallet keeps its
-                  authority state off chain. Its own documentation says the limits you set
-                  &ldquo;constrain the Agent <em>at the API level</em>&rdquo;, the key is MPC and
-                  &ldquo;never fully reconstructed on any single device or server&rdquo;, and access
-                  is withdrawn by signing out in the Binance app rather than by a transaction.
-                  There is no contract and no getter, so no third party can verify those limits
-                  &mdash; including us. We report that as unreadable rather than implying we
-                  checked it.
-                </li>
-                <li>
-                  <strong>Plain token approvals.</strong> An{" "}
-                  <span className="num">approve</span> to a spender grants ongoing power to move a
-                  token with no session, no expiry and no registry entry.
-                </li>
-                <li>
-                  <strong>Delegations outside the Keystore.</strong> An EIP-7702 account can
-                  delegate to an implementation with its own permission model; the delegation
-                  target is shown above, but its internal rules are not read here.
-                </li>
-              </ul>
-              <p className="prose sm">
-                What is verifiable here is whether a key holds authority at this block, and that
-                revoking it is possible and immediate. Both were confirmed on chain, including a
-                real session-key transaction and a revocation that took effect at once.
-              </p>
-              <div className="surface-card mt-m">
-                <dl className="spec">
-                  <div>
-                    <dt>Keystore</dt>
-                    <dd className="mono">{KEYSTORE[authority.chainId]}</dd>
-                  </div>
-                  <div>
-                    <dt>Revocation</dt>
-                    <dd>
-                      <span className="num">revokeKey(user, keyId)</span> — immediate and
-                      monotonic. A revoked key cannot be reinstated.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Who can revoke</dt>
-                    <dd>
-                      The key owner or validator only. GEBO holds no keys and cannot revoke on your
-                      behalf, which is why the call is shown rather than offered as a button.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Independently verifiable</dt>
-                    <dd>
-                      Anyone can repeat this read. It needs no admin key, no session, and nothing
-                      from Altana or from us.
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-          </section>
         </>
       )}
 
       {!authority && (
-        <section className="band band-last">
+        <section className="band">
           <div className="shell">
             <h2>Why this exists</h2>
             <div className="surface-card mt-m">
@@ -296,6 +216,59 @@ export default async function AuthorityPage({
           </div>
         </section>
       )}
+
+      {/**
+        * Coverage limits render whether or not a wallet has been looked up.
+        *
+        * These were nested inside the results block, so the single most important caveat
+        * on the page - that it reads ONE authority system, and that Binance's Agentic
+        * Wallet keeps its state off chain where nobody can verify it - was invisible
+        * until someone happened to search. A disclosure a reader has to trigger is not a
+        * disclosure, and this is the page where hiding one does the most damage.
+        */}
+      <section className="band band-last">
+        <div className="shell">
+          <h2>What this check does not cover</h2>
+          <p className="prose sm">
+            An agent can hold power over a wallet through routes this query does not touch,
+            and a clean result above says nothing about them.
+          </p>
+          <ul className="prose sm" style={{ paddingLeft: "1.1rem" }}>
+            <li>
+              <strong>Unregistered sessions.</strong> Granted with{" "}
+              <span className="num">register: false</span>, enforced by the account, invisible
+              to every third party including this page.
+            </li>
+            <li>
+              <strong>Binance&apos;s Agentic Wallet.</strong> Its authority state is off chain by
+              design. Binance&apos;s own documentation says the limits you set constrain the
+              agent &ldquo;at the API level&rdquo;, the key is MPC and &ldquo;never fully
+              reconstructed on any single device or server&rdquo;, and access is withdrawn by
+              signing out in the app rather than by a transaction. There is no contract and no
+              getter, so no third party can verify those limits &mdash; including us. We report
+              that as unreadable rather than implying we checked.
+            </li>
+            <li>
+              <strong>Plain token approvals.</strong> An <span className="num">approve</span> to
+              a spender grants ongoing power to move a token with no session, no expiry and no
+              registry entry.
+            </li>
+            <li>
+              <strong>The permission set itself.</strong> The Keystore exposes{" "}
+              <span className="num">getKeys</span>, <span className="num">isValidKey</span> and{" "}
+              <span className="num">getPublicKey</span>, and no getter for the allowlist, spend
+              caps or expiry &mdash; those are arguments to{" "}
+              <span className="num">registerKey</span>, not readable state. So the exact scope of
+              a key granted by someone else is not derivable from the registry alone.
+            </li>
+          </ul>
+          <p className="prose sm">
+            What is verifiable here is whether a key holds authority at this block, and that
+            revoking it is possible and immediate. Both were confirmed on chain, including a real
+            session-key transaction and a revocation that took effect at once.
+          </p>
+        </div>
+      </section>
     </>
   );
 }

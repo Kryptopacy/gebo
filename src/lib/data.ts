@@ -9,7 +9,7 @@ import postgres from "postgres";
  * in data/ when it is not, so the app stays runnable without a database.
  *
  * Connections go through the Supavisor transaction pooler, which does not
- * support prepared statements â€” hence `prepare: false`. Omitting that produces
+ * support prepared statements - hence `prepare: false`. Omitting that produces
  * intermittent "prepared statement already exists" errors that look like
  * random flakiness rather than a configuration mistake.
  */
@@ -221,7 +221,7 @@ export function trustState(a: Agent): { state: TrustState; reason: string } {
     return {
       state: "SHADOWED",
       reason: fatal[0]!.code === "template_var"
-        ? "registration contains an unsubstituted template variable â€” uncallable by any client"
+        ? "registration contains an unsubstituted template variable - uncallable by any client"
         : fatal[0]!.detail,
     };
   }
@@ -415,7 +415,7 @@ function mapAgentRow(r: any): Agent {
 }
 
 /**
- * Bounded agent read. Used only where a list is genuinely rendered â€” counts and
+ * Bounded agent read. Used only where a list is genuinely rendered - counts and
  * shares come from loadAggregates() instead of pulling rows.
  */
 export async function loadAgents(limit = 400): Promise<Agent[]> {
@@ -970,7 +970,7 @@ export function rankAgents(agents: Agent[]): Agent[] {
   });
 }
 
-/** Cap slots per operator â€” concentration is the central finding. */
+/** Cap slots per operator - concentration is the central finding. */
 export function diversify<T extends Agent>(agents: T[], maxPerOperator = 3): T[] {
   const seen = new Map<string, number>();
   const head: T[] = [];
