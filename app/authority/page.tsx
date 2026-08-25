@@ -1,7 +1,88 @@
 import { readAuthority, isAddress, revokeCall, KEYSTORE, type ChainId } from "@/lib/keystore";
+import { getClient } from "@/db";
+import { CONTRACTS } from "@/lib/session-scope";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type DemoGrant = {
+  id: number;
+  chainId: number;
+  walletAddress: string;
+  grantTxHash: string | null;
+  expiry: Date;
+  unbounded: boolean;
+  contracts: string[];
+  caps: { humanAmount?: string; symbol?: string; period?: string }[];
+};
+
+/**
+ * Live demo grants, straight from public.sessions.
+ *
+ * These rows exist because a scoped session that only ever existed in a script
+ * proves nothing to a judge: the bounty asks for authority that is registered,
+ * visible and revocable inside the product. Each row links to its own live
+ * Keystore lookup rather than asking the reader to trust this list.
+ */
+/**
+ * jsonb columns can arrive as pre-serialised strings depending on the pooler's
+ * query protocol, so parsing happens here once rather than being assumed.
+ */
+function asJsonArray<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[];
+  if (typeof v === "string") {
+    try {
+      const parsed: unknown = JSON.parse(v);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+async function demoGrants(): Promise<{ grants: DemoGrant[]; error: string | null }> {
+  try {
+    const sql = getClient();
+    const labelFor = new Map(
+      Object.values(CONTRACTS).map((c) => [c.address.toLowerCase(), c.label]),
+    );
+    const rows = await sql<{
+      id: number;
+      chain_id: number;
+      wallet_address: string;
+      grant_tx_hash: string | null;
+      expiry: Date;
+      unbounded: boolean;
+      call_allowlist: { to?: string }[] | null;
+      spend_caps: { humanAmount?: string; symbol?: string; period?: string }[] | null;
+    }[]>`
+      select id, chain_id, wallet_address, grant_tx_hash, expiry, unbounded,
+             call_allowlist, spend_caps
+      from sessions
+      where state = 'active'
+      order by chain_id desc, expiry`;
+    return {
+      grants: rows.map((r) => ({
+        id: r.id,
+        chainId: r.chain_id,
+        walletAddress: r.wallet_address,
+        grantTxHash: r.grant_tx_hash,
+        expiry: new Date(r.expiry),
+        unbounded: r.unbounded,
+        contracts: asJsonArray<{ to?: string }>(r.call_allowlist)
+          .map((c) => c.to?.toLowerCase())
+          .map((to) => (to ? labelFor.get(to) ?? `${to.slice(0, 10)}...` : ""))
+          .filter(Boolean),
+        caps: asJsonArray<{ humanAmount?: string; symbol?: string; period?: string }>(r.spend_caps),
+      })),
+      error: null,
+    };
+  } catch (e) {
+    // Invariant 9: a failed read renders as a failure with its reason, never as zero.
+    return { grants: [], error: String((e as Error).message ?? e).slice(0, 140) };
+  }
+}
 
 /**
  * Authority console.
@@ -36,6 +117,7 @@ export default async function AuthorityPage({
   const chainId: ChainId = sp.chain === "97" ? 97 : 56;
   const valid = raw ? isAddress(raw) : false;
   const authority = valid ? await readAuthority(raw as `0x${string}`, chainId) : null;
+  const demo = await demoGrants();
 
   return (
     <>
@@ -76,6 +158,63 @@ export default async function AuthorityPage({
             <p className="sm mt-m" style={{ color: "var(--fail)" }}>
               That is not a 20-byte hex address.
             </p>
+          )}
+
+          {demo.error && (
+            <div className="notice mt-m" data-tone="fail">
+              <strong>Demo grants could not be loaded.</strong>{" "}
+              <span className="sm">{demo.error}</span>
+            </div>
+          )}
+
+          {!demo.error && demo.grants.length > 0 && (
+            <div className="surface-card mt-l" style={{ padding: "16px 20px 18px" }}>
+              <p className="section-label">Live scoped grants held by this project&apos;s demo wallet</p>
+              <p className="prose sm" style={{ margin: 0, maxWidth: "78ch" }}>
+                Granted on chain through the Altana relay, registered in the Keystore, and enforced
+                by its validator rather than by this site. Each row links to the same public lookup
+                this page runs; nothing here asks you to trust the list.
+              </p>
+              <div className="data-table-frame mt-m">
+                <div className="rows">
+                  {demo.grants.map((g) => (
+                    <div key={g.id} className="row" style={{ gridTemplateColumns: "4rem minmax(0,1.6fr) minmax(0,1.6fr) 7rem 5rem" }}>
+                      <div>
+                        <span className="chip chip-flat num">{g.chainId}</span>
+                      </div>
+                      <div className="xs t-3 num" style={{ wordBreak: "break-all" }}>
+                        <a href={`/authority?wallet=${g.walletAddress}&chain=${g.chainId}`}>
+                          {g.walletAddress.slice(0, 10)}...{g.walletAddress.slice(-6)}
+                        </a>
+                        {g.grantTxHash && (
+                          <>
+                            {" · "}
+                            <a
+                              href={g.chainId === 56 ? `https://bscscan.com/tx/${g.grantTxHash}` : `https://testnet.bscscan.org/tx/${g.grantTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              grant tx
+                            </a>
+                          </>
+                        )}
+                      </div>
+                      <div className="xs t-3">
+                        {g.unbounded ? (
+                          <strong style={{ color: "var(--fail)" }}>UNBOUNDED - any contract</strong>
+                        ) : (
+                          <>may call {g.contracts.join(", ") || "nothing"}</>
+                        )}
+                      </div>
+                      <div className="xs t-3 num">
+                        {g.caps.map((c) => `${c.humanAmount ?? "?"} ${c.symbol ?? ""}/${c.period ?? ""}`).join(", ") || "-"}
+                      </div>
+                      <div className="xs t-4 num">{new Date(g.expiry).toISOString().slice(0, 10)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </section>

@@ -266,6 +266,30 @@ async function main() {
   });
 
   /**
+   * Live Altana sessions, granted rather than described.
+   *
+   * The Altana bounty disqualifies submissions that cannot show live onchain
+   * transactions through a scoped session. A grant script that ran once proves
+   * nothing a week later if the rows vanished or were never persisted, so this
+   * measures the durable evidence: an active session row carrying a grant tx.
+   */
+  const liveSessions = (await tableExists("sessions"))
+    ? await count(
+        "sessions",
+        "state = 'active' and grant_tx_hash is not null",
+      )
+    : null;
+  gates.push({
+    id: "altana-sessions",
+    item: "Live scoped Altana sessions (grant tx recorded)",
+    state: liveSessions && liveSessions > 0 ? "DONE" : "MISSING",
+    evidence:
+      liveSessions === null
+        ? "no sessions table"
+        : `${fmt(liveSessions)} active session(s) with grant transactions`,
+  });
+
+  /**
    * No SECURITY DEFINER function may be executable by PUBLIC.
    *
    * Measured rather than trusted, because the obvious fix silently did not work.
