@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
 import { attestationsFor, attestationSummary } from "@/lib/attestations";
 import { agentMetrics, type MetricValue } from "@/lib/metrics";
+import { fetchSampleOutput } from "@/lib/sample-output";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,10 +44,11 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
    * this page, and a failure there must not blank the agent card. That exact
    * coupling once blanked every counter on /live when a single malformed row threw.
    */
-  const [attRes, sumRes, metRes] = await Promise.allSettled([
+  const [attRes, sumRes, metRes, sampleRes] = await Promise.allSettled([
     attestationsFor(tokenId, 56, 12),
     attestationSummary(tokenId, 56),
     agentMetrics(56, tokenId),
+    fetchSampleOutput(a),
   ]);
   const attestations = attRes.status === "fulfilled" ? attRes.value : [];
   const attSummary = sumRes.status === "fulfilled" ? sumRes.value : null;
@@ -55,6 +57,7 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
   // failed". Both render the same honest no-figure state; neither renders zero.
   const metrics: MetricValue[] = metRes.status === "fulfilled" ? metRes.value : [];
   const byMetric = new Map(metrics.map((mv) => [mv.metricId, mv]));
+  const sampleOutput = sampleRes.status === "fulfilled" ? sampleRes.value : null;
 
   const st = trustState(a);
   const m = classify(a);
@@ -231,6 +234,42 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
           )}
         </div>
       </section>
+
+      {/* ── sample output ────────────────────────────────────────── */}
+      {sampleOutput && (
+        <section className="band-tight">
+          <div className="shell">
+            <p className="section-label">What you would get · live from the agent</p>
+            <div className="surface-card mt-m" style={{ borderLeft: "3px solid var(--accent)", padding: "14px 18px" }}>
+              <div className="xs t-4" style={{ marginBottom: 6, color: "var(--fg-3)" }}>
+                Sample query sent to this agent&apos;s endpoint:
+              </div>
+              <p className="sm" style={{ margin: 0, fontStyle: "italic", color: "var(--fg-2)", maxWidth: "70ch" }}>
+                {sampleOutput.query}
+              </p>
+              {sampleOutput.response ? (
+                <>
+                  <div className="xs t-4" style={{ marginTop: 12, marginBottom: 6, color: "var(--fg-3)" }}>
+                    Agent replied in {sampleOutput.latencyMs}ms:
+                  </div>
+                  <pre className="sm" style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "var(--mono)", fontSize: "0.85rem", lineHeight: 1.5, color: "var(--fg)" }}>
+                    {sampleOutput.response}
+                  </pre>
+                </>
+              ) : (
+                <div className="xs t-4" style={{ marginTop: 8, color: "var(--fail)" }}>
+                  {sampleOutput.error ?? "No response recorded"}
+                  {sampleOutput.latencyMs != null && ` (${sampleOutput.latencyMs}ms)`}
+                </div>
+              )}
+            </div>
+            <p className="xs t-4 mt-s">
+              This is a real query sent to the agent&apos;s live endpoint. The response is unedited.
+              <a href={`/a/${a.token_id}/hire`} style={{ marginLeft: 6 }}>Run the full simulation →</a>
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* ── authority ────────────────────────────────────────────── */}
       <section className="band">
