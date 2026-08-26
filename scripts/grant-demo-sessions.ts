@@ -115,9 +115,10 @@ for (const { category, presetId } of PLAN) {
 
   const existing = await sql<{ id: number }[]>`
     select id from sessions
-    where chain_id = ${CHAIN_ID} and canonical_json = ${canonical} and state = 'active'`;
+    where chain_id = ${CHAIN_ID} and canonical_json = ${canonical}
+      and state = 'active' and expiry > now()`;
   if (existing[0]) {
-    console.log(`  ${category.padEnd(12)} identical active session #${existing[0].id} already recorded, skipped`);
+    console.log(`  ${category.padEnd(12)} identical active session #${existing[0].id} not yet expired, skipped`);
     skipped++;
     continue;
   }

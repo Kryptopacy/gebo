@@ -33,7 +33,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { createPublicClient, http, parseAbi, type Address, type Hex } from "viem";
 import { bsc } from "viem/chains";
 import { healthFactorFor, summarise, bestSupplyApr } from "../src/lib/venus.ts";
-import { gradeNumericAnswer, parseAgentReply, replyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
+import { gradeNumericAnswer, parseAgentReply, structuredReplyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
 
 const RECORD = process.argv.includes("--record");
 const TIMEOUT_MS = 45_000;
@@ -268,7 +268,11 @@ async function askAgent(cardUrl: string, question: string) {
     return {
       ms: Date.now() - started,
       status: res.status,
-      text: declined ? "" : replyText(parsed.body),
+      // Structured data parts outrank prose: the reference agent answers
+      // borrowing-power correctly in its `data` part while prose correctly
+      // reports only the supplied amount (no ratio exists). Grading prose-only
+      // called that correct answer PARTIAL.
+      text: declined ? "" : structuredReplyText(parsed.body),
       err: declined,
       endpoint,
       declared,

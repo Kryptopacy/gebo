@@ -294,19 +294,24 @@ async function main() {
    * measures the durable evidence: an active session row carrying a grant tx.
    */
   const liveSessions = (await tableExists("sessions"))
-    ? await count(
-        "sessions",
-        "state = 'active' and grant_tx_hash is not null",
-      )
+    ? await sql<{ n: number }[]>`
+      select count(*)::int as n
+      from sessions
+      where state = 'active' and grant_tx_hash is not null
+        and expiry > now()`
     : null;
+  const totalSessions = (await tableExists("sessions"))
+    ? await count("sessions", "grant_tx_hash is not null")
+    : null;
+  const sessionCount = liveSessions?.[0]?.n ?? null;
   gates.push({
     id: "altana-sessions",
-    item: "Live scoped Altana sessions (grant tx recorded)",
-    state: liveSessions && liveSessions > 0 ? "DONE" : "MISSING",
+    item: "Live scoped Altana sessions (grant tx recorded, not expired)",
+    state: sessionCount && sessionCount >= 4 ? "DONE" : sessionCount && sessionCount > 0 ? "PARTIAL" : "MISSING",
     evidence:
-      liveSessions === null
+      sessionCount === null
         ? "no sessions table"
-        : `${fmt(liveSessions)} active session(s) with grant transactions`,
+        : `${fmt(sessionCount)} live session(s), ${fmt(totalSessions)} total granted. Sessions expire <=48h by design.`,
   });
 
   /**

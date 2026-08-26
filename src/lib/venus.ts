@@ -236,7 +236,7 @@ export async function healthFactorFor(account: Address): Promise<HealthReport> {
    * vBNB has no underlying() - the underlying is native BNB at 18 decimals - so a
    * failed read means 18 rather than an error.
    */
-  const underlyings: (Address | null)[] = assets.map((_, i) => {
+  const underlyings: (Address | null)[] = assets.map((_: Address, i: number) => {
     const r = perMarket[i * 5 + 4];
     return r?.status === "success" ? (r.result as Address) : null;
   });
@@ -421,7 +421,7 @@ export async function bestSupplyApr(): Promise<BestSupplyApr> {
   if (!markets_.length) return { blockNumber, markets: [], excluded: [], best: null };
 
   const perMarket = await pub.multicall({
-    contracts: markets_.flatMap((v) => [
+    contracts: markets_.flatMap((v: Address) => [
       { address: v, abi: vTokenAbi, functionName: "symbol" as const },
       { address: v, abi: rateAbi, functionName: "supplyRatePerBlock" as const },
       { address: v, abi: rateAbi, functionName: "getCash" as const },
@@ -433,7 +433,7 @@ export async function bestSupplyApr(): Promise<BestSupplyApr> {
 
   // Underlying decimals for whatever markets resolved, one batched pass. vBNB has
   // no underlying(); a failed read there means native BNB at 18.
-  const underlyings: (Address | null)[] = markets_.map((_, i) => {
+  const underlyings: (Address | null)[] = markets_.map((_: Address, i: number) => {
     const r = perMarket[i * 5 + 3];
     return r?.status === "success" ? (r.result as Address) : null;
   });

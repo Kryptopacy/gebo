@@ -256,18 +256,50 @@ export function replyText(body: unknown): string {
   };
 
   walk(body, 0);
-  const joined = parts.join(" ").replace(/\s+/g, " ").trim();
-  if (joined) return joined;
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
 
-  /**
-   * Last resort: the raw JSON minus the scaffolding. Stringifying the whole object
-   * reintroduced "jsonrpc":"2.0" and with it the stray 2.
-   */
-  if (typeof body === "object" && !Array.isArray(body)) {
-    const stripped = Object.fromEntries(
-      Object.entries(body as Record<string, unknown>).filter(([k]) => !PROTOCOL_KEYS.has(k)),
-    );
-    return JSON.stringify(stripped).slice(0, 2000);
-  }
-  return JSON.stringify(body).slice(0, 2000);
+/**
+ * Structured answers outrank prose.
+ *
+ * THE BUG THIS EXISTS FOR: our own reference agent answered the borrowing-power
+ * task correctly - the number sat in the A2A `data` part - while its PROSE
+ * correctly reported only the supplied amount, because there is no ratio to
+ * report. Prose-only grading called that answer PARTIAL. An agent that returns
+ * a machine-readable figure alongside imperfect English is BETTER than one that
+ * buries everything in sentences, and the grader must say so.
+ *
+ * Collect every `kind:"data"` part (plus any top-level `result.data`) and append
+ * their JSON to the reply text, minus protocol scaffolding. Depth-limited and
+ * seen-guarded like replyText.
+ */
+export function structuredReplyText(body: unknown): string {
+  const base = replyText(body);
+  if (!body || typeof body !== "object") return base;
+
+  const chunks: string[] = [];
+  const seen = new Set<unknown>();
+
+  const collect = (v: unknown, depth: number) => {
+    if (v == null || depth > 5 || typeof v !== "object") return;
+    if (seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) {
+      for (const item of v) collect(item, depth + 1);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    if (o.kind === "data" && o.data != null && typeof o.data === "object") {
+      const stripped = Object.fromEntries(
+        Object.entries(o.data as Record<string, unknown>).filter(
+          ([k]) => !PROTOCOL_KEYS.has(k),
+        ),
+      );
+      if (Object.keys(stripped).length) chunks.push(JSON.stringify(stripped));
+    }
+    for (const val of Object.values(o)) collect(val, depth + 1);
+  };
+  collect(body, 0);
+
+  return chunks.length ? `${base} ${chunks.join(" ")}`.trim() : base;
 }

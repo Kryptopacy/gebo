@@ -60,7 +60,7 @@ async function demoGrants(): Promise<{ grants: DemoGrant[]; error: string | null
       select id, chain_id, wallet_address, grant_tx_hash, expiry, unbounded,
              call_allowlist, spend_caps
       from sessions
-      where state = 'active'
+      where state = 'active' and expiry > now()
       order by chain_id desc, expiry`;
     return {
       grants: rows.map((r) => ({

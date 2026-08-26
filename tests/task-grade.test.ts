@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   extractNumbers, gradeNumericAnswer, replyText, rpcErrorMessage, parseAgentReply,
+  structuredReplyText,
 } from "../src/lib/task-grade.ts";
 
 /**
@@ -179,5 +180,42 @@ describe("parseAgentReply", () => {
     const r = parseAgentReply(raw, "application/json");
     expect(r.ok).toBe(true);
     if (r.ok) expect(replyText(r.body)).toContain("1.78");
+  });
+});
+
+describe("structuredReplyText", () => {
+  // The regression: our own agent answered borrowing-power correctly in the
+  // `data` part while prose correctly reported only the supplied amount (no
+  // ratio exists for a no-debt position). Prose-only grading said PARTIAL.
+  const reply = {
+    jsonrpc: "2.0", id: 1,
+    result: {
+      kind: "message", role: "agent", messageId: "gebo-health-1",
+      parts: [
+        { kind: "text", text: "0xAB12DE9c36DaD3d05f2D5F791b31669338C1F055 has $11760.58 supplied and no debt at block 118191500." },
+        { kind: "data", data: { account: "0xAB12DE9c36DaD3d05f2D5F791b31669338C1F055", blockNumber: "118191500", healthFactor: null, verdict: "no debt", borrowingPowerUsd: 9597.836, totalBorrowedUsd: 0 } },
+      ],
+    },
+  };
+
+  it("appends data-part figures so a correct structured answer can pass", () => {
+    const text = structuredReplyText(reply);
+    expect(text).toContain("borrowingPowerUsd");
+    const grade = gradeNumericAnswer(text, 9597.8357);
+    expect(grade.outcome).toBe("succeeded");
+  });
+
+  it("does not let protocol scaffolding back into the numbers", () => {
+    const text = structuredReplyText(reply);
+    expect(extractNumbers(text)).not.toContain(2); // jsonrpc "2.0"
+  });
+
+  it("degrades to plain prose when there is no data part", () => {
+    const proseOnly = { result: { parts: [{ kind: "text", text: "APR is 5.09 percent" }] } };
+    expect(structuredReplyText(proseOnly)).toBe("APR is 5.09 percent");
+  });
+
+  it("equals replyText plus nothing on string bodies", () => {
+    expect(structuredReplyText("plain")).toBe("plain");
   });
 });
