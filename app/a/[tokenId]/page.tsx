@@ -3,6 +3,7 @@ import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/d
 import { attestationsFor, attestationSummary } from "@/lib/attestations";
 import { agentMetrics, type MetricValue } from "@/lib/metrics";
 import { fetchSampleOutput } from "@/lib/sample-output";
+import { probeHistoryFor, type ProbeHistory } from "@/lib/probe-history";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,20 +45,20 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
    * this page, and a failure there must not blank the agent card. That exact
    * coupling once blanked every counter on /live when a single malformed row threw.
    */
-  const [attRes, sumRes, metRes, sampleRes] = await Promise.allSettled([
+  const [attRes, sumRes, metRes, sampleRes, probeRes] = await Promise.allSettled([
     attestationsFor(tokenId, 56, 12),
     attestationSummary(tokenId, 56),
     agentMetrics(56, tokenId),
     fetchSampleOutput(a),
+    probeHistoryFor(tokenId, 56),
   ]);
   const attestations = attRes.status === "fulfilled" ? attRes.value : [];
   const attSummary = sumRes.status === "fulfilled" ? sumRes.value : null;
   const evidenceUnavailable = attRes.status === "rejected";
-  // An empty result here can mean "below the observation floor" or "the read
-  // failed". Both render the same honest no-figure state; neither renders zero.
   const metrics: MetricValue[] = metRes.status === "fulfilled" ? metRes.value : [];
   const byMetric = new Map(metrics.map((mv) => [mv.metricId, mv]));
   const sampleOutput = sampleRes.status === "fulfilled" ? sampleRes.value : null;
+  const probeHistory: ProbeHistory | null = probeRes.status === "fulfilled" ? probeRes.value : null;
 
   const st = trustState(a);
   const m = classify(a);
@@ -478,57 +479,28 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
           </div>
         </section>
       )}
-      {/* attestations: what this agent has actually been asked to do */}
-      {/**
-        * The evidence layer existed in the database for weeks and rendered nowhere,
-        * so every task ever recorded against an agent was invisible to the person
-        * deciding whether to hire it. That is the whole product failing quietly.
-        *
-        * There is no score here and there never will be. GPT Store data measured the
-        * correlation between usage and rating at between -0.153 and +0.071, meaning
-        * ratings carry no information. What is shown instead is what was asked, what
-        * came back, and whether the evidence was verifiable - each row standing or
-        * falling on its own.
-        */}
+      {/* ── track record: attestations + probe history ──────────────── */}
       <section className="band band-last">
         <div className="shell">
           <div className="headline-pair">
             <h2>Track record</h2>
             <p className="prose sm">
-              Tasks recorded against this agent, each anchored to evidence a third
-              party can check. No stars, no score: a rating compresses away the only
-              part that matters, which is what was asked and what came back.
+              Every row is anchored to evidence a third party can check. Manual
+              tasks show what was asked and what came back. Probe history shows
+              every time we checked whether this agent answers.
             </p>
           </div>
 
-          {evidenceUnavailable ? (
-            <div className="notice mt-m" data-tone="fail">
-              <strong>The evidence ledger could not be read.</strong> This is a failure
-              to measure, not a finding that this agent has no track record.
-            </div>
-          ) : attestations.length === 0 ? (
-            <div className="surface-card mt-m">
-              <p className="prose sm" style={{ margin: 0 }}>
-                No task has been recorded against this agent yet.
-              </p>
-              <div className="notice mt-m" data-tone="hold">
-                <strong>That is not a criticism of the agent.</strong> It means nobody
-                has hired it through a route we can verify. An attestation is stored
-                only when it carries evidence &mdash; a session-key transaction, an
-                ERC-8183 job, an x402 payment, or a task we ran ourselves &mdash;
-                because a claim without evidence is an opinion, and opinions are what
-                this registry exists to replace.
-              </div>
-            </div>
-          ) : (
-            <>
-              {attSummary && (
-                <dl className="kpi-grid mt-m">
+          {/* KPI summary — show whichever data we have */}
+          {(attestations.length > 0 || probeHistory) && (
+            <dl className="kpi-grid mt-m">
+              {attestations.length > 0 && attSummary && (
+                <>
                   <div className="kpi-card">
                     <dt>Tasks recorded</dt>
                     <dd>{attSummary.total}</dd>
                     <div className="qualifier">
-                      {attSummary.verified} with evidence confirmed on chain or by us
+                      {attSummary.verified} with evidence confirmed
                     </div>
                   </div>
                   <div className="kpi-card">
@@ -540,14 +512,48 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                       </span>
                     </dd>
                     <div className="qualifier">
-                      Counted over every recorded task, failures included. A rate over a
-                      handful of tasks describes those tasks and nothing wider
+                      Failures included at full weight
                     </div>
                   </div>
-                </dl>
+                </>
               )}
+              {probeHistory && (
+                <>
+                  <div className="kpi-card">
+                    <dt>Probes (14d)</dt>
+                    <dd>{probeHistory.totalProbes.toLocaleString()}</dd>
+                    <div className="qualifier">
+                      Every probe is an independent check
+                    </div>
+                  </div>
+                  <div className="kpi-card">
+                    <dt>Uptime</dt>
+                    <dd style={{ color: (probeHistory.overallUptime ?? 0) >= 99 ? "var(--pass)" : (probeHistory.overallUptime ?? 0) >= 90 ? "var(--hold)" : "var(--fail)" }}>
+                      {probeHistory.overallUptime != null ? `${probeHistory.overallUptime}%` : "\u2014"}
+                    </dd>
+                    <div className="qualifier">
+                      Probes that received a valid response
+                    </div>
+                  </div>
+                  {probeHistory.avgP50 != null && (
+                    <div className="kpi-card">
+                      <dt>Avg response</dt>
+                      <dd>{probeHistory.avgP50} ms</dd>
+                      <div className="qualifier">
+                        Mean p50 across observed days
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </dl>
+          )}
 
-              <div className="data-table-frame mt-l">
+          {/* Manual attestations */}
+          {attestations.length > 0 && (
+            <>
+              <h3 className="mt-l" style={{ fontSize: "1rem" }}>Hired tasks</h3>
+              <div className="data-table-frame mt-m">
                 <div className="rows">
                   <div
                     className="rows-head"
@@ -575,7 +581,6 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                           ) : (
                             <span style={{ color: "var(--fail)" }}>evidence unverified</span>
                           )}
-                          {t.attesterTrusted && " \u00b7 trusted reviewer"}
                           {t.baselineDurationMs != null && (
                             <>
                               {" \u00b7 "}
@@ -603,18 +608,89 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                   ))}
                 </div>
               </div>
-
-              {attSummary && attSummary.total < 5 && (
-                <div className="notice mt-m" data-tone="hold">
-                  <strong>
-                    {attSummary.total} task{attSummary.total === 1 ? "" : "s"} is not a
-                    record.
-                  </strong>{" "}
-                  Read the rows, not the ratio. A percentage over this few observations
-                  would imply a reliability this evidence cannot support.
-                </div>
-              )}
             </>
+          )}
+
+          {/* Probe history — shown for ALL agents with endpoints */}
+          {probeHistory && probeHistory.days.length > 0 && (
+            <>
+              <h3 className="mt-l" style={{ fontSize: "1rem" }}>
+                {attestations.length > 0 ? "Liveness history" : "Probe history (14 days)"}
+              </h3>
+              <p className="xs t-4 mt-s">
+                {probeHistory.endpointKind?.toUpperCase()} endpoint:{" "}
+                <span className="num">{probeHistory.endpointUrl?.slice(0, 60)}...</span>
+                {" \u00b7 "}Each row is one day of independent probes.
+              </p>
+              <div className="data-table-frame mt-m">
+                <div className="rows">
+                  <div
+                    className="rows-head"
+                    style={{ gridTemplateColumns: "7rem 5rem 5rem 6rem 5rem 6rem" }}
+                  >
+                    <span>Date</span>
+                    <span style={{ textAlign: "right" }}>Probes</span>
+                    <span style={{ textAlign: "right" }}>Passed</span>
+                    <span style={{ textAlign: "right" }}>Uptime</span>
+                    <span style={{ textAlign: "right" }}>p50</span>
+                    <span>Fail streak</span>
+                  </div>
+                  {probeHistory.days.map((d) => (
+                    <div
+                      key={d.date}
+                      className="row"
+                      style={{ gridTemplateColumns: "7rem 5rem 5rem 6rem 5rem 6rem" }}
+                    >
+                      <div className="xs t-3 num">{d.date}</div>
+                      <div className="num xs t-3" style={{ textAlign: "right" }}>{d.probes}</div>
+                      <div className="num xs t-3" style={{ textAlign: "right" }}>{d.okCount}</div>
+                      <div
+                        className="num xs"
+                        style={{
+                          textAlign: "right",
+                          color: (d.uptimePct ?? 0) >= 99 ? "var(--pass)" : (d.uptimePct ?? 0) >= 90 ? "var(--hold)" : "var(--fail)",
+                        }}
+                      >
+                        {d.uptimePct != null ? `${d.uptimePct}%` : "\u2014"}
+                      </div>
+                      <div className="num xs t-3" style={{ textAlign: "right" }}>
+                        {d.p50Ms > 0 ? `${d.p50Ms} ms` : "\u2014"}
+                      </div>
+                      <div className="xs t-3" style={{ color: d.failStreak > 0 ? "var(--fail)" : undefined }}>
+                        {d.failStreak > 0 ? `${d.failStreak} day${d.failStreak > 1 ? "s" : ""}` : "\u2014"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="xs t-4 mt-s">
+                Measured by GEBO&apos;s probe cron from a single region. A failure here
+                means unreachable from our infrastructure, not necessarily down everywhere.
+              </p>
+            </>
+          )}
+
+          {/* Neither attestations nor probe history */}
+          {attestations.length === 0 && !probeHistory && (
+            <div className="surface-card mt-m">
+              <p className="prose sm" style={{ margin: 0 }}>
+                No evidence is available for this agent yet.
+              </p>
+              <div className="notice mt-m" data-tone="hold">
+                <strong>This is an absence of evidence, not evidence of absence.</strong>{" "}
+                The agent may be perfectly functional; we have simply not probed it
+                or tested it yet. Every agent with a declared endpoint will be probed
+                on our next sweep.
+              </div>
+            </div>
+          )}
+
+          {attestations.length === 0 && probeHistory && probeHistory.totalProbes < 10 && (
+            <div className="notice mt-m" data-tone="hold">
+              <strong>{probeHistory.totalProbes} probe{probeHistory.totalProbes === 1 ? "" : "s"} is not a record.</strong>{" "}
+              Read the rows, not the aggregate. Uptime over this few observations
+              implies a reliability the evidence cannot support.
+            </div>
           )}
         </div>
       </section>
