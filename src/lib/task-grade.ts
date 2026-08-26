@@ -29,6 +29,55 @@
 
 export type RunOutcome = "succeeded" | "partial" | "failed" | "disputed";
 
+/**
+ * Accept or reject a raw HTTP response body as a protocol reply.
+ *
+ * THE BUG THIS EXISTS FOR: an agent whose card URL 404s, or whose host answers
+ * every path with an SPA shell, returns Next.js HTML. That HTML was passed to
+ * the grader as if it were prose, and the grader extracted numbers from page
+ * markup - chunk hashes, timestamps - any of which can land within tolerance of
+ * the chain value. Four recorded runs carried kilobytes of framework HTML as
+ * their `result`, and one could have graded SUCCEEDED on it.
+ *
+ * A reply is only gradeable when it is JSON and parses to an object. Anything
+ * else is a transport/protocol failure with a reason a human can act on, and
+ * its body is discarded rather than stored as evidence.
+ */
+export type ParsedReply =
+  | { ok: true; body: unknown }
+  | { ok: false; reason: string };
+
+const MAX_REPLY_BYTES = 200_000;
+
+export function parseAgentReply(raw: string, contentType: string | null): ParsedReply {
+  const body = (raw ?? "").trim();
+  if (!body) return { ok: false, reason: "empty response body" };
+  if (body.length > MAX_REPLY_BYTES) {
+    return { ok: false, reason: `response of ${body.length} bytes exceeds ${MAX_REPLY_BYTES}, refused` };
+  }
+
+  const ct = (contentType ?? "").toLowerCase();
+  const looksHtml = /^\s*<(!doctype|html)/i.test(body) || ct.includes("text/html");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    if (looksHtml) return { ok: false, reason: "returned an HTML document, not a JSON-RPC reply" };
+    return {
+      ok: false,
+      reason: `returned ${ct || "unlabelled"} content that does not parse as JSON`,
+    };
+  }
+
+  // A bare string, number or array is not a JSON-RPC message. Grading it would
+  // repeat the original failure one layer down.
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, reason: "response parsed but is not a JSON-RPC object" };
+  }
+  return { ok: true, body: parsed };
+}
+
 export type Grade = {
   outcome: RunOutcome;
   /** The extracted number that matched, when one did. */

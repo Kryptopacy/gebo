@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { extractNumbers, gradeNumericAnswer, replyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
+import {
+  extractNumbers, gradeNumericAnswer, replyText, rpcErrorMessage, parseAgentReply,
+} from "../src/lib/task-grade.ts";
 
 /**
  * Task grading.
@@ -132,5 +134,50 @@ describe("rpcErrorMessage", () => {
     expect(rpcErrorMessage({ jsonrpc: "2.0", id: 1, result: { parts: [{ text: "1.78" }] } })).toBeNull();
     expect(rpcErrorMessage(null)).toBeNull();
     expect(rpcErrorMessage("plain text")).toBeNull();
+  });
+});
+
+describe("parseAgentReply", () => {
+  // The regression this guards: framework HTML reached the grader as prose and
+  // its markup numbers became candidate answers.
+  const nextjsHtml =
+    '<!DOCTYPE html><html><body>47120933<script src="/_next/static/chunks/main.js"></script></body></html>';
+
+  it("rejects HTML with a reason, not a gradeable body", () => {
+    const r = parseAgentReply(nextjsHtml, "text/html; charset=utf-8");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/HTML/);
+  });
+
+  it("rejects HTML even when the server mislabels it as JSON", () => {
+    const r = parseAgentReply("<html>404 not found</html>", "application/json");
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects unlabelled non-JSON bodies", () => {
+    const r = parseAgentReply("plain gateway error page", null);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/does not parse as JSON/);
+  });
+
+  it("rejects JSON that is not an object - a bare string or array is not a reply", () => {
+    expect(parseAgentReply('"just a string"', "application/json").ok).toBe(false);
+    expect(parseAgentReply("[1,2,3]", "application/json").ok).toBe(false);
+    expect(parseAgentReply("null", "application/json").ok).toBe(false);
+  });
+
+  it("rejects empty and oversized bodies", () => {
+    expect(parseAgentReply("", "application/json").ok).toBe(false);
+    expect(parseAgentReply("x".repeat(200_001), "application/json").ok).toBe(false);
+  });
+
+  it("accepts a genuine JSON-RPC object", () => {
+    const raw = JSON.stringify({
+      jsonrpc: "2.0", id: 1,
+      result: { parts: [{ kind: "text", text: "health factor 1.78" }] },
+    });
+    const r = parseAgentReply(raw, "application/json");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(replyText(r.body)).toContain("1.78");
   });
 });
