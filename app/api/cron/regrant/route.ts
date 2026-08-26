@@ -42,7 +42,7 @@ export async function GET(request: Request) {
         import("postgres"),
         import("@altananetwork/sdk"),
         import("viem"),
-        import("../../../src/lib/session-scope.ts"),
+        import("../../../../src/lib/session-scope.ts"),
       ] as const);
 
     const sql = postgres(url, { prepare: false, max: 1, onnotice: () => {} });
