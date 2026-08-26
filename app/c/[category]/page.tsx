@@ -154,7 +154,7 @@ export default async function CategoryPage({
                   ))}
                 </div>
                 {eligible.slice(0, 8).map((o) => (
-                  <div key={o.id} className="row" style={{ gridTemplateColumns: oppGrid }}>
+                  <a key={o.id} href={`/o/${o.id}`} className="row row-hover" style={{ gridTemplateColumns: oppGrid }}>
                     <div>
                       <h3>{o.label}</h3>
                       <div className="xs t-4 num">
@@ -167,7 +167,7 @@ export default async function CategoryPage({
                         {c.fmt(o.payload[c.key], o.payload)}
                       </div>
                     ))}
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
@@ -181,7 +181,7 @@ export default async function CategoryPage({
               <div className="data-table-frame mt-m">
                 <div className="rows">
                   {eligible.slice(8).map((o) => (
-                    <div key={o.id} className="row" style={{ gridTemplateColumns: oppGrid }}>
+                    <a key={o.id} href={`/o/${o.id}`} className="row row-hover" style={{ gridTemplateColumns: oppGrid }}>
                       <div>
                         <h3>{o.label}</h3>
                         <div className="xs t-4 num">
@@ -194,7 +194,7 @@ export default async function CategoryPage({
                           {c.fmt(o.payload[c.key], o.payload)}
                         </div>
                       ))}
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>
@@ -209,11 +209,11 @@ export default async function CategoryPage({
               <div className="data-table-frame mt-m">
                 <div className="rows">
                   {ineligible.slice(0, 12).map((o) => (
-                    <div key={o.id} className="row"
+                    <a key={o.id} href={`/o/${o.id}`} className="row row-hover"
                       style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1.4fr)" }}>
                       <div className="sm t-3">{o.label}</div>
                       <div className="xs t-4">{o.ineligibleReason}</div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>
