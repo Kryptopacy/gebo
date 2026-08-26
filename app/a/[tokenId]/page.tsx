@@ -80,11 +80,43 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             {a.x402 && <span className="chip chip-flat">x402</span>}
           </div>
           <p className="standfirst sm">{st.reason}</p>
+
+          {/* Plain-English summary for non-technical users */}
+          <div className="surface-card mt-m" style={{ borderLeft: "3px solid var(--accent)", padding: "14px 18px" }}>
+            <p className="sm" style={{ margin: 0, color: "var(--fg-2)" }}>
+              {cat ? (
+                <>
+                  <strong>What this agent does:</strong> It helps with{" "}
+                  <strong>{cat.job.toLowerCase()}</strong> on BNB Smart Chain.
+                  {handshake
+                    ? " It is currently online and reachable."
+                    : " It could not be reached at our last check."}
+                  {st.state === "VERIFIED"
+                    ? " We have verified its identity against the on-chain registry."
+                    : ""}
+                </>
+              ) : (
+                <>
+                  <strong>What this agent does:</strong> This agent is registered on BNB Smart Chain
+                  but has not been classified into a specific category yet.
+                  {handshake
+                    ? " It is currently online and reachable."
+                    : " It could not be reached at our last check."}
+                </>
+              )}
+            </p>
+            {a.description && (
+              <p className="xs t-4 mt-s" style={{ margin: 0, maxWidth: "70ch" }}>
+                {a.description.slice(0, 200)}{a.description.length > 200 ? "..." : ""}
+              </p>
+            )}
+          </div>
+
           <div className="inline-list mt-m">
             <a href={`/a/${a.token_id}/hire`} className="cta">
-              {fatal.length ? "Inspect authority scope" : "Authorise this agent"}
+              {fatal.length ? "View safety details" : "Try this agent"}
             </a>
-            <span className="xs t-4">Nothing is signed. Scope, simulate, then review the grant.</span>
+            <span className="xs t-4">Review what it can do, then decide. Nothing is signed until you approve.</span>
           </div>
         </div>
       </section>
@@ -209,29 +241,31 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             <div className="authority-body" style={{ padding: "16px 24px 20px" }}>
               <dl className="spec">
                 <div>
-                  <dt>Authority</dt>
-                  <dd>Not publicly verifiable. No registered session key exists, so no third party can check what this agent is permitted to do.</dd>
-                </div>
-                <div>
-                  <dt>Interpretation</dt>
+                  <dt>In plain English</dt>
                   <dd>
-                    Either it holds no delegated authority, or it holds authority granted
-                    without registration — enforced on-chain but invisible to readers.
-                    The absence of a session is <strong style={{ color: "var(--fg)" }}>not</strong>{" "}
-                    evidence of safety.
+                    This agent has not been granted any spending authority through the Altana
+                    session system. That means either it operates without touching your wallet,
+                    or it uses a different permission system we cannot see from here.
                   </dd>
                 </div>
                 <div>
-                  <dt>Worst case</dt>
-                  <dd className="mono">unknown — declining to estimate</dd>
+                  <dt>What this means for you</dt>
+                  <dd>
+                    You can still hire this agent through APEX escrow (a neutral third-party
+                    smart contract on BNB Chain). The escrow holds funds until the job is
+                    completed, and you can dispute if the result is not satisfactory.
+                  </dd>
+                </div>
+                <div>
+                  <dt>How to verify</dt>
+                  <dd className="mono" style={{ fontSize: "0.85rem" }}>
+                    Read directly from the Altana keystore at 0x6572427ED530BadcF7375Cf9A4709D8d2b0E7E0a
+                    on BNB Smart Chain. These reads are permissionless and require no admin key.
+                  </dd>
                 </div>
               </dl>
             </div>
           </div>
-          <p className="xs t-4 mt-m" style={{ maxWidth: "70ch" }}>
-            Read directly from the Altana keystore at 0x6572427ED530BadcF7375Cf9A4709D8d2b0E7E0a
-            on BNB Smart Chain. These reads are permissionless and require no admin key.
-          </p>
         </div>
       </section>
 
