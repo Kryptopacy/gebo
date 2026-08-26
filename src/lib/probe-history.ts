@@ -47,8 +47,11 @@ export async function probeHistoryFor(
       limit 1`;
 
     if (!eps.length) return null;
+    const ep = eps[0]!;
 
-    // Get daily probe data for the last 14 days
+    // Get daily probe data for the last 14 days. `day` is a date column, so the
+    // comparison stays in date arithmetic — casting to text throws
+    // "operator does not exist: date >= text" at runtime.
     const rows = await sql<{
       day: string;
       probes: number;
@@ -57,13 +60,14 @@ export async function probeHistoryFor(
       p50_ms: number;
       fail_streak: number;
     }[]>`
-      select day, probes, ok_count, validated_count, p50_ms, fail_streak
+      select to_char(pd.day, 'YYYY-MM-DD') as day, pd.probes, pd.ok_count,
+             pd.validated_count, pd.p50_ms, pd.fail_streak
       from probe_daily pd
       join agent_endpoints ae on ae.id = pd.endpoint_id
       where ae.chain_id = ${chainId}
         and ae.token_id = ${tokenId}
         and ae.kind in ('a2a', 'mcp')
-        and pd.day >= (current_date - interval '14 days')::text
+        and pd.day >= current_date - interval '14 days'
       order by pd.day desc`;
 
     if (!rows.length) return null;
@@ -88,8 +92,8 @@ export async function probeHistoryFor(
       totalOk,
       overallUptime: totalProbes > 0 ? Math.round((totalOk / totalProbes) * 1000) / 10 : null,
       avgP50: p50s.length > 0 ? Math.round(p50s.reduce((a, b) => a + b, 0) / p50s.length) : null,
-      endpointUrl: eps[0].url,
-      endpointKind: eps[0].kind,
+      endpointUrl: ep.url,
+      endpointKind: ep.kind,
     };
   } catch {
     return null;
