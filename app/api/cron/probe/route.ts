@@ -22,6 +22,7 @@ import { NextResponse } from "next/server";
 import postgres from "postgres";
 import { authorizeCron } from "@/lib/cron-auth";
 import { probeEndpoint, type Endpoint } from "@/lib/probe";
+import { computeLivenessMetrics } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -162,6 +163,17 @@ export async function GET(request: Request) {
 
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
+    // Materialise uptime and latency into metric_values with their L2
+    // qualifiers. Runs in the same tick as the probes so the numbers can never
+    // drift more than one batch behind the evidence they describe.
+    let metrics: { agents: number; written: number } | null = null;
+    let metricsError: string | null = null;
+    try {
+      metrics = await computeLivenessMetrics(sql);
+    } catch (e) {
+      metricsError = String((e as Error)?.message ?? e).slice(0, 200);
+    }
+
     const [due] = await sql<{ n: number }[]>`
       select count(*)::int as n from agent_endpoints
       where chain_id = 56 and probe_tier < 3 and kind in ('a2a','mcp')
@@ -173,6 +185,8 @@ export async function GET(request: Request) {
       probed: tally.validated + tally.responded + tally.failed,
       ...tally,
       stillDue: due?.n ?? 0,
+      metrics,
+      ...(metricsError ? { metricsError } : {}),
       ms: Date.now() - startedAt,
     });
   } catch (err: any) {

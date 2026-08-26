@@ -1,4 +1,5 @@
 import { loadAgents, funnel, POPULATION } from "@/lib/data";
+import { METRIC_DEFS, OBS_FLOOR, WINDOW as METRIC_WINDOW } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -35,11 +36,19 @@ const MEASURES = [
   },
   {
     name: "uptime and percentiles",
-    definition: "Not yet published.",
-    window: "—",
+    definition: `Published from the metric registry once an agent clears ${OBS_FLOOR} probes in a ${METRIC_WINDOW} window. Until then the field reads insufficient observations, because deriving a percentage from one observation would be dishonest.`,
+    window: `${METRIC_WINDOW} window`,
     defect:
-      "Requires at least twenty probes across separate windows. Deriving a percentage from one observation would be dishonest, so the field reads insufficient observations instead.",
+      "Computed per agent across all its declared endpoints; a multi-endpoint agent's figure blends them. The registry entry carries the full formula and defects.",
   },
+  // Liveness metrics render straight from the registry in src/lib/metrics.ts,
+  // so these rows can never drift from what is actually stored and shown.
+  ...Object.entries(METRIC_DEFS).map(([id, d]) => ({
+    name: id.replace(/_/g, " "),
+    definition: `${d.display}: ${d.formula}. Denominator: ${d.denominator}. Costs: ${d.costTreatment}.`,
+    window: METRIC_WINDOW,
+    defect: d.knownDefects.join(" "),
+  })),
 ];
 
 const REFUSED = [

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
 import { attestationsFor, attestationSummary } from "@/lib/attestations";
+import { agentMetrics, type MetricValue } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -42,13 +43,18 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
    * this page, and a failure there must not blank the agent card. That exact
    * coupling once blanked every counter on /live when a single malformed row threw.
    */
-  const [attRes, sumRes] = await Promise.allSettled([
+  const [attRes, sumRes, metRes] = await Promise.allSettled([
     attestationsFor(tokenId, 56, 12),
     attestationSummary(tokenId, 56),
+    agentMetrics(56, tokenId),
   ]);
   const attestations = attRes.status === "fulfilled" ? attRes.value : [];
   const attSummary = sumRes.status === "fulfilled" ? sumRes.value : null;
   const evidenceUnavailable = attRes.status === "rejected";
+  // An empty result here can mean "below the observation floor" or "the read
+  // failed". Both render the same honest no-figure state; neither renders zero.
+  const metrics: MetricValue[] = metRes.status === "fulfilled" ? metRes.value : [];
+  const byMetric = new Map(metrics.map((mv) => [mv.metricId, mv]));
 
   const st = trustState(a);
   const m = classify(a);
@@ -128,8 +134,26 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               <dd>{a.probe?.rttMs != null ? `${a.probe.rttMs}` : "—"}
                 {a.probe?.rttMs != null && <span className="t-4" style={{ fontSize: "0.8rem" }}> ms</span>}
               </dd>
-              <div className="qualifier">One observation, one region. Not an average.</div>
+              <div className="qualifier">Latest probe only. One observation, one region. Not an average.</div>
             </div>
+            {(() => {
+              const p50 = byMetric.get("latency_p50_7d");
+              return p50 ? (
+                <div className="kpi-card">
+                  <dt>Response time p50, 7d</dt>
+                  <dd>{p50.value}<span className="t-4" style={{ fontSize: "0.8rem" }}> ms</span></dd>
+                  <div className="qualifier">
+                    n={p50.qualifiers.obsCount} probes. {p50.qualifiers.knownDefects[0]}
+                  </div>
+                </div>
+              ) : (
+                <div className="kpi-card" data-empty="true">
+                  <dt>Response time p50, 7d</dt>
+                  <dd style={{ fontSize: "1.1rem" }}>Insufficient observations</dd>
+                  <div className="qualifier">Shown once 20 probes accumulate in the window.</div>
+                </div>
+              );
+            })()}
             <div className="kpi-card">
               <dt>Transport</dt>
               <dd style={{ fontSize: "1.25rem", letterSpacing: 0 }}>
@@ -137,11 +161,28 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               </dd>
               <div className="qualifier">HTTP status and classified outcome</div>
             </div>
-            <div className="kpi-card" data-empty="true">
-              <dt>Uptime 7d</dt>
-              <dd style={{ fontSize: "1.1rem" }}>Insufficient observations</dd>
-              <div className="qualifier">n=1, floor=20. Shown once a real record exists.</div>
-            </div>
+            {(() => {
+              const up = byMetric.get("uptime_7d");
+              return up ? (
+                <div className="kpi-card">
+                  <dt>Uptime 7d</dt>
+                  <dd style={{ color: "var(--pass)" }}>{up.value}%</dd>
+                  <div className="qualifier">
+                    n={up.qualifiers.obsCount} probes over 7 days.{" "}
+                    <a href="/methodology">How this is measured, and how it can mislead</a>
+                  </div>
+                </div>
+              ) : (
+                <div className="kpi-card" data-empty="true">
+                  <dt>Uptime 7d</dt>
+                  <dd style={{ fontSize: "1.1rem" }}>Insufficient observations</dd>
+                  <div className="qualifier">
+                    No percentage is shown until 20 probes accumulate in the window. A
+                    percentage from fewer would imply a reliability this evidence cannot support.
+                  </div>
+                </div>
+              );
+            })()}
           </dl>
 
           {a.probe?.evidence && (
