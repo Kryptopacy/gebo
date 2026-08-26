@@ -32,6 +32,10 @@ const comptrollerAbi = parseAbi([
   "function oracle() view returns (address)",
   "function closeFactorMantissa() view returns (uint256)",
   "function liquidationIncentiveMantissa() view returns (uint256)",
+  // The authoritative market list. Hardcoding vToken addresses instead of reading
+  // this produced a best-APR scan that matched zero markets - five plausible
+  // addresses, zero of them verified first.
+  "function getAllMarkets() view returns (address[])",
 ]);
 
 const vTokenAbi = parseAbi([
@@ -362,4 +366,123 @@ export function summarise(r: HealthReport): string {
     `across ${r.positions.length} market(s). Venus reports $${r.liquidityUsd.toFixed(2)} liquidity and ` +
     `$${r.shortfallUsd.toFixed(2)} shortfall.` + terms
   );
+}
+
+/**
+ * Every market Venus lists, straight from the comptroller. The previous version
+ * hardcoded five "well-known" vToken addresses and then filtered them through
+ * markets(); every one failed that check, so the yield task had no truth to grade
+ * against. Reading the list from chain is both shorter and self-verifying.
+ */
+async function listedMarkets(pub: PublicClient): Promise<Address[]> {
+  return (await pub.readContract({
+    address: COMPTROLLER, abi: comptrollerAbi, functionName: "getAllMarkets",
+  })) as readonly Address[] as Address[];
+}
+
+const BLOCKS_PER_YEAR = 10_512_000;
+
+const rateAbi = parseAbi([
+  "function supplyRatePerBlock() view returns (uint256)",
+  // Liquidity filter. A quoted APR without money behind it is how vUST's
+  // broken-rate 415% would top the ranking - technically computable, worthless
+  // as advice. Markets under MIN_LIQUIDITY_USD are excluded and named.
+  "function getCash() view returns (uint256)",
+]);
+
+/** Below this much lendable USD, an APR is a curiosity, not a yield opportunity. */
+const MIN_LIQUIDITY_USD = 50_000;
+
+export type SupplyApr = {
+  symbol: string;
+  vToken: Address;
+  /** Simple annualised percentage, understated per the block-time note above. */
+  aprPct: number;
+  /** Lendable underlying at current oracle prices, the filter's basis. */
+  cashUsd: number;
+};
+
+export type BestSupplyApr = {
+  blockNumber: bigint;
+  /** Liquid markets only, best first. */
+  markets: SupplyApr[];
+  /** Markets excluded by the liquidity floor, so the omission is auditable. */
+  excluded: { symbol: string; aprPct: number; cashUsd: number }[];
+  best: SupplyApr | null;
+};
+
+export async function bestSupplyApr(): Promise<BestSupplyApr> {
+  const pub = client();
+  const [blockNumber, markets_, oracle] = await Promise.all([
+    pub.getBlockNumber(),
+    listedMarkets(pub),
+    pub.readContract({ address: COMPTROLLER, abi: comptrollerAbi, functionName: "oracle" }) as Promise<Address>,
+  ]);
+  if (!markets_.length) return { blockNumber, markets: [], excluded: [], best: null };
+
+  const perMarket = await pub.multicall({
+    contracts: markets_.flatMap((v) => [
+      { address: v, abi: vTokenAbi, functionName: "symbol" as const },
+      { address: v, abi: rateAbi, functionName: "supplyRatePerBlock" as const },
+      { address: v, abi: rateAbi, functionName: "getCash" as const },
+      { address: v, abi: vTokenAbi, functionName: "underlying" as const },
+      { address: oracle, abi: oracleAbi, functionName: "getUnderlyingPrice" as const, args: [v] },
+    ]),
+    allowFailure: true,
+  });
+
+  // Underlying decimals for whatever markets resolved, one batched pass. vBNB has
+  // no underlying(); a failed read there means native BNB at 18.
+  const underlyings: (Address | null)[] = markets_.map((_, i) => {
+    const r = perMarket[i * 5 + 3];
+    return r?.status === "success" ? (r.result as Address) : null;
+  });
+  const decimalReads = await pub.multicall({
+    contracts: underlyings
+      .filter((u): u is Address => u !== null)
+      .map((u) => ({ address: u, abi: erc20Abi, functionName: "decimals" as const })),
+    allowFailure: true,
+  });
+  const decimalsFor = new Map<Address, number>();
+  {
+    let k = 0;
+    for (const u of underlyings) {
+      if (u === null) { k++; continue; }
+      const d = decimalReads[k++];
+      decimalsFor.set(u, d?.status === "success" ? Number(d.result) : 18);
+    }
+  }
+
+  const markets: SupplyApr[] = [];
+  const excluded: BestSupplyApr["excluded"] = [];
+  for (let i = 0; i < markets_.length; i++) {
+    const sym = perMarket[i * 5];
+    const rate = perMarket[i * 5 + 1];
+    const cash = perMarket[i * 5 + 2];
+    const priceR = perMarket[i * 5 + 4];
+    if (sym?.status !== "success" || rate?.status !== "success") continue;
+
+    const fracPerBlock = Number(rate.result as bigint) / 1e18;
+    if (!Number.isFinite(fracPerBlock) || fracPerBlock <= 0) continue;
+    const aprPct = Math.round(fracPerBlock * BLOCKS_PER_YEAR * 10000) / 100;
+
+    let cashUsd = 0;
+    if (cash?.status === "success" && priceR?.status === "success") {
+      const u = underlyings[i];
+      const dec = u ? decimalsFor.get(u) ?? 18 : 18;
+      // Oracle prices are scaled to 36 minus underlying decimals - the same
+      // conversion healthFactorFor makes, for the same reason.
+      const price = Number(priceR.result as bigint) / 10 ** (36 - dec);
+      cashUsd = (Number(cash.result as bigint) / 10 ** dec) * price;
+    }
+
+    const entry: SupplyApr = { symbol: String(sym.result), vToken: markets_[i]!, aprPct, cashUsd };
+    if (cashUsd >= MIN_LIQUIDITY_USD) markets.push(entry);
+    else excluded.push(entry);
+  }
+  markets.sort((a, b) => b.aprPct - a.aprPct);
+  return {
+    blockNumber, markets, excluded,
+    best: markets[0] ?? null,
+  };
 }

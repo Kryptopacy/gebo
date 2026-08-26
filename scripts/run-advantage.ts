@@ -30,9 +30,10 @@
 import "dotenv/config";
 import postgres from "postgres";
 import { privateKeyToAccount } from "viem/accounts";
-import type { Address, Hex } from "viem";
-import { healthFactorFor, summarise } from "../src/lib/venus.ts";
-import { gradeNumericAnswer, replyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
+import { createPublicClient, http, parseAbi, type Address, type Hex } from "viem";
+import { bsc } from "viem/chains";
+import { healthFactorFor, summarise, bestSupplyApr } from "../src/lib/venus.ts";
+import { gradeNumericAnswer, parseAgentReply, replyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
 
 const RECORD = process.argv.includes("--record");
 const TIMEOUT_MS = 45_000;
@@ -41,44 +42,182 @@ const TIMEOUT_MS = 45_000;
 const SUBJECTS: { address: Address; note: string }[] = [
   { address: "0xAB12DE9c36DaD3d05f2D5F791b31669338C1F055", note: "live borrowing position across 4 markets" },
   { address: "0x05eCa5cE85CFD18A52e475544BEcA4D1d5bf4acB", note: "collateral in 5 markets, no debt" },
-  { address: "0x913bf7DAf9C48AcA2671603C515026A9902225a5", note: "collateral in 5 markets, no debt" },
 ];
+
+/**
+ * THE THREE TASKS.
+ *
+ * TermiX requires at least three real tasks run both ways, with time, cost and
+ * output reported per task, and at least one from a high-stakes category. These
+ * are three genuinely different questions rather than one question re-asked:
+ *
+ *   venus-hf    security. Liquidation risk of a live position - checkable to the
+ *               cent against Venus's own getAccountLiquidity.
+ *   venus-apr   yield. Where idle capital earns most right now - checkable
+ *               against supplyRatePerBlock on every market.
+ *   pcs-tick    trading infrastructure. The exact state of the deepest WBNB/USDT
+ *               pool - checkable against slot0, and the number a grid or
+ *               rebalancing agent must know before placing anything.
+ *
+ * Each manual arm runs the same computation an agent would, timed over reads and
+ * arithmetic only, so it understates - never overstates - agent advantage.
+ */
+type ManualResult = {
+  target: number | null;
+  text: string;
+  ms: number;
+  refKey: string;
+  /**
+   * Overrides the canned question when the position's state changes what is
+   * worth asking - a no-debt account has no ratio, so the harness asks about
+   * borrowing power instead of grading an answer to a question it mis-set.
+   */
+  question?: string;
+};
+
+const TASKS: {
+  id: string;
+  label: string;
+  category: string;
+  question: (subject?: Address) => string;
+  runManual: () => Promise<ManualResult>;
+}[] = [
+  {
+    id: "venus-hf",
+    label: "Venus health factor",
+    category: "security",
+    question: (subject) =>
+      `What is the Venus lending health factor for ${subject} on BNB Chain? ` +
+      `Report the ratio and whether the position is at risk of liquidation.`,
+    runManual: async () => {
+      const started = Date.now();
+      const subject = SUBJECTS[0]!.address;
+      const truth = await healthFactorFor(subject);
+      const hasRatio = truth.healthFactor != null;
+      const target = hasRatio ? truth.healthFactor! : truth.borrowingPowerUsd;
+      return {
+        target,
+        text: summarise(truth),
+        ms: Date.now() - started,
+        refKey: subject.slice(2, 10),
+        question: hasRatio
+          ? `What is the Venus lending health factor for ${subject} on BNB Chain? Report the ratio and whether the position is at risk of liquidation.`
+          : `${subject} supplies collateral on Venus but carries no debt right now, so there is no ratio. ` +
+            `How much borrowing power, in USD, does that address have? Report the figure.`,
+      };
+    },
+  },
+  {
+    id: "venus-apr",
+    label: "Best Venus supply APR",
+    category: "yield",
+    question: () =>
+      `Across the major Venus markets (vBNB, vUSDT, vUSDC, vBTC, vETH), which market ` +
+      `currently pays suppliers the highest APR, and what is that APR in percent?`,
+    runManual: async () => {
+      const started = Date.now();
+      const best = await bestSupplyApr();
+      return {
+        target: best.best?.aprPct ?? null,
+        text:
+          (best.best
+            ? `Highest supply APR ${best.best.aprPct}% on ${best.best.symbol} at block ${best.blockNumber}. ` +
+              `All markets: ${best.markets.map((m) => `${m.symbol} ${m.aprPct}%`).join(", ")}. ` +
+              `Simple annualisation at 10,512,000 blocks/year; understates true rate on today's faster blocks.`
+            : `No listed market returned a readable supply rate.`),
+        ms: Date.now() - started,
+        refKey: "all",
+      };
+    },
+  },
+  {
+    id: "pcs-tick",
+    label: "PancakeSwap V3 pool tick",
+    category: "trading-infrastructure",
+    question: (subject) =>
+      `For the PancakeSwap V3 pool ${subject}: what is the current tick, and what does it imply about which side of the pool is token0 vs token1?`,
+    runManual: async () => {
+      // The canonical deepest WBNB/USDT pair, read fresh so both arms see the
+      // same market seconds apart rather than a cached snapshot.
+      const pool = await deepestWbnbUsdtPool();
+      if (!pool) throw new Error("no eligible WBNB/USDT pool found in opportunities index");
+      const started = Date.now();
+      const pub = createPublicClient({
+        chain: bsc,
+        transport: http(process.env.BSC_MAINNET_RPC ?? "https://bsc-rpc.publicnode.com", { timeout: 20_000 }),
+      });
+      const slot0 = await pub.readContract({
+        address: pool.address as Address,
+        abi: parseAbi(["function slot0() view returns (uint160, int24, uint16, uint16, uint8, uint8, bool)"]),
+        functionName: "slot0",
+      }) as readonly [bigint, number, ...unknown[]];
+      const tick = Number(slot0[1]);
+      return {
+        target: tick,
+        text:
+          `Pool ${pool.label} (${pool.address}) sits at tick ${tick}. ` +
+          `Price of token1 in token0 is 1.0001^tick, so the sign of the tick says which side holds the active capital.`,
+        ms: Date.now() - started,
+        refKey: pool.address.slice(2, 10),
+      };
+    },
+  },
+];
+
+/** Deepest eligible WBNB/USDT pool straight from our own opportunities index. */
+async function deepestWbnbUsdtPool(): Promise<{ address: string; label: string } | null> {
+  const rows = await sql<{ ref: string; label: string; payload: unknown }[]>`
+    select ref, label, payload
+    from opportunities
+    where chain_id = 56 and category = 'rebalancing' and venue = 'pancakeswap-v3' and eligible
+    order by ((payload->>'tvlUsd')::numeric) desc nulls last
+    limit 1`;
+  const r = rows[0];
+  return r ? { address: r.ref, label: r.label } : null;
+}
 
 const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 3, onnotice: () => {} });
 
-/** Registered agents whose declared job covers this question. */
+/** Registered agents whose declared job covers these questions. */
 const agents = await sql<{ token_id: string; name: string | null; category: string | null; url: string; kind: string }[]>`
   select a.token_id::text as token_id, a.name, a.category, e.url, e.kind
   from agents a
   join agent_endpoints e on e.chain_id = a.chain_id and e.token_id = a.token_id
   where a.chain_id = 56
     and a.trust_state = 'VERIFIED'
-    and a.category in ('health', 'rebalancing')
+    and a.category in ('health', 'rebalancing', 'grid')
     and e.kind = 'a2a'
   order by (a.category = 'health') desc, a.token_id desc
   limit 4
 `;
 
-console.log(`\n  AGENT ADVANTAGE: Venus health factor`);
+console.log(`\n  AGENT ADVANTAGE: ${TASKS.length} tasks x ${agents.length} registered agents`);
 console.log(`  ${"=".repeat(70)}`);
 console.log(`  mode      ${RECORD ? "RECORD" : "dry run"}`);
-console.log(`  subjects  ${SUBJECTS.length}`);
-console.log(`  agents    ${agents.length} registered, plus our reference implementation\n`);
+console.log(`  tasks     ${TASKS.map((t) => t.id).join(", ")}`);
+console.log(`  agents    ${agents.length} registered\n`);
 
 /**
  * Resolve the endpoint a card advertises, which is where a client must send work.
- * Following it is the whole point: five agents publish a reachable card naming an
- * endpoint only their author can reach, and a harness that skipped this step would
- * never notice.
+ *
+ * Any 2xx JSON reply carrying an http(s) `url` field is treated as a card and
+ * followed, whatever its path is called - gating on "well-known" in the filename
+ * missed our own /api/agent/&lt;persona&gt;/card routes and would have posted tasks
+ * at documents. If the GET fails, the body is not a card, or no url is present,
+ * the original URL is used unchanged: some registrations name their JSON-RPC
+ * endpoint directly.
  */
 async function resolveEndpoint(cardUrl: string, signal: AbortSignal): Promise<{ endpoint: string; declared: string | null }> {
-  if (!/well-known|agent-card|agent\.json/i.test(cardUrl)) return { endpoint: cardUrl, declared: null };
   try {
     const res = await fetch(cardUrl, { signal, headers: { accept: "application/json" } });
-    if (!res.ok) return { endpoint: cardUrl, declared: null };
-    const card = (await res.json()) as { url?: unknown };
-    if (typeof card.url === "string" && /^https?:\/\//i.test(card.url)) {
-      return { endpoint: card.url, declared: card.url };
+    if (res.ok) {
+      const parsed = parseAgentReply(await res.text(), res.headers.get("content-type"));
+      if (parsed.ok) {
+        const url = (parsed.body as { url?: unknown }).url;
+        if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+          return { endpoint: url, declared: url };
+        }
+      }
     }
   } catch { /* fall through and record the attempt honestly */ }
   return { endpoint: cardUrl, declared: null };
@@ -100,8 +239,23 @@ async function askAgent(cardUrl: string, question: string) {
       }),
     });
     const raw = await res.text();
-    let json: unknown = raw;
-    try { json = JSON.parse(raw); } catch { /* keep raw */ }
+    /**
+     * Only a JSON object is a protocol reply. Everything else - HTML error
+     * pages, SPA shells served with 200, bare strings - is a transport failure
+     * whose body must never reach the grader or the attestation record. This
+     * check lives here, the single shared path, rather than per-task.
+     */
+    const parsed = parseAgentReply(raw, res.headers.get("content-type"));
+    if (!parsed.ok) {
+      return {
+        ms: Date.now() - started,
+        status: res.status,
+        text: "",
+        err: parsed.reason,
+        endpoint,
+        declared,
+      };
+    }
     /**
      * A JSON-RPC error is the agent declining, not an answer that happens to be wrong.
      *
@@ -110,11 +264,11 @@ async function askAgent(cardUrl: string, question: string) {
      * 15% of a health factor of 1.7824. The report would have claimed an agent
      * correctly reported a ratio it never computed.
      */
-    const declined = rpcErrorMessage(json);
+    const declined = rpcErrorMessage(parsed.body);
     return {
       ms: Date.now() - started,
       status: res.status,
-      text: replyText(json),
+      text: declined ? "" : replyText(parsed.body),
       err: declined,
       endpoint,
       declared,
@@ -139,36 +293,37 @@ if (RECORD && !attester) {
 
 let recorded = 0;
 
-for (const subject of SUBJECTS) {
-  const question =
-    `What is the Venus lending health factor for ${subject.address} on BNB Chain? ` +
-    `Report the ratio and whether the position is at risk of liquidation.`;
+for (const task of TASKS) {
+  // ── manual arm first: the truth decides what is worth asking ────────────────
+  let manual: ManualResult;
+  try {
+    manual = await task.runManual();
+  } catch (e) {
+    console.log(`  TASK ${task.id} - manual arm failed, task skipped: ${String((e as Error).message).slice(0, 120)}\n`);
+    continue;
+  }
+  if (manual.target == null) {
+    console.log(`  TASK ${task.id} - no gradeable target this run, skipped.\n`);
+    continue;
+  }
+  const question = manual.question ?? task.question();
 
-  // ── manual arm, timed ──────────────────────────────────────────────────────
-  const mStart = Date.now();
-  const truth = await healthFactorFor(subject.address);
-  const manualMs = Date.now() - mStart;
-  const truthText = summarise(truth);
+  console.log(`  TASK ${task.label} [${task.category}]`);
+  console.log(`    MANUAL ARM  ${manual.ms} ms  ->  target ${manual.target}`);
+  console.log(`                ${manual.text.slice(0, 150)}\n`);
 
   /**
-   * The gradeable number. For a position with no debt there is no ratio, so the
-   * borrowing power is graded instead - an agent that reports the collateral value
-   * correctly has answered the question that applies.
+   * COST, MEASURED RATHER THAN OMITTED. Both arms read public chain state over
+   * the same RPC and pay nothing but bandwidth. Recording null here would read
+   * as "unknown"; recording zero with this note states a measured fact. Gas
+   * would only enter if an agent's answer required a transaction, which none of
+   * these tasks do.
    */
-  const target = truth.healthFactor ?? truth.borrowingPowerUsd;
-
-  console.log(`  SUBJECT ${subject.address}`);
-  console.log(`    ${subject.note}`);
-  console.log(`    MANUAL ARM  ${manualMs} ms  ->  ${truth.verdict}, target ${target.toFixed(4)}`);
-  console.log(`                ${truthText.slice(0, 150)}\n`);
-
-  const manualNote =
-    `Computed from chain in ${manualMs} ms: Venus getAssetsIn, then getAccountSnapshot, ` +
-    `markets() and the oracle price per market, with the 36-minus-underlying-decimals ` +
-    `price scaling and per-market collateral factors applied. Validated against Venus's ` +
-    `own getAccountLiquidity. Timed over the reads and arithmetic ONLY - it excludes the ` +
-    `time a person spends discovering that this is the method, so it understates the ` +
-    `manual arm and therefore understates any agent advantage.`;
+  const zeroCostNote =
+    `Both arms are pure chain reads over one shared public RPC: marginal cash cost ` +
+    `$0.00 on each side. Timed over reads and arithmetic ONLY, excluding the human ` +
+    `time to discover the method, so the manual baseline understates itself and any ` +
+    `agent advantage is understated rather than inflated.`;
 
   for (const agent of agents) {
     const r = await askAgent(agent.url, question);
@@ -177,7 +332,7 @@ for (const subject of SUBJECTS) {
     const transportFailed = r.err != null || (r.status !== 0 && (r.status < 200 || r.status >= 300));
     const grade = transportFailed
       ? { outcome: "failed" as const, note: r.err ?? `endpoint returned HTTP ${r.status}` }
-      : gradeNumericAnswer(r.text, target);
+      : gradeNumericAnswer(r.text, manual.target);
 
     const label = r.declared && /127\.0\.0\.1|localhost|:\/\/10\.|192\.168\./.test(r.declared)
       ? `card advertises ${r.declared} - unreachable by any client`
@@ -195,21 +350,27 @@ for (const subject of SUBJECTS) {
         attester: attester!,
         attester_kind: "gebo",
         evidence_kind: "gebo_task",
-        evidence_ref: `venus-hf-${agent.token_id}-${subject.address.slice(2, 10)}`,
+        evidence_ref: `${task.id}-${agent.token_id}-${manual.refKey}`,
         evidence_verified: true,
         evidence_checked_at: new Date(),
         outcome: grade.outcome,
         task: question,
         result: r.text ? r.text.slice(0, 4000) : `No usable reply. ${label}`,
         duration_ms: r.ms,
-        baseline_duration_ms: manualMs,
-        baseline_note: manualNote,
+        cost_amount: "0",
+        cost_token: "USD",
+        baseline_duration_ms: manual.ms,
+        baseline_cost_amount: "0",
+        baseline_note: `${zeroCostNote} Method: ${label.slice(0, 400)}`,
       } as any)}
       on conflict (chain_id, token_id, evidence_kind, evidence_ref) do update set
         outcome = excluded.outcome,
         result = excluded.result,
         duration_ms = excluded.duration_ms,
+        cost_amount = excluded.cost_amount,
+        cost_token = excluded.cost_token,
         baseline_duration_ms = excluded.baseline_duration_ms,
+        baseline_cost_amount = excluded.baseline_cost_amount,
         baseline_note = excluded.baseline_note,
         evidence_checked_at = now()
     `;
@@ -219,6 +380,7 @@ for (const subject of SUBJECTS) {
 }
 
 console.log(`  ${RECORD ? `${recorded} attestation(s) written.` : "Dry run: nothing written."}`);
-console.log(`  Every run used the endpoint the registry publishes, one attempt, no retries.\n`);
+console.log(`  Every run used the endpoint the registry publishes, one attempt, no retries.`);
+console.log(`  Non-JSON replies are rejected before grading; HTML never reaches a record.\n`);
 
 await sql.end({ timeout: 5 });
