@@ -3,6 +3,32 @@
 Supplement to AGENTS.md, not a replacement. `npm run readiness` remains the source
 of truth for what is DONE; this file records what readiness cannot see: in-flight
 steps, session-specific gotchas, and the exact next actions.
+## Resume status - 2026-08-27
+
+What the 08-26 queue got wrong (a READER of the earlier list would do wasted work):
+
+- **Registration repair (step 1): verified done.** Tokens 259573/574/575/576 point
+  to `https://gebo-bsc.vercel.app/api/agent/{health,rebalance,grid,yield}/card`
+  and are all `VERIFIED` in `agent_endpoints`. `scripts/tmp-owners.ts` already ran.
+- **Advantage harness (steps 2-3): done.** readiness shows `runs=22` and
+  `attestations=27`.
+- **Concurrent UI agent decommissioned 2026-08-27.** The "swept into its commit"
+  hazard in AGENTS.md is historical; Kilo is the only agent now. The rule (commit
+  promptly, check `git log --stat`) still stands.
+
+Still open, and still worth doing (all measured/code-verified, not from this list):
+
+1. **Migration 0015 (`0015_regrant_sessions.sql`) not applied** - no `gebo-regrant-1/2`
+   in `cron.job`. The Sep 8/9 judging-window re-grant is not scheduled. Apply with
+   `npm run migrate` (idempotent), then confirm with `npm run cron:status`.
+2. **Altana sessions are testnet (chain 97)**: 3 expired, last expires
+   2026-08-27 13:54Z. Mainnet grants never done. The regrant route is mainnet-only
+   (`CHAIN_ID = 56`), funds-checked, and has never run end-to-end - dry-run it
+   before judging eve.
+3. **Category payload asymmetry still open** (`grid`/`yield` share one schema each;
+   rebalancing+grid share PancakeSwap; yield+health share Venus; spec wants more).
+4. `task-grade` "scaffold" test was broken (fixture's own hex address held a `2`),
+   not the grader. Fixed locally; see AGENTS.md for how (/authority now scoped).
 
 ## Landed this session (all pushed, all live on prod)
 

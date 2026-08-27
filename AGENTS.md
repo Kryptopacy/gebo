@@ -136,8 +136,12 @@ real work.
 2. **Never rank by popularity.** GPT Store data measured Cor(usage, rating) at
    −0.153 to +0.071 — ratings carry no information. There are no star ratings here.
 3. **Absence of evidence is never rendered as evidence of absence.** Any claim
-   scoped to one data source must say so in the UI. `/authority` currently violates
-   this and it is the highest-priority open bug.
+   scoped to one data source must say so in the UI. `/authority` does this: it
+   declares it reads one authority system (Altana Keystore) and renders an
+   unconditional "What this check does not cover" section listing the routes it
+   cannot see (unregistered sessions, Binance Agentic Wallet, plain approvals,
+   the permission set). If a page ever prints an unscoped "none registered" again,
+   that is the regression, and it is the highest-priority bug class.
 4. **The judged four never grow.** `rebalancing`, `grid`, `yield`, `health` are
    fixed by the BNB rubric. Detected capabilities may only become *adjacent*
    categories.
@@ -223,14 +227,14 @@ file.
 
 ## Concurrent agents
 
-A second agent (Antigravity IDE) works the UI in this same worktree. It owns
-`app/globals.css`, `app/layout.tsx`, `app/page.tsx` and the visual layer generally.
-
-Consequence to watch for: `src/lib/reputation.ts` and
-`scripts/verify-reputation-registry.ts` were swept into that agent's UI commit
-`5a0b46b` unverified, because they were sitting uncommitted when it staged
-everything. **Commit your own work promptly**, and check `git log --stat` for a
-commit whose message does not match its contents.
+The second agent (Antigravity IDE's UI layer agent) was decommissioned on
+2026-08-27 — Kilo is now the only agent working this worktree. Historically it
+owned `app/globals.css`, `app/layout.tsx`, `app/page.tsx` and the visual layer
+generally, and once swept uncommitted files (`src/lib/reputation.ts`,
+`scripts/verify-reputation-registry.ts`) into a UI commit `5a0b46b` unverified.
+That hazard is gone, but the rule it taught still stands: **commit your own work
+promptly**, and check `git log --stat` for a commit whose message does not match
+its contents.
 
 ## What is deliberately not built
 

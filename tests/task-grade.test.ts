@@ -206,8 +206,26 @@ describe("structuredReplyText", () => {
   });
 
   it("does not let protocol scaffolding back into the numbers", () => {
-    const text = structuredReplyText(reply);
-    expect(extractNumbers(text)).not.toContain(2); // jsonrpc "2.0"
+    // The regression this guards: A2A/MCP implementations put useful content in
+    // `parts`, but the envelope carries JSON-RPC fields we must never grade.
+    // jsonrpc "2.0" putting a bare 2 among the candidate answers is exactly the
+    // kind of false pass the grader must not manufacture.
+    //
+    // The fixture deliberately has NO hex address or block number: the old
+    // version carried an address like 0x…2D5F… whose own digits contain an
+    // isolated 2, so asserting `not.toContain(2)` was guaranteed to fail no
+    // matter how the envelope was handled. The only numbers here are the one
+    // real answer and the envelope values.
+    const replyNoHex = {
+      jsonrpc: "2.0", id: 7,
+      result: { kind: "message", parts: [{ kind: "data", data: { supplyPct: 5.31 } }] },
+    };
+    const text = structuredReplyText(replyNoHex);
+    expect(text).not.toMatch(/2\.0/);
+    const nums = extractNumbers(text);
+    expect(nums).not.toContain(2); // jsonrpc "2.0"
+    expect(nums).not.toContain(7); // id
+    expect(nums).toContain(5.31);  // the real data figure
   });
 
   it("degrades to plain prose when there is no data part", () => {
