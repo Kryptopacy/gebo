@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import {
-  CATEGORIES, loadAgents, agentsByCategory, rankAgents, diversify,
+  CATEGORIES, loadAgents, agentsByCategory, rankAgentsByLiveEvidence, diversify,
   trustState, classify, loadOpportunities, type CategorySlug,
 } from "@/lib/data";
 
@@ -48,7 +48,7 @@ export default async function OpportunityPage({
 
   const cat = CATEGORIES[o.category as CategorySlug];
   const inCat = cat
-    ? diversify(rankAgents(agentsByCategory(await loadAgents()).get(o.category as CategorySlug) ?? []), 3)
+    ? diversify(await rankAgentsByLiveEvidence(agentsByCategory(await loadAgents()).get(o.category as CategorySlug) ?? []), 3)
     : [];
 
   const entries = Object.entries(o.payload ?? {}).sort(([a], [b]) => a.localeCompare(b));

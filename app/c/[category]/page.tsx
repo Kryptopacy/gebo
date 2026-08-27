@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import {
-  CATEGORIES, type CategorySlug, loadAgents, agentsByCategory, rankAgents,
+  CATEGORIES, type CategorySlug, loadAgents, agentsByCategory, rankAgentsByLiveEvidence,
   diversify, trustState, classify, opportunitiesFor, OPPORTUNITY_COLUMNS,
 } from "@/lib/data";
 import CategoryTabs from "./CategoryTabs";
@@ -19,7 +19,7 @@ export default async function CategoryPage({
   const cat = CATEGORIES[slug];
 
   const inCat = agentsByCategory(await loadAgents()).get(slug) ?? [];
-  const ranked = diversify(rankAgents(inCat), 3);
+  const ranked = diversify(await rankAgentsByLiveEvidence(inCat), 3);
 
   const opps = await opportunitiesFor(slug);
   const eligible = opps.filter((o) => o.eligible);

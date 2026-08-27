@@ -970,6 +970,104 @@ export function rankAgents(agents: Agent[]): Agent[] {
   });
 }
 
+/**
+ * Tiered, live-evidence ranking for a category listing.
+ *
+ * The handshake verdict (trust_state) stays the primary signal - a verified agent
+ * outranks one that merely responded, whatever the latency - because that is the
+ * verification the product stands on, and it is a measure of reachability, never a
+ * popularity vote (invariant 2).
+ *
+ * Within a tier the order now follows MEASURED liveness from metric_values (7-day
+ * uptime, then p50 latency, then observation count) instead of a single last-probe
+ * round-trip. This is the "sorted by live evidence, not just handshake" behaviour
+ * the whole-agents work called for: an agent we have probed 243 times and found
+ * healthy is not placed behind one whose only signal is a one-off handshake.
+ *
+ * Honesty rules, unchanged from the rest of the registry:
+ *  - Agents with enough evidence to cross metric_values' observation floor (20
+ *    probes) sort before those still below it. Absence of evidence is never
+ *    treated as a poor score; it ranks after measured evidence, and degrades to
+ *    the old last-probe order rather than being called bad.
+ *  - A failed metrics read does not fabricate a ranking or break the listing; it
+ *    falls back to the pure ranker's behaviour and logs why.
+ */
+export async function rankAgentsByLiveEvidence(agents: Agent[], chainId = 56): Promise<Agent[]> {
+  const sql = db();
+  // tokenId -> measured liveness (only rows that cleared the observation floor).
+  let live = new Map<string, { uptime: number | null; p50: number | null; obs: number }>();
+  if (sql && agents.length) {
+    try {
+      const ids = agents.map((a) => a.token_id);
+      const rows = await sql<{
+        token_id: bigint | string;
+        metric_id: string;
+        value: number | null;
+        obs_count: number;
+      }[]>`
+        select token_id, metric_id, value, obs_count
+        from metric_values
+        where chain_id = ${chainId}
+          and (token_id)::text = any(${ids})
+          and metric_id in ('uptime_7d', 'latency_p50_7d')
+          and value is not null`;
+      for (const r of rows) {
+        const k = String(r.token_id);
+        const cur = live.get(k) ?? { uptime: null, p50: null, obs: 0 };
+        if (r.metric_id === "uptime_7d") cur.uptime = Number(r.value);
+        else {
+          cur.p50 = Number(r.value);
+          cur.obs = Number(r.obs_count);
+        }
+        live.set(k, cur);
+      }
+    } catch (err) {
+      console.warn(`[data] live-evidence metrics read failed: ${String(err).slice(0, 140)}`);
+      live = new Map();
+    }
+  }
+
+  const tierOf = (a: Agent) => {
+    const { state } = trustState(a);
+    return state === "VERIFIED" ? 0 : state === "LISTED" ? 1 : state === "DORMANT" ? 2 : 3;
+  };
+
+  return [...agents].sort((a, b) => {
+    const ta = tierOf(a);
+    const tb = tierOf(b);
+    if (ta !== tb) return ta - tb;
+
+    // Measured evidence before still-unmeasured, within the same tier.
+    const ma = live.get(a.token_id);
+    const mb = live.get(b.token_id);
+    const ea = ma?.uptime != null ? 0 : 1;
+    const eb = mb?.uptime != null ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+
+    // Higher 7-day uptime first.
+    const ua = ma?.uptime ?? -1;
+    const ub = mb?.uptime ?? -1;
+    if (ua !== ub) return ub - ua;
+
+    // Then lower p50 latency.
+    const pa = ma?.p50 ?? Number.MAX_SAFE_INTEGER;
+    const pb = mb?.p50 ?? Number.MAX_SAFE_INTEGER;
+    if (pa !== pb) return pa - pb;
+
+    // Then more observations (evidence weight, not popularity).
+    const oa = ma?.obs ?? 0;
+    const ob = mb?.obs ?? 0;
+    if (oa !== ob) return ob - oa;
+
+    // Degrade to the single-probe fallback, then a stable id.
+    const ra = a.probe?.rttMs ?? Number.MAX_SAFE_INTEGER;
+    const rb = b.probe?.rttMs ?? Number.MAX_SAFE_INTEGER;
+    if (ra !== rb) return ra - rb;
+
+    return Number(b.token_id) - Number(a.token_id);
+  });
+}
+
 /** Cap slots per operator - concentration is the central finding. */
 export function diversify<T extends Agent>(agents: T[], maxPerOperator = 3): T[] {
   const seen = new Map<string, number>();
