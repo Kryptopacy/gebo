@@ -322,25 +322,32 @@ export default function AssistantWidget() {
               gap: 8,
             }}
           >
-            <div>
-              <div style={{ fontWeight: 650, fontSize: "0.95rem" }}>GEBO assistant</div>
-              <div style={{ fontSize: "0.72rem", color: "var(--fg-3)" }}>
-                Read-only. It finds and explains; it never touches your wallet.
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/gebo-mark.png" alt="" width={22} height={22} />
+              <div>
+                <div style={{ fontWeight: 650, fontSize: "0.95rem" }}>GEBO assistant</div>
+                <div style={{ fontSize: "0.72rem", color: "var(--fg-3)" }}>
+                  Read-only. It finds and explains; it never touches your wallet.
+                </div>
               </div>
             </div>
             <button
               onClick={() => setOpen(false)}
+              onPointerDown={(e) => e.stopPropagation()}
               aria-label="Close assistant"
               style={{
                 background: "none",
                 border: "none",
-                color: "var(--fg-3)",
+                color: "var(--fg-2)",
                 cursor: "pointer",
-                fontSize: "1.1rem",
-                padding: 4,
+                fontSize: "1.3rem",
+                lineHeight: 1,
+                padding: "2px 6px",
+                borderRadius: 6,
               }}
             >
-              x
+              ×
             </button>
           </div>
 
@@ -477,30 +484,32 @@ export default function AssistantWidget() {
         </div>
       )}
 
-      <button
-        onClick={() => {
-          if (suppressClickRef.current) {
-            suppressClickRef.current = false;
-            return;
-          }
-          setOpen((v) => !v);
-        }}
-        onPointerDown={startDrag}
-        onPointerMove={onDragMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className="gebo-assistant-btn"
-        style={btnStyle}
-        data-busy={busy ? "true" : "false"}
-        aria-label={open ? "Close assistant" : "Open the GEBO assistant"}
-        title="GEBO assistant (drag to move)"
-      >
+      {!open && (
+        <button
+          onClick={() => {
+            if (suppressClickRef.current) {
+              suppressClickRef.current = false;
+              return;
+            }
+            setOpen((v) => !v);
+          }}
+          onPointerDown={startDrag}
+          onPointerMove={onDragMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          className="gebo-assistant-btn"
+          style={btnStyle}
+          data-busy={busy ? "true" : "false"}
+          aria-label={open ? "Close assistant" : "Open the GEBO assistant"}
+          title="GEBO assistant (drag to move)"
+        >
         <span style={{ position: "relative", display: "flex" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/gebo-mark.png" alt="" width={30} height={30} />
           {busy && <span className="gebo-assistant-ring" />}
         </span>
       </button>
+      )}
       <style>{WIDGET_CSS}</style>
     </>
   );

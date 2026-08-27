@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
-import { loadCensus } from "@/lib/data";
+import { loadCensus, loadAggregates, CATEGORIES, JUDGED_CATEGORIES, OTHER_CATEGORIES, type CategorySlug } from "@/lib/data";
 import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
 import AssistantWidget from "./assistant/AssistantWidget";
@@ -88,7 +88,23 @@ const themeInitScript = `
 })();
 `;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const [census, aggregates] = await Promise.all([loadCensus(), loadAggregates()]);
+  const categoryCounts = aggregates.categories ?? {};
+
+  const toWithCount = <T extends { slug: CategorySlug }>(c: T) => ({
+    slug: c.slug,
+    meta: c,
+    count: categoryCounts[c.slug] ?? 0,
+  });
+
+  const judgedWithCounts = JUDGED_CATEGORIES
+    .map(toWithCount)
+    .filter((c) => c.count > 0);
+  const otherWithCounts = OTHER_CATEGORIES
+    .map(toWithCount)
+    .filter((c) => c.count > 0);
+
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <head>
@@ -119,7 +135,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               />
             </form>
             <nav aria-label="Primary Navigation">
-              <CategoriesDropdown />
+              <CategoriesDropdown judged={judgedWithCounts} other={otherWithCounts} />
               <a href="/live">Liveness</a>
               <a href="/authority">Authority</a>
               <a href="/methodology">Methodology</a>
@@ -152,40 +168,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {/* Col 2: Structured Category Directory (Scalable) */}
               <div className="colophon-col">
                 <div className="colophon-title">
-                  <span>Verified Agent Jobs</span>
+                  <span>Verified Agent Jobs (Judged)</span>
                 </div>
                 <ul className="colophon-links">
-                  <li>
-                    <a href="/c/rebalancing">
-                      <span>Rebalancing</span>
-                      <span className="colophon-badge">PancakeSwap</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/c/grid">
-                      <span>Grid Trading</span>
-                      <span className="colophon-badge">DEX</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/c/yield">
-                      <span>Yield Routing</span>
-                      <span className="colophon-badge">Venus</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/c/health">
-                      <span>Health Factor Defence</span>
-                      <span className="colophon-badge">Lending</span>
-                    </a>
-                  </li>
+                  {judgedWithCounts.length > 0 ? (
+                    judgedWithCounts.map((c) => (
+                      <li key={c.slug}>
+                        <a href={`/c/${c.slug}`}>
+                          <span>{c.meta.job}</span>
+                          <span className="colophon-badge">{c.meta.venue}</span>
+                        </a>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="colophon-empty">No judged categories with agents yet</li>
+                  )}
                 </ul>
 
                 <div className="colophon-subtitle">Ecosystem Capabilities</div>
                 <ul className="colophon-links">
-                  <li><a href="/c/trading">Trading & Execution</a></li>
-                  <li><a href="/c/research">Research & Screening</a></li>
-                  <li><a href="/c/payments">Payments (x402)</a></li>
+                  {otherWithCounts.length > 0 ? (
+                    otherWithCounts.map((c) => (
+                      <li key={c.slug}>
+                        <a href={`/c/${c.slug}`}>
+                          <span>{c.meta.job}</span>
+                          <span className="colophon-badge">{c.meta.venue}</span>
+                        </a>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="colophon-empty">No ecosystem categories with agents yet</li>
+                  )}
                   <li>
                     <a href="/search" style={{ color: "var(--accent)" }}>
                       + Explore all capabilities →

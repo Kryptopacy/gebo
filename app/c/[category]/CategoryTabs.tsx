@@ -128,6 +128,10 @@ export default function CategoryTabs({
             <h2>Agents for this job</h2>
             <p className="prose sm" style={{ marginBottom: 0 }}>
               Verified agents first, then those that merely responded, then the unreachable.
+              Within each, ordered by our measured 7-day uptime and response latency from
+              the probe pipeline, where enough observations exist - never by popularity.
+            </p>
+            <p className="prose sm" style={{ marginBottom: 0 }}>
               No operator may take more than three places.
             </p>
 

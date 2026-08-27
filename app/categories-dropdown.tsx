@@ -2,8 +2,22 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import type { CategorySlug, CATEGORIES } from "@/lib/data";
 
-export function CategoriesDropdown() {
+type CategoryMeta = typeof CATEGORIES[CategorySlug];
+
+interface CategoryWithCount {
+  slug: CategorySlug;
+  meta: CategoryMeta;
+  count: number;
+}
+
+interface CategoriesDropdownProps {
+  judged: CategoryWithCount[];
+  other: CategoryWithCount[];
+}
+
+export function CategoriesDropdown({ judged, other }: CategoriesDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -19,7 +33,7 @@ export function CategoriesDropdown() {
   const handleMouseLeave = () => {
     timerRef.current = setTimeout(() => {
       setOpen(false);
-    }, 220); // 220ms grace period so moving cursor never drops menu
+    }, 220);
   };
 
   useEffect(() => {
@@ -43,6 +57,8 @@ export function CategoriesDropdown() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  const allCategories = [...judged, ...other];
 
   return (
     <div
@@ -82,45 +98,53 @@ export function CategoriesDropdown() {
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
-          <div className="nav-dropdown-section">
-            <div className="nav-dropdown-header">Verified Jobs (Judged)</div>
-            <div className="nav-dropdown-grid">
-              <Link href="/c/rebalancing" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Rebalancing</span>
-                <span className="nav-dropdown-desc">PancakeSwap V3 range manager</span>
-              </Link>
-              <Link href="/c/grid" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Grid Trading</span>
-                <span className="nav-dropdown-desc">Order ladder automation</span>
-              </Link>
-              <Link href="/c/yield" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Yield Routing</span>
-                <span className="nav-dropdown-desc">Lending optimizer across pools</span>
-              </Link>
-              <Link href="/c/health" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Health Factor</span>
-                <span className="nav-dropdown-desc">Liquidation defence on Venus</span>
-              </Link>
+          {judged.length > 0 && (
+            <div className="nav-dropdown-section">
+              <div className="nav-dropdown-header">Verified Jobs (Judged)</div>
+              <div className="nav-dropdown-grid">
+                {judged.map((c) => (
+                  <Link
+                    key={c.slug}
+                    href={`/c/${c.slug}`}
+                    className="nav-dropdown-item"
+                    onClick={() => setOpen(false)}
+                  >
+                    <span className="nav-dropdown-label">{c.meta.job}</span>
+                    <span className="nav-dropdown-desc">
+                      {c.meta.blurb} · {c.count} agents
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="nav-dropdown-section nav-dropdown-section-alt">
-            <div className="nav-dropdown-header">Ecosystem Categories</div>
-            <div className="nav-dropdown-grid">
-              <Link href="/c/trading" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Trading & Execution</span>
-                <span className="nav-dropdown-desc">DCA, arbitrage, intent solvers</span>
-              </Link>
-              <Link href="/c/research" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Research & Screening</span>
-                <span className="nav-dropdown-desc">Token analysis, signal screening</span>
-              </Link>
-              <Link href="/c/payments" className="nav-dropdown-item" onClick={() => setOpen(false)}>
-                <span className="nav-dropdown-label">Payments (x402)</span>
-                <span className="nav-dropdown-desc">Per-call micropayment agents</span>
-              </Link>
+          {other.length > 0 && (
+            <div className="nav-dropdown-section nav-dropdown-section-alt">
+              <div className="nav-dropdown-header">Ecosystem Categories</div>
+              <div className="nav-dropdown-grid">
+                {other.map((c) => (
+                  <Link
+                    key={c.slug}
+                    href={`/c/${c.slug}`}
+                    className="nav-dropdown-item"
+                    onClick={() => setOpen(false)}
+                  >
+                    <span className="nav-dropdown-label">{c.meta.job}</span>
+                    <span className="nav-dropdown-desc">
+                      {c.meta.blurb} · {c.count} agents
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {allCategories.length === 0 && (
+            <div className="nav-dropdown-section">
+              <div className="nav-dropdown-header">No categorized agents yet</div>
+            </div>
+          )}
 
           <div className="nav-dropdown-footer">
             <Link href="/search" className="nav-dropdown-footer-link" onClick={() => setOpen(false)}>
