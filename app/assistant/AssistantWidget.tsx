@@ -42,7 +42,10 @@ const WIDGET_CSS = `
 .gebo-assistant-btn {
   position: fixed; right: 20px; bottom: 20px; z-index: 1200;
   width: 52px; height: 52px; border-radius: 999px;
-  background: var(--surface);
+  /* --ink-850, not a custom token: this file once used var(--surface), which
+     no theme block defines, so the background resolved to nothing and the
+     widget rendered transparent over whatever sat beneath it. */
+  background: var(--ink-850);
   border: 1px solid var(--fg-4);
   cursor: grab; padding: 0;
   display: flex; align-items: center; justify-content: center;
@@ -268,7 +271,11 @@ export default function AssistantWidget() {
     const base: CSSProperties = {
       width: `min(${PANEL_W}px, calc(100vw - 32px))`,
       height: `min(${PANEL_H}px, calc(100vh - 120px))`,
-      background: "var(--surface)",
+      // Opaque and drawn from tokens the theme actually defines. The panel
+      // floats above the masthead (z-index 20 here vs the widget's 1200), so
+      // if this background is ever transparent again the nav dropdown shows
+      // straight through and both layers read as one garbled menu.
+      background: "var(--ink-850)",
       border: "1px solid var(--fg-4)",
       borderRadius: 14,
       display: "flex",
@@ -359,7 +366,10 @@ export default function AssistantWidget() {
                     onClick={() => send(s)}
                     style={{
                       textAlign: "left",
-                      background: "var(--bg)",
+                      // --ink-800: one step up from the --ink-850 panel so the
+                      // chips read as raised, not transparent. Was var(--bg),
+                      // which no theme block defines.
+                      background: "var(--ink-800)",
                       border: "1px solid var(--fg-4)",
                       borderRadius: 10,
                       color: "var(--fg)",
@@ -381,7 +391,9 @@ export default function AssistantWidget() {
                 style={{
                   alignSelf: m.role === "user" ? "flex-end" : "flex-start",
                   maxWidth: "88%",
-                  background: m.role === "user" ? "var(--accent)" : "var(--bg)",
+                  // --ink-800 for assistant bubbles: same reasoning as the
+                  // suggestion chips; var(--bg) here made bubbles transparent.
+                  background: m.role === "user" ? "var(--accent)" : "var(--ink-800)",
                   color: m.role === "user" ? "#0c0e12" : "var(--fg)",
                   borderRadius: 10,
                   padding: "8px 12px",
@@ -435,7 +447,7 @@ export default function AssistantWidget() {
               aria-label="Message the GEBO assistant"
               style={{
                 flex: 1,
-                background: "var(--bg)",
+                background: "var(--ink-850)",
                 border: "1px solid var(--fg-4)",
                 borderRadius: 8,
                 color: "var(--fg)",

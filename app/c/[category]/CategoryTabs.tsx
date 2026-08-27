@@ -78,7 +78,10 @@ export default function CategoryTabs({
               display: "flex",
               gap: 8,
               padding: "4px",
-              background: "var(--surface)",
+              // var(--surface) was never defined in any theme block, so this
+              // pill rail rendered transparent; --ink-850 is the token the
+              // rest of the design system uses for raised surfaces.
+              background: "var(--ink-850)",
               borderRadius: 10,
               width: "fit-content",
             }}
@@ -95,7 +98,9 @@ export default function CategoryTabs({
                   fontSize: "0.85rem",
                   fontWeight: tab === t ? 600 : 400,
                   background: tab === t ? "var(--accent)" : "transparent",
-                  color: tab === t ? "var(--bg)" : "var(--fg-3)",
+                  // Dark ink on the yellow accent, matching the assistant
+                  // widget's on-accent text. var(--bg) was undefined.
+                  color: tab === t ? "#0c0e12" : "var(--fg-3)",
                   transition: "all 0.15s",
                 }}
               >
