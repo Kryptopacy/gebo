@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "description": "GEBO â€” verification-first agent registry for BNB Smart Chain",
-
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,10 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify": "tsc --noEmit && vitest run && next build",
-
     "migrate": "tsx scripts/migrate.ts",
     "db:check": "tsx scripts/db-check.ts",
-
     "sync": "tsx scripts/sync-registry.ts",
     "sync:backfill": "tsx scripts/sync-registry.ts --backfill",
     "resolve": "tsx scripts/resolve-pending.ts",
@@ -24,7 +21,6 @@
     "probe:due": "tsx scripts/probe-agents.ts --due",
     "opportunities": "tsx scripts/index-opportunities.ts",
     "classify": "tsx scripts/classify-agents.ts",
-
     "stats": "tsx scripts/show-stats.ts",
     "readiness": "tsx scripts/readiness.ts",
     "measure:b402": "tsx scripts/measure-b402.ts",
@@ -38,7 +34,6 @@
     "classify:drift": "tsx scripts/check-classify-drift.ts",
     "categories:emerging": "tsx scripts/emerging-categories.ts",
     "docs:measurements": "tsx scripts/write-measurements.ts",
-
     "keys:gen": "tsx scripts/gen-keys.ts",
     "spike:altana": "tsx scripts/spike-altana.ts",
     "spike:altana:mainnet": "tsx scripts/spike-altana.ts --mainnet",
@@ -47,6 +42,7 @@
   },
   "dependencies": {
     "@altananetwork/sdk": "^0.8.0",
+    "@google/genai": "^2.17.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "next": "^15.5.0",

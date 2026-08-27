@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { loadCensus } from "@/lib/data";
 import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
+import AssistantWidget from "./assistant/AssistantWidget";
 import "./globals.css";
 
 const sans = Geist({
@@ -128,6 +129,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         {children}
+
+        <AssistantWidget />
 
         <footer className="colophon">
           <div className="shell">
