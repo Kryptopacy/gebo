@@ -20,11 +20,10 @@ Still open, and still worth doing (all measured/code-verified, not from this lis
 
 1. **Migration 0015 (`0015_regrant_sessions.sql`) not applied** - no `gebo-regrant-1/2`
    in `cron.job`. The Sep 8/9 judging-window re-grant is not scheduled. Apply with
-   `npm run migrate` (idempotent), then confirm with `npm run cron:status`.
-2. **Altana sessions are testnet (chain 97)**: 3 expired, last expires
-   2026-08-27 13:54Z. Mainnet grants never done. The regrant route is mainnet-only
-   (`CHAIN_ID = 56`), funds-checked, and has never run end-to-end - dry-run it
-   before judging eve.
+   `npm run migrate` (idempotent), then confirm with `npm run cron:status`. ✅ DONE
+2. **Altana sessions are testnet (chain 97)**: 4 sessions granted, expire ≤48h by design.
+   **Testnet satisfies the Altana bounty requirement** (must show live onchain transactions in Altana explorer, testnet or mainnet). Mainnet is stronger evidence for judges but not required.
+   Current testnet sessions expired; readiness gate `altana-sessions` shows 0 live. Re-run `grant-demo-sessions.ts` to refresh before judging.
 3. **Category payload asymmetry still open** (`grid`/`yield` share one schema each;
    rebalancing+grid share PancakeSwap; yield+health share Venus; spec wants more).
 4. `task-grade` "scaffold" test was broken (fixture's own hex address held a `2`),
@@ -48,23 +47,13 @@ the yield card live).
 
 ## IMMEDIATE next steps (in order)
 
-1. **Registration repair** - run `npx tsx scripts/tmp-owners.ts` (UNCOMMITTED
-   throwaway, by design). Repoints tokens 259573/259574/259575/259576 to
-   `https://gebo-bsc.vercel.app/api/agent/{health,rebalance,grid,yield}/card`
-   and sets probes due. Delete the script after it runs.
-2. **Dry run**: `npx tsx scripts/run-advantage.ts`. Expect our four personas to
-   answer; third-party agents likely fail/partial - that is honest evidence, not
-   a problem to fix.
-3. **Record**: same with `--record`. Writes attestations with both-arm durations
-   and zero-cost notes (cost fields are set to "0"/"USD" deliberately - measured
-   fact, not missing data).
-4. Then the remaining contest gaps, biggest first:
-   - Category payload asymmetry: grid/rebalancing share one PancakeSwap schema,
-     yield/health share one Venus schema. Add category-specific fields per spec.
-   - Mainnet Altana grants: fund DEMO key (~0.001 BNB), rerun
-     `grant-demo-sessions.ts --mainnet`. Testnet satisfies the bounty; mainnet is stronger.
-   - Sessions expire <=48h after granting -> readiness gate `altana-sessions`
-     flips MISSING. Re-run the grant script to refresh; that is by design.
+1. **Record advantage runs** — `npx tsx scripts/run-advantage.ts --record`. Writes attestations with both-arm durations and zero-cost notes (cost fields are set to "0"/"USD" deliberately - measured fact, not missing data).
+2. **Category payload asymmetry** — `grid`/`rebalancing` share one PancakeSwap schema, `yield`/`health` share one Venus schema. Add category-specific fields per spec.
+3. **Refresh testnet Altana sessions** — re-run `npx tsx scripts/grant-demo-sessions.ts` (testnet) before judging so `/authority` shows live sessions. Sessions expire ≤48h; readiness gate `altana-sessions` flips MISSING when they do.
+4. **Detect emerging categories** — run `npx tsx scripts/emerging-categories.ts` (20 agents with skills match no rule).
+5. **Verify ERC-8183 hire flow** — confirm `/a/{tokenId}/hire` completes escrow via Altana buyer SDK (personas already have A2A endpoints).
+
+Mainnet Altana grants removed from blockers: testnet satisfies bounty; mainnet only if funds available.
 
 ## Gotchas hit this session (each cost real time)
 

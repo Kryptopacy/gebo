@@ -752,9 +752,12 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
   ],
   grid: [
     { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
+    { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
     { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
     { key: "observationCardinality", label: "Oracle slots", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
     { key: "unlocked", label: "Pool state", fmt: (v) => (v === false ? "locked" : "unlocked") },
+    { key: "reserveA", label: "Reserve A", fmt: (v, p) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18 ${p.tokenA ?? ""}`), align: "right" },
+    { key: "reserveB", label: "Reserve B", fmt: (v, p) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18 ${p.tokenB ?? ""}`), align: "right" },
   ],
   yield: [
     { key: "supplyAprPct", label: "Supply APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
@@ -767,6 +770,9 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
     { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
     { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null ? "—" : `${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
     { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
+    { key: "totalBorrows", label: "Total borrows", fmt: (v) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
+    { key: "cash", label: "Cash", fmt: (v) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
+    { key: "reserveFactor", label: "Reserve factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
   ],
 };
 
