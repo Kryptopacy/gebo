@@ -6,13 +6,22 @@
  * explains; anything that touches a wallet happens in the hire flow, never
  * here.
  *
- * Inline styles only: the visual layer (globals.css) is owned separately, and
- * a self-contained widget cannot break the rest of the page if those styles
- * change underneath it.
+ * DRAGGABLE. The button (and the panel, by its header) can be grabbed and
+ * moved anywhere on screen; the spot persists in localStorage. The button's
+ * position is the single source of truth and the panel anchors to it,
+ * clamped to the viewport. A 6px movement threshold separates a drag from a
+ * click, so tapping still toggles the panel. Pointer events cover mouse and
+ * touch; touch-action:none stops the page scrolling mid-drag.
+ *
+ * Styles live here rather than in globals.css so the widget is self-contained.
+ * Class names are prefixed so they cannot collide. All animation is off under
+ * prefers-reduced-motion.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 type Msg = { role: "user" | "assistant"; text: string };
+type Pos = { x: number; y: number };
 
 const SUGGESTIONS = [
   "What agents can watch my Venus lending position?",
@@ -21,22 +30,26 @@ const SUGGESTIONS = [
   "How many registered agents are actually hireable?",
 ];
 
-/**
- * Widget styles live here rather than in globals.css because the visual layer
- * is owned separately. Class names are prefixed so they cannot collide.
- * All animation is off under prefers-reduced-motion.
- */
+const BTN_SIZE = 52;
+const PANEL_W = 380;
+const PANEL_H = 540;
+const MARGIN = 8;
+const GAP = 12;
+const DRAG_THRESHOLD = 6;
+const POS_KEY = "gebo-assistant-pos";
+
 const WIDGET_CSS = `
 .gebo-assistant-btn {
   position: fixed; right: 20px; bottom: 20px; z-index: 1200;
   width: 52px; height: 52px; border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--fg-4);
-  cursor: pointer; padding: 0;
+  cursor: grab; padding: 0;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 4px 14px rgba(0,0,0,0.28);
   transition: box-shadow 0.2s ease, filter 0.2s ease;
   animation: gebo-enter 0.5s ease-out, gebo-breathe 3.4s ease-in-out 0.5s infinite;
+  touch-action: none; user-select: none; -webkit-user-select: none;
 }
 .gebo-assistant-btn:hover { filter: brightness(1.12); box-shadow: 0 6px 20px rgba(0,0,0,0.38); }
 .gebo-assistant-btn[data-busy="true"] { animation-play-state: paused; }
@@ -45,6 +58,9 @@ const WIDGET_CSS = `
   position: absolute; inset: -3px; border-radius: 999px;
   border: 2px solid var(--accent); border-top-color: transparent;
   animation: gebo-spin 0.9s linear infinite;
+}
+.gebo-assistant-head {
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
 }
 @keyframes gebo-enter { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
 @keyframes gebo-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
@@ -55,9 +71,30 @@ const WIDGET_CSS = `
 }
 `;
 
+function viewport() {
+  return {
+    w: typeof window === "undefined" ? 1280 : window.innerWidth,
+    h: typeof window === "undefined" ? 800 : window.innerHeight,
+  };
+}
+
+/** Default resting spot: bottom-right corner, matching the CSS pre-mount. */
+function defaultPos(): Pos {
+  const { w, h } = viewport();
+  return { x: w - BTN_SIZE - 20, y: h - BTN_SIZE - 20 };
+}
+
+function clampPos(p: Pos): Pos {
+  const { w, h } = viewport();
+  return {
+    x: Math.min(Math.max(p.x, MARGIN), Math.max(MARGIN, w - BTN_SIZE - MARGIN)),
+    y: Math.min(Math.max(p.y, MARGIN), Math.max(MARGIN, h - BTN_SIZE - MARGIN)),
+  };
+}
+
 /** Minimal markdown: links, bold, line breaks. Nothing else is interpreted. */
-function renderInline(text: string, keyPrefix: string) {
-  const parts: React.ReactNode[] = [];
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  const parts: ReactNode[] = [];
   const re = /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*/g;
   let last = 0;
   let m: RegExpExecArray | null;
@@ -105,11 +142,91 @@ export default function AssistantWidget() {
   const [busy, setBusy] = useState(false);
   const [interactionId, setInteractionId] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
+  // null until mount: the CSS class holds the default bottom-right spot so
+  // server and first client render match, then stored/default pos takes over.
+  const [pos, setPos] = useState<Pos | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; base: Pos; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(POS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as { x?: unknown; y?: unknown };
+        if (typeof p.x === "number" && typeof p.y === "number") {
+          setPos(clampPos({ x: p.x, y: p.y }));
+          return;
+        }
+      }
+    } catch {
+      // unreadable stored position falls through to the default
+    }
+    setPos(defaultPos());
+  }, []);
+
+  // A stored spot can end up off-screen after a window resize.
+  useEffect(() => {
+    if (!pos) return;
+    const onResize = () => setPos((p) => (p ? clampPos(p) : p));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [pos]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [msgs, busy, open]);
+
+  // ── drag ────────────────────────────────────────────────────────────────
+  // Works on both the button and the panel header; both move the same
+  // underlying position, so the pair stays one unit.
+
+  const startDrag = useCallback(
+    (e: ReactPointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      dragRef.current = { startX: e.clientX, startY: e.clientY, base: pos ?? defaultPos(), moved: false };
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {
+        // capture is best-effort; tracking still works within the element
+      }
+    },
+    [pos],
+  );
+
+  const onDragMove = useCallback((e: ReactPointerEvent) => {
+    const st = dragRef.current;
+    if (!st) return;
+    const dx = e.clientX - st.startX;
+    const dy = e.clientY - st.startY;
+    if (!st.moved && Math.abs(dx) + Math.abs(dy) <= DRAG_THRESHOLD) return;
+    st.moved = true;
+    setPos(clampPos({ x: st.base.x + dx, y: st.base.y + dy }));
+  }, []);
+
+  const endDrag = useCallback((e: ReactPointerEvent) => {
+    const st = dragRef.current;
+    dragRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // already released
+    }
+    if (st?.moved) {
+      suppressClickRef.current = true;
+      setPos((p) => {
+        const c = clampPos(p ?? defaultPos());
+        try {
+          localStorage.setItem(POS_KEY, JSON.stringify(c));
+        } catch {
+          // private mode: position just will not persist
+        }
+        return c;
+      });
+    }
+  }, []);
+
+  // ── chat ────────────────────────────────────────────────────────────────
 
   async function send(text: string) {
     const q = text.trim();
@@ -145,27 +262,50 @@ export default function AssistantWidget() {
     }
   }
 
-  const panelStyle: React.CSSProperties = {
-    position: "fixed",
-    right: 20,
-    bottom: 84,
-    width: "min(380px, calc(100vw - 32px))",
-    height: "min(540px, calc(100vh - 120px))",
-    background: "var(--surface)",
-    border: "1px solid var(--fg-4)",
-    borderRadius: 14,
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    zIndex: 1200,
-    boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-  };
+  // Panel anchors to the button: right edges aligned, panel above the button.
+  // Clamped to the viewport, flipping below the button when there is no room.
+  const panelStyle: CSSProperties = (() => {
+    const base: CSSProperties = {
+      width: `min(${PANEL_W}px, calc(100vw - 32px))`,
+      height: `min(${PANEL_H}px, calc(100vh - 120px))`,
+      background: "var(--surface)",
+      border: "1px solid var(--fg-4)",
+      borderRadius: 14,
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      zIndex: 1200,
+      boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+    };
+    if (!pos) {
+      return { ...base, position: "fixed" as const, right: 20, bottom: 84 };
+    }
+    const { w, h } = viewport();
+    const pw = Math.min(PANEL_W, w - 32);
+    const ph = Math.min(PANEL_H, h - 120);
+    let left = pos.x + BTN_SIZE - pw;
+    let top = pos.y - ph - GAP;
+    if (top < MARGIN) top = pos.y + BTN_SIZE + GAP;
+    left = Math.min(Math.max(left, MARGIN), Math.max(MARGIN, w - pw - MARGIN));
+    top = Math.min(Math.max(top, MARGIN), Math.max(MARGIN, h - ph - MARGIN));
+    return { ...base, position: "fixed" as const, left, top };
+  })();
+
+  const btnStyle: CSSProperties | undefined = pos
+    ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" }
+    : undefined;
 
   return (
     <>
       {open && (
         <div style={panelStyle} role="dialog" aria-label="GEBO assistant">
           <div
+            className="gebo-assistant-head"
+            onPointerDown={startDrag}
+            onPointerMove={onDragMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            title="Drag to move the assistant"
             style={{
               padding: "12px 16px",
               borderBottom: "1px solid var(--fg-4)",
@@ -326,11 +466,22 @@ export default function AssistantWidget() {
       )}
 
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false;
+            return;
+          }
+          setOpen((v) => !v);
+        }}
+        onPointerDown={startDrag}
+        onPointerMove={onDragMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
         className="gebo-assistant-btn"
+        style={btnStyle}
         data-busy={busy ? "true" : "false"}
         aria-label={open ? "Close assistant" : "Open the GEBO assistant"}
-        title="GEBO assistant"
+        title="GEBO assistant (drag to move)"
       >
         <span style={{ position: "relative", display: "flex" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
