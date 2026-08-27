@@ -24,8 +24,17 @@
  * which understates the manual cost and therefore understates any agent advantage.
  * Stated rather than quietly enjoyed, and repeated in the UI.
  *
- * Run: npx tsx scripts/run-advantage.ts            (dry run)
- *      npx tsx scripts/run-advantage.ts --record   (writes attestations)
+ * Run: npx tsx scripts/run-advantage.ts [--record] [--limit <n>] [--category <slug> ...]
+ *
+ *   --record            write attested evidence rows (gebo_task) for each run
+ *   --limit <n>         how many verified a2a agents to ask (default 4)
+ *   --category <slug>   restrict to these categories; repeatable. Defaults to the
+ *                       three judged ones the harness was built around. Pass one
+ *                       here (or many) to widen coverage to the whole verified
+ *                       population - the "same thoroughness for all agents" goal.
+ *
+ * Without --record the harness is a dry run: it measures, grades and prints, but
+ * never writes to the evidence ledger, so it is safe to point at any agent.
  */
 import "dotenv/config";
 import postgres from "postgres";
@@ -35,8 +44,30 @@ import { bsc } from "viem/chains";
 import { healthFactorFor, summarise, bestSupplyApr } from "../src/lib/venus.ts";
 import { gradeNumericAnswer, parseAgentReply, structuredReplyText, rpcErrorMessage } from "../src/lib/task-grade.ts";
 
-const RECORD = process.argv.includes("--record");
+const args = process.argv.slice(2);
+const RECORD = args.includes("--record");
 const TIMEOUT_MS = 45_000;
+
+/** --limit <n>: how many verified a2a agents to ask (default 4 for a bounded run). */
+const LIMIT = (() => {
+  const i = args.indexOf("--limit");
+  const n = i >= 0 ? Number(args[i + 1]) : 4;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 4;
+})();
+
+/** --category <slug> (repeatable). Defaults to the judged categories the harness targets. */
+const SCOPE_CATEGORIES = (() => {
+  const cats: string[] = [];
+  args.forEach((a, i) => {
+    if (a === "--category") {
+      const nxt = args[i + 1];
+      // Only honour a real slug: "--category --other" or "--category" as the
+      // last token must not pollute the category filter with a flag or undefined.
+      if (nxt && !nxt.startsWith("--")) cats.push(nxt);
+    }
+  });
+  return cats.length ? cats : ["health", "rebalancing", "grid"];
+})();
 
 /** Addresses with known, validated Venus state. Chosen for variety of outcome. */
 const SUBJECTS: { address: Address; note: string }[] = [
@@ -185,17 +216,40 @@ const agents = await sql<{ token_id: string; name: string | null; category: stri
   join agent_endpoints e on e.chain_id = a.chain_id and e.token_id = a.token_id
   where a.chain_id = 56
     and a.trust_state = 'VERIFIED'
-    and a.category in ('health', 'rebalancing', 'grid')
+    and a.category = any(${SCOPE_CATEGORIES})
     and e.kind = 'a2a'
   order by (a.category = 'health') desc, a.token_id desc
-  limit 4
+  limit ${LIMIT}
 `;
+
+/** How much of the verified population we already have evidence for (coverage). */
+const coverage = await sql<{ category: string | null; total: number; with_evidence: number }[]>`
+  select a.category,
+         count(distinct a.token_id)::int                      as total,
+         count(distinct case when atn.token_id is not null then a.token_id end)::int as with_evidence
+  from agents a
+  join agent_endpoints e on e.chain_id = a.chain_id and e.token_id = a.token_id and e.kind = 'a2a'
+  left join attestations atn
+    on atn.chain_id = a.chain_id and atn.token_id = a.token_id and atn.evidence_kind = 'gebo_task'
+  where a.chain_id = 56
+    and a.trust_state = 'VERIFIED'
+    and a.category = any(${SCOPE_CATEGORIES})
+  group by a.category
+  order by a.category`;
 
 console.log(`\n  AGENT ADVANTAGE: ${TASKS.length} tasks x ${agents.length} registered agents`);
 console.log(`  ${"=".repeat(70)}`);
 console.log(`  mode      ${RECORD ? "RECORD" : "dry run"}`);
 console.log(`  tasks     ${TASKS.map((t) => t.id).join(", ")}`);
-console.log(`  agents    ${agents.length} registered\n`);
+console.log(`  categories ${SCOPE_CATEGORIES.join(", ")}`);
+console.log(`  --limit   ${LIMIT}`);
+console.log(`  agents    ${agents.length} registered`);
+console.log("\n  coverage (verified a2a agents vs. how many already carry gebo_task evidence):");
+for (const c of coverage) {
+  const pct = c.total ? Math.round(((c.with_evidence ?? 0) / c.total) * 100) : 0;
+  console.log(`    ${String(c.category).padEnd(14)} ${String(c.total).padStart(4)} total, ${String(c.with_evidence ?? 0).padStart(4)} with evidence  (${pct}%)`);
+}
+console.log(`\n`);
 
 /**
  * Resolve the endpoint a card advertises, which is where a client must send work.
