@@ -9,15 +9,15 @@ type CategoryMeta = typeof CATEGORIES[CategorySlug];
 interface CategoryWithCount {
   slug: CategorySlug;
   meta: CategoryMeta;
-  count: number;
+  /** null = the count read failed; render without a number rather than as zero. */
+  count: number | null;
 }
 
 interface CategoriesDropdownProps {
-  judged: CategoryWithCount[];
-  other: CategoryWithCount[];
+  categories: CategoryWithCount[];
 }
 
-export function CategoriesDropdown({ judged, other }: CategoriesDropdownProps) {
+export function CategoriesDropdown({ categories }: CategoriesDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -58,7 +58,7 @@ export function CategoriesDropdown({ judged, other }: CategoriesDropdownProps) {
     };
   }, []);
 
-  const allCategories = [...judged, ...other];
+  const allCategories = categories;
 
   return (
     <div
@@ -98,53 +98,25 @@ export function CategoriesDropdown({ judged, other }: CategoriesDropdownProps) {
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
-          {judged.length > 0 && (
-            <div className="nav-dropdown-section">
-              <div className="nav-dropdown-header">Verified Jobs (Judged)</div>
-              <div className="nav-dropdown-grid">
-                {judged.map((c) => (
-                  <Link
-                    key={c.slug}
-                    href={`/c/${c.slug}`}
-                    className="nav-dropdown-item"
-                    onClick={() => setOpen(false)}
-                  >
-                    <span className="nav-dropdown-label">{c.meta.job}</span>
-                    <span className="nav-dropdown-desc">
-                      {c.meta.blurb} · {c.count} agents
-                    </span>
-                  </Link>
-                ))}
-              </div>
+          <div className="nav-dropdown-section">
+            <div className="nav-dropdown-header">Agent Jobs</div>
+            <div className="nav-dropdown-grid">
+              {allCategories.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/c/${c.slug}`}
+                  className="nav-dropdown-item"
+                  onClick={() => setOpen(false)}
+                >
+                  <span className="nav-dropdown-label">{c.meta.job}</span>
+                  <span className="nav-dropdown-desc">
+                    {c.meta.blurb}
+                    {c.count !== null ? ` · ${c.count} agents` : ""}
+                  </span>
+                </Link>
+              ))}
             </div>
-          )}
-
-          {other.length > 0 && (
-            <div className="nav-dropdown-section nav-dropdown-section-alt">
-              <div className="nav-dropdown-header">Ecosystem Categories</div>
-              <div className="nav-dropdown-grid">
-                {other.map((c) => (
-                  <Link
-                    key={c.slug}
-                    href={`/c/${c.slug}`}
-                    className="nav-dropdown-item"
-                    onClick={() => setOpen(false)}
-                  >
-                    <span className="nav-dropdown-label">{c.meta.job}</span>
-                    <span className="nav-dropdown-desc">
-                      {c.meta.blurb} · {c.count} agents
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {allCategories.length === 0 && (
-            <div className="nav-dropdown-section">
-              <div className="nav-dropdown-header">No categorized agents yet</div>
-            </div>
-          )}
+          </div>
 
           <div className="nav-dropdown-footer">
             <Link href="/search" className="nav-dropdown-footer-link" onClick={() => setOpen(false)}>

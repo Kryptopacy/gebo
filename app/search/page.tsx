@@ -25,9 +25,12 @@ export default async function SearchPage({
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
 
-  const [hits, facets] = q
-    ? await Promise.all([searchAgents(q, 60), searchFacets(q)])
-    : [[], []];
+  // Sequential, not Promise.all: two concurrent queries means two pool
+  // connections on a cold instance, and concurrent connection establishment
+  // through the Supabase pooler stalls hard enough from the deploy region to
+  // hang the page. One connection, two round trips, renders in ~2s.
+  const hits = q ? await searchAgents(q, 60) : [];
+  const facets = q ? await searchFacets(q) : [];
 
   const byState = (s: string) => hits.filter((h) => trustState(h.agent).state === s).length;
 

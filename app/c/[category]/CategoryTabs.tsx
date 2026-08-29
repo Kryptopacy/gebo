@@ -20,13 +20,13 @@ type Opportunity = {
   ref: string;
   eligible: boolean;
   ineligibleReason: string | null;
-  payload: Record<string, unknown>;
+  /** Pre-formatted cell values, one per column, built on the server. */
+  cells: string[];
 };
 
 type Column = {
   key: string;
   label: string;
-  fmt: (v: unknown, p: Record<string, unknown>) => string;
   align?: "right";
 };
 
@@ -52,7 +52,7 @@ export default function CategoryTabs({
   ineligible,
   cols,
   oppGrid,
-  tally,
+  counts,
   cat,
   slug,
 }: {
@@ -62,7 +62,8 @@ export default function CategoryTabs({
   ineligible: Opportunity[];
   cols: Column[];
   oppGrid: string;
-  tally: (s: string) => number;
+  /** Precomputed trust-state tallies; functions cannot cross the RSC boundary. */
+  counts: { VERIFIED: number; LISTED: number; DORMANT: number; SHADOWED: number };
   cat: { counterfactual: string; floor: string; judged: boolean };
   slug: string;
 }) {
@@ -248,13 +249,13 @@ export default function CategoryTabs({
                           {VENUE_LABEL[o.venue] ?? o.venue} &middot; {o.ref.slice(0, 10)}&hellip;
                         </div>
                       </div>
-                      {cols.map((c) => (
+                      {cols.map((c, i) => (
                         <div
                           key={c.key}
                           className="num sm"
                           style={{ textAlign: c.align === "right" ? "right" : "left" }}
                         >
-                          {c.fmt(o.payload[c.key], o.payload)}
+                          {o.cells[i]}
                         </div>
                       ))}
                     </a>
@@ -287,7 +288,7 @@ export default function CategoryTabs({
                             {o.ref.slice(0, 10)}&hellip;
                           </div>
                         </div>
-                        {cols.map((c) => (
+                        {cols.map((c, i) => (
                           <div
                             key={c.key}
                             className="num sm"
@@ -295,7 +296,7 @@ export default function CategoryTabs({
                               textAlign: c.align === "right" ? "right" : "left",
                             }}
                           >
-                            {c.fmt(o.payload[c.key], o.payload)}
+                            {o.cells[i]}
                           </div>
                         ))}
                       </a>
@@ -346,31 +347,31 @@ export default function CategoryTabs({
                 <dt>Verified</dt>
                 <dd
                   style={{
-                    color: tally("VERIFIED") ? "var(--pass)" : "var(--fg-4)",
+                    color: counts.VERIFIED ? "var(--pass)" : "var(--fg-4)",
                   }}
                 >
-                  {tally("VERIFIED")}
+                  {counts.VERIFIED}
                 </dd>
                 <div className="qualifier">Completed an A2A or MCP handshake</div>
               </div>
               <div className="kpi-card">
                 <dt>Listed</dt>
-                <dd>{tally("LISTED")}</dd>
+                <dd>{counts.LISTED}</dd>
                 <div className="qualifier">Responded without speaking the protocol</div>
               </div>
               <div className="kpi-card">
                 <dt>Dormant</dt>
-                <dd className="t-4">{tally("DORMANT")}</dd>
+                <dd className="t-4">{counts.DORMANT}</dd>
                 <div className="qualifier">No usable response from our probe</div>
               </div>
               <div className="kpi-card">
                 <dt>Shadowed</dt>
                 <dd
                   style={{
-                    color: tally("SHADOWED") ? "var(--fail)" : "var(--fg-4)",
+                    color: counts.SHADOWED ? "var(--fail)" : "var(--fg-4)",
                   }}
                 >
-                  {tally("SHADOWED")}
+                  {counts.SHADOWED}
                 </dd>
                 <div className="qualifier">
                   Fatal registration defect &mdash; uncallable by any client
@@ -380,7 +381,7 @@ export default function CategoryTabs({
 
             <div className="stack-sm mt-l" style={{ gap: 12 }}>
               <div className="notice">
-                Performance in this category will be judged{" "}
+                Performance in this category is measured{" "}
                 <strong>{cat.counterfactual}</strong>. No figure appears until an agent
                 has at least <strong>{cat.floor}</strong> behind it.
               </div>

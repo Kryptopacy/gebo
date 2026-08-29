@@ -10,8 +10,19 @@
  * result in the revert data — so it must be simulated, not read. Using
  * readContract here fails, which is a common integration mistake.
  */
-import { createPublicClient, http, fallback, parseAbi, formatUnits, type Address, type PublicClient } from "viem";
-import { bsc } from "viem/chains";
+import { createPublicClient, http, fallback, parseAbi, formatUnits, defineChain, type Address, type PublicClient } from "viem";
+// Inline chain definition, not the "viem/chains" barrel: viem 2.55 has no
+// per-chain subpath export, and the barrel evaluates ~500 chain modules
+// (measured 15s+ per fresh dev worker on this machine - the cause of the hire
+// page "navigation keeps timing out"). viem's own bsc is a plain defineChain
+// object with no formatters, so this is equivalent.
+const bsc = defineChain({
+  id: 56,
+  name: "BNB Smart Chain",
+  nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+  rpcUrls: { default: { http: ["https://bsc-rpc.publicnode.com"] } },
+  blockExplorers: { default: { name: "BscScan", url: "https://bscscan.com" } },
+});
 import { TOKENS } from "./session-scope.ts";
 
 const QUOTER_V2 = "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997" as const;

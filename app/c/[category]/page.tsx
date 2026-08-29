@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import {
-  CATEGORIES, type CategorySlug, loadAgents, agentsByCategory, rankAgentsByLiveEvidence,
+  CATEGORIES, type CategorySlug, agentsInCategory, rankAgentsByLiveEvidence,
   diversify, trustState, classify, opportunitiesFor, OPPORTUNITY_COLUMNS,
 } from "@/lib/data";
 import CategoryTabs from "./CategoryTabs";
@@ -18,16 +18,30 @@ export default async function CategoryPage({
   const slug = category as CategorySlug;
   const cat = CATEGORIES[slug];
 
-  const inCat = agentsByCategory(await loadAgents()).get(slug) ?? [];
+  const inCat = await agentsInCategory(slug);
   const ranked = diversify(await rankAgentsByLiveEvidence(inCat), 3);
 
   const opps = await opportunitiesFor(slug);
-  const eligible = opps.filter((o) => o.eligible);
-  const ineligible = opps.filter((o) => !o.eligible);
-  const cols = OPPORTUNITY_COLUMNS[slug] ?? [];
+  // Cell values are formatted on the server: OPPORTUNITY_COLUMNS carries fmt
+  // functions, and functions cannot cross the server/client boundary into
+  // CategoryTabs. The client renders strings and alignment only.
+  const colDefs = OPPORTUNITY_COLUMNS[slug] ?? [];
+  const cols = colDefs.map(({ key, label, align }) => ({ key, label, align }));
+  const oppsWithCells = opps.map((o) => ({
+    ...o,
+    cells: colDefs.map((c) => c.fmt(o.payload[c.key], o.payload)),
+  }));
+  const eligible = oppsWithCells.filter((o) => o.eligible);
+  const ineligible = oppsWithCells.filter((o) => !o.eligible);
   const oppGrid = `minmax(0,1.6fr) ${cols.map(() => "7.5rem").join(" ")}`;
 
   const tally = (s: string) => inCat.filter((a) => trustState(a).state === s).length;
+  const counts = {
+    VERIFIED: tally("VERIFIED"),
+    LISTED: tally("LISTED"),
+    DORMANT: tally("DORMANT"),
+    SHADOWED: tally("SHADOWED"),
+  };
   const operators = new Set(inCat.map((a) => a.operator?.key)).size;
 
   return (
@@ -58,12 +72,12 @@ export default async function CategoryPage({
       {/* Tabbed content */}
       <CategoryTabs
         ranked={ranked}
-        opps={opps}
+        opps={oppsWithCells}
         eligible={eligible}
         ineligible={ineligible}
         cols={cols}
         oppGrid={oppGrid}
-        tally={tally}
+        counts={counts}
         cat={{ counterfactual: cat.counterfactual, floor: cat.floor, judged: cat.judged }}
         slug={slug}
       />

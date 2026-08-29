@@ -1,5 +1,6 @@
-import { loadAgents, funnel, POPULATION } from "@/lib/data";
+import { loadAgents, funnel, POPULATION, loadCategoryCandidates } from "@/lib/data";
 import { METRIC_DEFS, OBS_FLOOR, WINDOW as METRIC_WINDOW } from "@/lib/metrics";
+import MethodologyTabs from "./MethodologyTabs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,8 +42,6 @@ const MEASURES = [
     defect:
       "Computed per agent across all its declared endpoints; a multi-endpoint agent's figure blends them. The registry entry carries the full formula and defects.",
   },
-  // Liveness metrics render straight from the registry in src/lib/metrics.ts,
-  // so these rows can never drift from what is actually stored and shown.
   ...Object.entries(METRIC_DEFS).map(([id, d]) => ({
     name: id.replace(/_/g, " "),
     definition: `${d.display}: ${d.formula}. Denominator: ${d.denominator}. Costs: ${d.costTreatment}.`,
@@ -61,7 +60,8 @@ const REFUSED = [
 ];
 
 export default async function Methodology() {
-  const f = funnel(await loadAgents());
+  const [agents, candReport] = await Promise.all([loadAgents(), loadCategoryCandidates()]);
+  const f = funnel(agents);
 
   const defects: [string, string][] = [
     ["Single-region probing", "One vantage point. An agent that blocks our region or network appears dead. We cannot distinguish being down from being unreachable from here."],
@@ -69,26 +69,13 @@ export default async function Methodology() {
     ["One observation per agent", "A single transient failure counts as a failure here. Nothing is ever written on-chain from one observation."],
     ["Protocol overlap not deduplicated", `An agent declaring both MCP and A2A counts once per protocol in population figures, so ${POPULATION.callableUpperBound.toLocaleString()} is an upper bound.`],
     ["Counts drift", `Registration is continuous, at roughly ${POPULATION.newAgentsToday} new agents per day. Every figure is point-in-time, measured ${POPULATION.measuredAt}.`],
-    ["Classification is heuristic", "Keyword matching over names and declared protocols. Registration files rarely declare machine-readable capability, so anything stronger would be invention. Unclassified agents are counted, not hidden."],
+    ["Classification is evidence-gated", "A category is assigned only on specific evidence in the agent's own text - A2A card skills first, then registration description, then name - and the matched evidence is recorded on the agent. Registration files rarely declare machine-readable capability, so most agents cannot be classified at all; they are counted, not hidden. Loose matching inflated counts several times over during development and is pinned against by tests."],
   ];
 
-  return (
+  // Build tab content as variables to avoid parser issues with complex JSX in props
+  const measuresTab = (
     <>
-      <section className="band">
-        <div className="shell">
-          <p className="crumb"><a href="/">GEBO</a> <span className="t-4">/</span> Methodology</p>
-          <div className="headline-pair">
-            <h1 style={{ fontSize: "clamp(1.9rem, 3.6vw, 2.7rem)" }}>
-              Every number, and what is wrong with it.
-            </h1>
-            <p className="standfirst">
-              A metric whose construction you cannot inspect is not evidence. So each measure
-              is defined here alongside the ways it can mislead you.
-            </p>
-          </div>
-        </div>
-      </section>
-
+      {/* ── What is measured ────────────────────────────────────────── */}
       <section className="band">
         <div className="shell">
           <h2>What is measured</h2>
@@ -109,7 +96,12 @@ export default async function Methodology() {
           </div>
         </div>
       </section>
+    </>
+  );
 
+  const refusedTab = (
+    <>
+      {/* ── What this registry refuses to show ─────────────────────── */}
       <section className="band">
         <div className="shell">
           <h2>What this registry refuses to show</h2>
@@ -125,7 +117,12 @@ export default async function Methodology() {
           </div>
         </div>
       </section>
+    </>
+  );
 
+  const rankingTab = (
+    <>
+      {/* ── How ranking works ───────────────────────────────────────── */}
       <section className="band">
         <div className="shell">
           <h2>How ranking works</h2>
@@ -157,7 +154,87 @@ export default async function Methodology() {
           </div>
         </div>
       </section>
+    </>
+  );
 
+  const categoriesTab = (
+    <>
+      {/* ── How categories evolve ───────────────────────────────────── */}
+      <section className="band">
+        <div className="shell">
+          <h2>How categories evolve</h2>
+          <p className="prose sm">
+            The four flagship jobs are fixed. Adjacent categories grow only by promotion: a
+            detector runs daily over the unclassified corpus and nominates terms that appear in
+            three or more distinct skills texts from at least two independent operators, and a
+            person reads the agents behind a term before it becomes a rule. Automation proposes;
+            promotion stays human, because the last four terms that cleared the bar on frequency
+            alone were an operator name, two memecoin titles and the word &ldquo;not&rdquo;.
+          </p>
+
+          {!candReport.ok ? (
+            <div className="notice mt-m" data-tone="fail">
+              <strong>Could not read the candidate ledger.</strong> {candReport.reason ? `Reason: ${candReport.reason}.` : ""}{" "}
+              An empty table and an unreadable one are different findings; this one was not measured.
+            </div>
+          ) : (
+            <div className="surface-card mt-m">
+              <dl className="spec">
+                <div>
+                  <dt>Unclassified agents</dt>
+                  <dd className="num">{candReport.corpus!.unclassified.toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt>of those, declare skills</dt>
+                  <dd className="num">{candReport.corpus!.withSkills.toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt>declare any capability text</dt>
+                  <dd className="num">{candReport.corpus!.withAnyText.toLocaleString()}</dd>
+                </div>
+              </dl>
+              <p className="xs t-4" style={{ margin: "10px 0 0" }}>
+                The unclassified mass is not a matching failure to solve with a cleverer
+                classifier: almost none of it publishes capability text to match. A name-only
+                registration carries nothing to classify.
+              </p>
+
+              {candReport.candidates.length > 0 ? (
+                <div className="data-table-frame mt-m">
+                  <div className="rows">
+                    <div className="rows-head" style={{ gridTemplateColumns: "minmax(0,1.2fr) 5rem 6rem 6rem minmax(0,1.4fr) 6rem" }}>
+                      <span>Term</span><span>Texts</span><span>Verified</span><span>Operators</span><span>Examples</span><span>Last seen</span>
+                    </div>
+                    {candReport.candidates.map((c) => (
+                      <div key={c.term} className="row" style={{ gridTemplateColumns: "minmax(0,1.2fr) 5rem 6rem 6rem minmax(0,1.4fr) 6rem" }}>
+                        <div className="sm">{c.term} <span className="xs t-4">[{c.status}]</span></div>
+                        <div className="num sm">{c.distinctTexts}</div>
+                        <div className="num sm">{c.verifiedTexts}</div>
+                        <div className="num sm">{c.distinctOperators}</div>
+                        <div className="xs t-3">{c.exampleAgents.slice(0, 3).join(", ")}</div>
+                        <div className="xs t-4 num">{c.lastSeenAt}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="sm t-3" style={{ margin: "14px 0 0" }}>
+                  No term currently clears the nomination bar. That is the measured state of the
+                  chain, not a gap in detection: agents matching no rule are overwhelmingly
+                  registrations without usable capability text, not an unmet need waiting for a
+                  tenth category.
+                </p>
+              )}
+            </div>
+          )}
+          </div>
+        </section>
+      </>
+  );
+
+  const defectsTab = (
+    <>
+      {/* ── Defects in this dataset ────────────────────────────────── */}
       <section className="band band-last">
         <div className="shell">
           <h2>Defects in this dataset</h2>
@@ -178,6 +255,33 @@ export default async function Methodology() {
           </p>
         </div>
       </section>
+    </>
+  );
+
+  return (
+    <>
+      <section className="band">
+        <div className="shell">
+          <p className="crumb"><a href="/">GEBO</a> <span className="t-4">/</span> Methodology</p>
+          <div className="headline-pair">
+            <h1 style={{ fontSize: "clamp(1.9rem, 3.6vw, 2.7rem)" }}>
+              Every number, and what is wrong with it.
+            </h1>
+            <p className="standfirst">
+              A metric whose construction you cannot inspect is not evidence. So each measure
+              is defined here alongside the ways it can mislead you.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <MethodologyTabs
+        measures={measuresTab}
+        refused={refusedTab}
+        ranking={rankingTab}
+        categories={categoriesTab}
+        defects={defectsTab}
+      />
     </>
   );
 }

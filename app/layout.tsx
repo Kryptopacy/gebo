@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
-import { loadCensus, loadAggregates, CATEGORIES, JUDGED_CATEGORIES, OTHER_CATEGORIES, type CategorySlug } from "@/lib/data";
+import { loadCensus, loadAggregates, JUDGED_CATEGORIES, OTHER_CATEGORIES } from "@/lib/data";
 import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
 import AssistantWidget from "./assistant/AssistantWidget";
@@ -92,18 +92,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const [census, aggregates] = await Promise.all([loadCensus(), loadAggregates()]);
   const categoryCounts = aggregates.categories ?? {};
 
-  const toWithCount = <T extends { slug: CategorySlug }>(c: T) => ({
+  /**
+   * One directory, core job categories first, listed whether or not a count
+   * read succeeded. Splitting nav into "judged" vs other sections leaked the
+   * build's internal scoring frame into the storefront; a marketplace front
+   * door presents one catalog. Counts render only when the read that produced
+   * them succeeded (count = null means unmeasured, never zero - invariant 9).
+   */
+  const allCategories = [...JUDGED_CATEGORIES, ...OTHER_CATEGORIES].map((c) => ({
     slug: c.slug,
     meta: c,
-    count: categoryCounts[c.slug] ?? 0,
-  });
-
-  const judgedWithCounts = JUDGED_CATEGORIES
-    .map(toWithCount)
-    .filter((c) => c.count > 0);
-  const otherWithCounts = OTHER_CATEGORIES
-    .map(toWithCount)
-    .filter((c) => c.count > 0);
+    count: aggregates.live ? (categoryCounts[c.slug] ?? 0) : null,
+  }));
 
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
@@ -135,7 +135,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
             </form>
             <nav aria-label="Primary Navigation">
-              <CategoriesDropdown judged={judgedWithCounts} other={otherWithCounts} />
+              <CategoriesDropdown categories={allCategories} />
               <a href="/live">Liveness</a>
               <a href="/authority">Authority</a>
               <a href="/methodology">Methodology</a>
@@ -165,40 +165,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </div>
               </div>
 
-              {/* Col 2: Structured Category Directory (Scalable) */}
+              {/* Col 2: Category directory - one catalog, core jobs first */}
               <div className="colophon-col">
                 <div className="colophon-title">
-                  <span>Verified Agent Jobs (Judged)</span>
+                  <span>Agent Jobs</span>
                 </div>
                 <ul className="colophon-links">
-                  {judgedWithCounts.length > 0 ? (
-                    judgedWithCounts.map((c) => (
-                      <li key={c.slug}>
-                        <a href={`/c/${c.slug}`}>
-                          <span>{c.meta.job}</span>
-                          <span className="colophon-badge">{c.meta.venue}</span>
-                        </a>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="colophon-empty">No judged categories with agents yet</li>
-                  )}
-                </ul>
-
-                <div className="colophon-subtitle">Ecosystem Capabilities</div>
-                <ul className="colophon-links">
-                  {otherWithCounts.length > 0 ? (
-                    otherWithCounts.map((c) => (
-                      <li key={c.slug}>
-                        <a href={`/c/${c.slug}`}>
-                          <span>{c.meta.job}</span>
-                          <span className="colophon-badge">{c.meta.venue}</span>
-                        </a>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="colophon-empty">No ecosystem categories with agents yet</li>
-                  )}
+                  {allCategories.map((c) => (
+                    <li key={c.slug}>
+                      <a href={`/c/${c.slug}`}>
+                        <span>{c.meta.job}</span>
+                        <span className="colophon-badge">{c.meta.venue}</span>
+                      </a>
+                    </li>
+                  ))}
                   <li>
                     <a href="/search" style={{ color: "var(--accent)" }}>
                       + Explore all capabilities →
@@ -248,11 +228,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <div className="colophon-spec-row">
                       <span className="colophon-spec-label">Identity Registry</span>
                       <a
-                        href="https://bscscan.com/address/0x8004a169D4F11E55Fd67b1348881A25B4468a432"
+                        href="https://bscscan.com/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
                         target="_blank"
                         rel="noreferrer"
                         className="colophon-spec-link"
-                        title="View ERC-8004 contract on BscScan"
+                        title="View ERC-8004 IdentityRegistry contract on BscScan"
                       >
                         <span>0x8004…a432</span>
                         <span style={{ fontSize: 10 }}>↗</span>
@@ -262,11 +242,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <div className="colophon-spec-row">
                       <span className="colophon-spec-label">Altana Keystore</span>
                       <a
-                        href="https://bscscan.com/address/0x6572427E3e0bB1F70b2c3479B48f3F108C507E0a"
+                        href="https://bscscan.com/address/0x6572427ED530BadcF7375Cf9A4709D8d2b0E7E0a"
                         target="_blank"
                         rel="noreferrer"
                         className="colophon-spec-link"
-                        title="View Keystore contract on BscScan"
+                        title="View Altana Keystore contract on BscScan"
                       >
                         <span>0x6572…7E0a</span>
                         <span style={{ fontSize: 10 }}>↗</span>

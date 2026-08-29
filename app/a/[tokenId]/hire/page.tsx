@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import { findAgent, trustState, classify, CATEGORIES, type CategorySlug } from "@/lib/data";
-import { PRESETS, blastRadius, buildPermissions, canonicalise, type BlastRadius } from "@/lib/session-scope";
+import { PRESETS, blastRadius, type BlastRadius } from "@/lib/session-scope";
 import { simulateForCategory } from "@/lib/simulate";
+import { attestationSummary } from "@/lib/attestations";
 import ScopePicker from "./ScopePicker";
+import { HireAction } from "./HireAction";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,8 +27,10 @@ export default async function HirePage({ params }: { params: Promise<{ tokenId: 
   // Real quote from live chain state — no funded wallet involved.
   const sim = await simulateForCategory(m.category);
 
-  const standard = presets.find((p) => p.id === "standard") ?? presets[0]!;
-  const commitment = canonicalise(buildPermissions(standard));
+  // Track record, read independently and settled separately: a failure to read
+  // must not block the hire, and must render as unmeasured, not as "no record".
+  const attRes = await Promise.allSettled([attestationSummary(agent.token_id, 56)]);
+  const trackRecord = attRes[0].status === "fulfilled" ? attRes[0].value : null;
 
   const blocked = st.state === "SHADOWED";
 
@@ -43,8 +47,8 @@ export default async function HirePage({ params }: { params: Promise<{ tokenId: 
           <div className="headline-pair">
             <h1 style={{ fontSize: "clamp(1.7rem, 3vw, 2.2rem)" }}>Authorise {name}</h1>
             <p className="standfirst sm">
-              Nothing is signed on this page. Choose what the agent may do, watch the
-              consequence of that choice, then see exactly what a grant would contain.
+              Connect wallet, choose scope, then sign the hire transaction on chain.
+              The agent acts within the limits you set — revocable anytime.
             </p>
           </div>
         </div>
@@ -150,30 +154,50 @@ export default async function HirePage({ params }: { params: Promise<{ tokenId: 
         </div>
       </section>
 
-      {/* ── 3 · grant ───────────────────────────────────────────────── */}
+      {/* ── 3 · hire ────────────────────────────────────────────────── */}
       <section className="band">
         <div className="shell">
           <div className="step-head">
             <span className="step-num num">03</span>
             <div>
-              <h2>What a grant would contain</h2>
+              <h2>Hire on chain</h2>
               <p className="prose sm" style={{ marginBottom: 0 }}>
-                The exact permission object, serialised the way it must be signed. Altana
-                matches these bytes when the session executes, so key order is fixed and
-                amounts stay decimal strings — coercing them to numbers would silently lose
-                precision above 2^53.
+                Zero-budget APEX (ERC-8183) escrow. The job traverses Open → Funded → Submitted → Completed.
+                Only the two safeTransfer calls are skipped. Revocable anytime.
               </p>
             </div>
           </div>
 
-          <pre className="payload mt-m">{JSON.stringify(JSON.parse(commitment), null, 2)}</pre>
+          {/* Track record at the point of signing, not one click away: the
+              attestation ledger is part of the pre-hire decision, and a hirer
+              who never saw it is deciding blind. */}
+          {trackRecord === null ? (
+            <p className="xs t-4 mt-m" style={{ marginBottom: 0 }}>
+              Track record could not be read just now. The attestation ledger is on{" "}
+              <a href={`/a/${agent.token_id}`} style={{ color: "var(--accent)" }}>this agent&apos;s card</a>{" "}
+              if the read recovers.
+            </p>
+          ) : trackRecord.total === 0 ? (
+            <p className="xs t-4 mt-m" style={{ marginBottom: 0 }}>
+              No attestation has ever been recorded for this agent. Hiring it now makes you the
+              first data point other hirers will see.
+            </p>
+          ) : (
+            <p className="xs" style={{ marginBottom: 0 }}>
+              <span className="num">{trackRecord.total}</span> attestation{trackRecord.total === 1 ? "" : "s"} on record ·{" "}
+              <span className="num" style={{ color: "var(--pass)" }}>{trackRecord.succeeded}</span> succeeded ·{" "}
+              <span className="num">{trackRecord.verified}</span> with independently confirmed evidence ·{" "}
+              <span className="num">{trackRecord.distinctAttesters}</span> distinct attesters.{" "}
+              <a href={`/a/${agent.token_id}`} style={{ color: "var(--accent)" }}>Full ledger →</a>
+            </p>
+          )}
 
-          <div className="notice mt-l">
-            <strong>Signing is not yet enabled.</strong> The grant transaction requires a
-            funded wallet on BNB Chain, and GEBO deliberately does not custody keys or ask for
-            a private key. Everything above is real and verifiable without one — the scope, the
-            enforced limits, and the quote are all live.
-          </div>
+          <HireAction
+            agentTokenId={agent.token_id}
+            agentName={name}
+            categorySlug={slug}
+            providerAddress={agent.owner_address}
+          />
         </div>
       </section>
 

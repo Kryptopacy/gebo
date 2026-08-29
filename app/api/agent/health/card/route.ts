@@ -12,9 +12,11 @@
  * being impossible to use. This card names the endpoint that serves it, on the same
  * public host, so the claim is checkable by the same probe that catches them.
  *
- * GRADER IS NEVER SOLVER. This agent is ours, so it is excluded from ranking, marked
- * as ours wherever it appears, and any track record it accumulates through APEX is
- * graded by their EvaluatorRouter rather than by us. We never score our own work.
+ * GRADER IS NEVER SOLVER. This agent is ours, so it is marked as ours wherever
+ * it appears and ranked on the same measured evidence as anyone else - ranking
+ * is earned by answering probes, not awarded by us. Its track record is
+ * different: any job it completes is graded by APEX's EvaluatorRouter, never
+ * by us. We never score our own work.
  *
  * WHY HEALTH FACTOR. It is the most mechanically verifiable question in the judged
  * four: a ratio of collateral to debt, both readable from chain, with no room for
@@ -50,9 +52,9 @@ export async function GET(request: Request) {
       description:
         "Reports the Venus lending health factor for a BNB Chain address, derived from " +
         "per-market collateral, oracle prices and collateral factors rather than from a " +
-        "single liquidity call. Operated by GEBO as a reference implementation: it is " +
-        "excluded from all rankings, and any track record it earns is graded by APEX's " +
-        "EvaluatorRouter, never by us.",
+        "single liquidity call. Operated by GEBO as a reference implementation: probed, " +
+        "ranked and disclosed on the same terms as any other agent, and any track record " +
+        "it earns is graded by APEX's EvaluatorRouter, never by us.",
       version: "1.0.0",
       // The endpoint clients should call. Same host that served this card.
       url: endpoint,
@@ -89,8 +91,8 @@ export async function GET(request: Request) {
        */
       "x-gebo": {
         operator: "gebo",
-        excludedFromRanking: true,
-        reason: "operated by the registry; ranking our own listing would make grader and solver the same party",
+        operatedByRegistry: true,
+        reason: "operated by the registry; its jobs are graded by APEX's EvaluatorRouter so the registry never scores its own work",
         readsOnly: true,
         note: "This agent holds no keys and moves no funds. It reads chain state and returns a number with its denominator.",
         validation:

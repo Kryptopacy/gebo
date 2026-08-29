@@ -496,18 +496,41 @@ export async function loadAggregates(): Promise<Aggregates> {
   }
 
   try {
-    const results = await withTimeout(Promise.all([
-      sql<{ n: number }[]>`select count(*)::int as n from agents where chain_id = 56`,
-      sql<{ trust_state: string; n: number }[]>`
-        select trust_state, count(*)::int as n from agents where chain_id = 56 group by trust_state`,
-      sql<{ category: string | null; n: number }[]>`
-        select category, count(*)::int as n from agents
-        where chain_id = 56 and category is not null group by category`,
-      sql<{ key: string; label: string; agent_count: number; validated_count: number; fatal_defect_count: number }[]>`
-        select key, label, agent_count, validated_count, fatal_defect_count
-        from operators where agent_count > 0 order by agent_count desc limit 10`,
-      sql<{ n: number }[]>`select count(*)::int as n from operators where agent_count > 0`,
-    ]), 9000, null as any);
+    /**
+     * ONE statement, not five concurrent queries.
+     *
+     * The five-query Promise.all needed up to three simultaneous pool
+     * connections, and opening concurrent connections through the Supabase
+     * pooler stalls badly enough - measured repeatedly from the deploy region -
+     * to trip the 9s timeout on every render, which is what emptied the footer
+     * and dropdown categories and raised the "could not be measured" banner on
+     * the landing page. A single statement needs one connection and one round
+     * trip; every component query is sub-250ms once connected.
+     */
+    const rows = (await withTimeout(sql<{
+      agents: number;
+      states: { state: string; n: number }[] | null;
+      cats: { category: string; n: number }[] | null;
+      operators: number;
+      top: { key: string; label: string; agent_count: number; validated_count: number; fatal_defect_count: number }[] | null;
+    }[]>`
+      select
+        (select count(*)::int from agents where chain_id = 56) as agents,
+        (select json_agg(x) from (
+           select trust_state as state, count(*)::int as n
+           from agents where chain_id = 56 group by trust_state
+         ) x) as states,
+        (select json_agg(x) from (
+           select category, count(*)::int as n
+           from agents where chain_id = 56 and category is not null group by category
+         ) x) as cats,
+        (select count(*)::int from operators where agent_count > 0) as operators,
+        (select json_agg(x) from (
+           select key, label, agent_count, validated_count, fatal_defect_count
+           from operators where agent_count > 0
+           order by agent_count desc limit 10
+         ) x) as top
+    `, 9000, null as any)) ?? [];
     /**
      * A failed read is never cached.
      *
@@ -517,25 +540,23 @@ export async function loadAggregates(): Promise<Aggregates> {
      * "0 agents" until the next deploy. Returning without caching means the next
      * request retries.
      */
-    if (!results) return empty;
-    const [counts, states, cats, ops, opCount] = results;
-
-    const total = counts[0]?.n ?? 0;
+    const r = rows[0];
+    if (!r) return empty;
     const st = { ...empty.states };
-    for (const s of states) {
-      if (s.trust_state in st) st[s.trust_state as TrustState] = s.n;
+    for (const s of r.states ?? []) {
+      if (s.state in st) st[s.state as TrustState] = s.n;
     }
 
     aggCache = {
-      agents: total,
+      agents: r.agents,
       states: st,
-      categories: Object.fromEntries((cats as { category: string | null; n: number }[]).map((c) => [c.category!, c.n])),
-      operators: opCount[0]?.n ?? 0,
-      topOperators: (ops as { key: string; label: string; agent_count: number; validated_count: number; fatal_defect_count: number }[]).map((o) => ({
+      categories: Object.fromEntries((r.cats ?? []).map((c: { category: string; n: number }) => [c.category, c.n])),
+      operators: r.operators,
+      topOperators: (r.top ?? []).map((o: { key: string; label: string; agent_count: number; validated_count: number; fatal_defect_count: number }) => ({
         key: o.key, label: o.label, count: o.agent_count,
         validated: o.validated_count, broken: o.fatal_defect_count,
       })),
-      topOperatorShare: total && ops[0] ? (ops[0].agent_count / total) * 100 : 0,
+      topOperatorShare: r.agents && r.top?.[0] ? (r.top[0].agent_count / r.agents) * 100 : 0,
       live: true,
     };
     return aggCache;
@@ -545,12 +566,99 @@ export async function loadAggregates(): Promise<Aggregates> {
   }
 }
 
-/** Agents for one category, ranked and operator-capped, without loading the rest. */
-export async function agentsInCategory(category: CategorySlug, limit = 60): Promise<Agent[]> {
+// ── category candidates ───────────────────────────────────────────────────────
+
+export type CategoryCandidate = {
+  term: string;
+  status: string;
+  distinctTexts: number;
+  verifiedTexts: number;
+  distinctOperators: number;
+  exampleAgents: string[];
+  lastSeenAt: string;
+};
+
+export type CategoryCandidateReport = {
+  ok: boolean;
+  reason: string | null;
+  candidates: CategoryCandidate[];
+  corpus: { unclassified: number; withSkills: number; withAnyText: number } | null;
+};
+
+/**
+ * The emerging-capability review surface: detector candidates plus the corpus
+ * stats that explain them. One combined statement, per the connection-frugality
+ * rule this file now follows; a failed read reports ok=false rather than an
+ * empty list, because "no candidates" and "could not read candidates" are
+ * different findings and only one of them is silence.
+ */
+export async function loadCategoryCandidates(): Promise<CategoryCandidateReport> {
+  const sql = db();
+  const failed: CategoryCandidateReport = { ok: false, reason: null, candidates: [], corpus: null };
+  if (!sql) return { ...failed, reason: "database not configured" };
+  try {
+    const rows = (await withTimeout(sql<{
+      unclassified: number;
+      with_skills: number;
+      with_any_text: number;
+      candidates: {
+        term: string; status: string; distinct_texts: number; verified_texts: number;
+        distinct_operators: number; example_agents: string[] | null; last_seen_at: string;
+      }[];
+    }[]>`
+      select
+        (select count(*)::int from agents where chain_id = 56 and category is null) as unclassified,
+        (select count(*)::int from agents
+          where chain_id = 56 and category is null and skills is not null) as with_skills,
+        (select count(*)::int from agents
+          where chain_id = 56 and category is null
+            and (skills is not null
+                 or (description is not null and length(btrim(description)) > 3))) as with_any_text,
+        (select coalesce(json_agg(x), '[]'::json) from (
+           select term, status, distinct_texts, verified_texts, distinct_operators,
+                  example_agents, last_seen_at
+           from category_candidates where chain_id = 56
+           order by last_seen_at desc limit 24
+         ) x) as candidates
+    `, 9000, null as any)) ?? [];
+    const r = rows[0];
+    if (!r) return { ...failed, reason: "read timed out" };
+    return {
+      ok: true,
+      reason: null,
+      corpus: { unclassified: r.unclassified, withSkills: r.with_skills, withAnyText: r.with_any_text },
+      candidates: (r.candidates ?? []).map((c: {
+        term: string; status: string; distinct_texts: number; verified_texts: number;
+        distinct_operators: number; example_agents: string[] | null; last_seen_at: string;
+      }) => ({
+        term: c.term,
+        status: c.status,
+        distinctTexts: c.distinct_texts,
+        verifiedTexts: c.verified_texts,
+        distinctOperators: c.distinct_operators,
+        exampleAgents: c.example_agents ?? [],
+        lastSeenAt: new Date(c.last_seen_at).toISOString().slice(0, 10),
+      })),
+    };
+  } catch (err) {
+    return { ...failed, reason: String(err).slice(0, 140) };
+  }
+}
+
+/**
+ * Agents for one category, without loading the rest.
+ *
+ * The category page used to loadAgents() - 400 fat rows across every category,
+ * ~7s through the pooler from the deploy region - and then filter down to one
+ * slug in memory. This reads only the category's rows: the same AGENT_SELECT,
+ * the same trust-state ordering, a fraction of the payload. Ranking and
+ * operator diversification stay with the caller, which ranks by live evidence.
+ */
+export async function agentsInCategory(category: CategorySlug, limit = 200): Promise<Agent[]> {
   const sql = db();
   if (!sql) {
     const all = await loadAgents();
-    return diversify(rankAgents((agentsByCategory(all).get(category) ?? [])), 3).slice(0, limit);
+    return agentsByCategory(all).get(category) ?? [];
   }
   try {
     const rows = (await sql.unsafe(
@@ -562,7 +670,7 @@ export async function agentsInCategory(category: CategorySlug, limit = 60): Prom
        limit $2`,
       [category, limit],
     )) as unknown as any[];
-    return diversify(rows.map(mapAgentRow), 3);
+    return rows.map(mapAgentRow);
   } catch (err) {
     console.warn(`[data] category read failed: ${String(err).slice(0, 140)}`);
     return [];

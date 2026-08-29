@@ -256,6 +256,7 @@ export async function attestationsFor(tokenId: string, chainId = 56, limit = 25)
 export async function taskRuns(
   chainId = 56,
   limit = 100,
+  tokenId?: string,
 ): Promise<{ runs: TaskRun[]; unavailable: boolean; reason: string | null }> {
   const sql = db();
   if (!sql) {
@@ -276,6 +277,7 @@ export async function taskRuns(
       left join agents ag
         on ag.chain_id = a.chain_id and ag.token_id = a.token_id
       where a.chain_id = ${chainId}
+        ${tokenId ? sql`and a.token_id = ${tokenId}` : sql``}
         -- A run without a manual arm cannot answer the question being asked.
         and (a.baseline_duration_ms is not null or a.baseline_cost_amount is not null)
         /**

@@ -25,7 +25,7 @@ const PERSONAS: Record<string, {
     description:
       "Ranks live Venus supply markets by measured APR and reports where idle capital earns most right now, " +
       "with lendable liquidity attached and broken-rate artifacts named rather than ranked. Operated by GEBO: " +
-      "excluded from rankings; any track record is graded by APEX's EvaluatorRouter.",
+      "probed, ranked and disclosed on the same terms as any other agent; any track record is graded by APEX's EvaluatorRouter.",
     skillId: "venus-best-apr",
     skillName: "Best Venus supply APR",
     skillDescription:
@@ -99,8 +99,8 @@ export async function GET(
       ],
       "x-gebo": {
         operator: "gebo",
-        excludedFromRanking: true,
-        reason: "operated by the registry; ranking our own listing would make grader and solver the same party",
+        operatedByRegistry: true,
+        reason: "operated by the registry; its jobs are graded by APEX's EvaluatorRouter so the registry never scores its own work",
         readsOnly: true,
         note: "This agent holds no keys and moves no funds. It reads chain state and returns figures with their denominators.",
       },

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import {
-  CATEGORIES, loadAgents, agentsByCategory, rankAgentsByLiveEvidence, diversify,
+  CATEGORIES, agentsInCategory, rankAgentsByLiveEvidence, diversify,
   trustState, classify, loadOpportunities, type CategorySlug,
 } from "@/lib/data";
 
@@ -48,7 +48,7 @@ export default async function OpportunityPage({
 
   const cat = CATEGORIES[o.category as CategorySlug];
   const inCat = cat
-    ? diversify(await rankAgentsByLiveEvidence(agentsByCategory(await loadAgents()).get(o.category as CategorySlug) ?? []), 3)
+    ? diversify(await rankAgentsByLiveEvidence(await agentsInCategory(o.category as CategorySlug)), 3)
     : [];
 
   const entries = Object.entries(o.payload ?? {}).sort(([a], [b]) => a.localeCompare(b));
@@ -115,7 +115,7 @@ export default async function OpportunityPage({
           </div>
           {cat?.judged && (
             <p className="xs t-4 mt-m" style={{ maxWidth: "78ch" }}>
-              Judged against {cat.counterfactual}. An agent working on this position is measured
+              Measured against {cat.counterfactual}. An agent working on this position is measured
               against doing nothing, on the same capital over the same window.
             </p>
           )}

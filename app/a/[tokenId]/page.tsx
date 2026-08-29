@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
-import { attestationsFor, attestationSummary } from "@/lib/attestations";
+import { attestationsFor, attestationSummary, taskRuns } from "@/lib/attestations";
 import { agentMetrics, type MetricValue } from "@/lib/metrics";
 import { fetchSampleOutput } from "@/lib/sample-output";
 import { probeHistoryFor, type ProbeHistory } from "@/lib/probe-history";
+import AgentTabs from "./AgentTabs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -45,12 +47,13 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
    * this page, and a failure there must not blank the agent card. That exact
    * coupling once blanked every counter on /live when a single malformed row threw.
    */
-  const [attRes, sumRes, metRes, sampleRes, probeRes] = await Promise.allSettled([
+  const [attRes, sumRes, metRes, sampleRes, probeRes, runsRes] = await Promise.allSettled([
     attestationsFor(tokenId, 56, 12),
     attestationSummary(tokenId, 56),
     agentMetrics(56, tokenId),
     fetchSampleOutput(a),
     probeHistoryFor(tokenId, 56),
+    taskRuns(56, 50, tokenId),
   ]);
   const attestations = attRes.status === "fulfilled" ? attRes.value : [];
   const attSummary = sumRes.status === "fulfilled" ? sumRes.value : null;
@@ -59,12 +62,49 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
   const byMetric = new Map(metrics.map((mv) => [mv.metricId, mv]));
   const sampleOutput = sampleRes.status === "fulfilled" ? sampleRes.value : null;
   const probeHistory: ProbeHistory | null = probeRes.status === "fulfilled" ? probeRes.value : null;
+  const advantageRuns = runsRes.status === "fulfilled" ? runsRes.value : null;
 
   const st = trustState(a);
   const m = classify(a);
   const cat = m.category ? CATEGORIES[m.category] : null;
   const fatal = a.lint?.defects?.filter((d) => d.severity === "fatal") ?? [];
   const handshake = a.probe?.grade === "validated";
+  /**
+   * Provenance disclosure, not a badge of honour. The four reference agents
+   * (HealthGuard, RangeKeeper, GridRunner, YieldRouter) run on GEBO's own
+   * deployment, and a visitor deciding who to hire is owed that fact plainly -
+   * they are probed and graded like anyone else, never privileged.
+   *
+   * NO HARDCODED DOMAIN, by design: an agent counts as GEBO-operated when its
+   * endpoint runs on a host this deployment itself answers on - the request's
+   * own host, plus the canonical hosts from env. A custom domain keeps the
+   * disclosure working from the day the on-chain URIs are re-registered, and
+   * nothing in code ever names a domain.
+   */
+  const requestHost = (await headers()).get("host")?.split(":")[0] ?? null;
+  const ownHosts = new Set<string>(
+    [
+      requestHost,
+      process.env.NEXT_PUBLIC_SITE_URL,
+      process.env.VERCEL_PROJECT_PRODUCTION_URL,
+      process.env.VERCEL_URL,
+    ]
+      .filter((u): u is string => !!u)
+      .flatMap((u) => {
+        try {
+          return [new URL(u.startsWith("http") ? u : `https://${u}`).hostname];
+        } catch {
+          return [];
+        }
+      }),
+  );
+  const hostOf = (u: string): string | null => {
+    try { return new URL(u).hostname; } catch { return null; }
+  };
+  const geboOperated = (a.endpoints ?? []).some((e) => {
+    const h = hostOf(e.url);
+    return h !== null && ownHosts.has(h);
+  });
 
   return (
     <>
@@ -82,8 +122,17 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             </h1>
             <span className="chip" data-state={st.state}>{st.state}</span>
             {a.x402 && <span className="chip chip-flat">x402</span>}
+            {geboOperated && <span className="chip chip-flat">Operated by GEBO</span>}
           </div>
           <p className="standfirst sm">{st.reason}</p>
+
+          {geboOperated && (
+            <p className="xs t-4" style={{ marginBottom: 12 }}>
+              GEBO operates this agent itself, as a working reference for the category.
+              It answers from live chain state, is probed and graded on the same terms as
+              every other agent, and holds no privileged place in these rankings.
+            </p>
+          )}
 
           {/* Plain-English summary for non-technical users */}
           <div className="surface-card mt-m" style={{ borderLeft: "3px solid var(--accent)", padding: "14px 18px" }}>
@@ -144,6 +193,10 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
         </section>
       )}
 
+      {/* ── tabbed content: liveness + sample / authority / registration / track record ── */}
+      <AgentTabs
+        overview={
+          <>
       {/* ── liveness ─────────────────────────────────────────────── */}
       <section className="band-tight">
         <div className="shell">
@@ -272,8 +325,12 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
         </section>
       )}
 
+          </>
+        }
+        authority={
+          <>
       {/* ── authority ────────────────────────────────────────────── */}
-      <section className="band">
+      <section className="band band-last">
         <div className="shell">
           <h2>What it could do to your wallet</h2>
           <div className="authority surface-card mt-m" data-risk="unknown" style={{ padding: 0, overflow: "hidden" }}>
@@ -308,7 +365,10 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
           </div>
         </div>
       </section>
-
+          </>
+        }
+        registration={
+          <>
       {/* ── declarations ─────────────────────────────────────────── */}
       <section className="band">
         <div className="shell">
@@ -479,6 +539,10 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
           </div>
         </section>
       )}
+          </>
+        }
+        trackRecord={
+          <>
       {/* ── track record: attestations + probe history ──────────────── */}
       <section className="band band-last">
         <div className="shell">
@@ -548,6 +612,51 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               )}
             </dl>
           )}
+
+          {/* Hire vs do-it-yourself, per agent, at the point of decision.
+              The corpus-wide Advantage Report lives at /compare; this answers
+              the question the visitor actually has: does THIS agent beat me. */}
+          {advantageRuns && (() => {
+            const pairs = advantageRuns.runs.filter(
+              (r) => r.agentMs != null && r.manualMs != null,
+            );
+            if (!advantageRuns.unavailable && pairs.length === 0) return null;
+            if (advantageRuns.unavailable) {
+              return (
+                <p className="xs t-4 mt-m" style={{ marginBottom: 0 }}>
+                  The hire-versus-DIY comparison could not be read just now.
+                </p>
+              );
+            }
+            const med = (xs: number[]) => {
+              const s = [...xs].sort((a, b) => a - b);
+              const m = Math.floor(s.length / 2);
+              return s.length % 2 ? s[m]! : Math.round((s[m - 1]! + s[m]!) / 2);
+            };
+            const agentMed = med(pairs.map((r) => r.agentMs!));
+            const manualMed = med(pairs.map((r) => r.manualMs!));
+            const verified = pairs.filter((r) => r.evidenceVerified).length;
+            const secs = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 60_000)}min`);
+            const ratio = manualMed > 0 ? manualMed / agentMed : null;
+            return (
+              <div className="surface-card mt-m" style={{ borderLeft: "3px solid var(--accent)", padding: "14px 18px" }}>
+                <p className="sm" style={{ margin: 0 }}>
+                  <strong>Should you hire it, or do it yourself?</strong> Across{" "}
+                  <span className="num">{pairs.length}</span> recorded task
+                  {pairs.length === 1 ? "" : "s"} where both were timed, this agent&apos;s median
+                  was <span className="num">{secs(agentMed)}</span> against{" "}
+                  <span className="num">{secs(manualMed)}</span> by hand
+                  {ratio ? ` (${ratio >= 1 ? ratio.toFixed(1) + "x faster" : (1 / ratio).toFixed(1) + "x slower"})` : ""}.
+                </p>
+                <p className="xs t-4" style={{ margin: "8px 0 0" }}>
+                  {pairs.length} task pair{pairs.length === 1 ? "" : "s"}, medians; {verified} with
+                  independently confirmed evidence; zero-budget jobs, so cost is gas only; output
+                  quality is not scored. The corpus-wide report is on{" "}
+                  <a href="/compare" style={{ color: "var(--accent)" }}>the Advantage Report</a>.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Manual attestations */}
           {attestations.length > 0 && (
@@ -694,6 +803,13 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
           )}
         </div>
       </section>
+          </>
+        }
+        badges={{
+          "Registration": (a.lint?.defects?.length ?? 0) > 0 ? a.lint!.defects!.length : undefined,
+          "Track record": attSummary?.total,
+        }}
+      />
     </>
   );
 }
