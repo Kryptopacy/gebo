@@ -86,12 +86,15 @@ key to wallet. Both require indexing `registerKey`/`revokeKey` logs. The
   Conflating them reads as shallow.
 - BNB stablecoins are **18 decimals, not 6**. A decimals slip is a 10^12 spend-cap
   error. One helper constructs caps; it is property-tested across both.
-- **We are on mainnet, not testnet.** Every indexed figure is `chain_id = 56`, and
-  `keystore.ts` defaults to 56. `CHAIN_ID=97` in `.env` is **dead config** — no code
-  reads it; the two loaders hardcode `const CHAIN_ID = 56`. The only testnet work
-  was `scripts/spike-altana.ts`, now switchable with `npm run spike:altana:mainnet`
-  (or `GEBO_SPIKE_CHAIN=56`). The hackathon requires agents "live on BSC" and Altana
-  scores mainnet above testnet, so the mainnet run is worth the gas.
+- **We are on mainnet, not testnet — for INDEXING.** Every indexed figure is
+  `chain_id = 56`, and `keystore.ts` defaults to 56. `CHAIN_ID=97` in `.env` is
+  **dead config** — no code reads it; the two loaders hardcode `const CHAIN_ID = 56`.
+  The hackathon requires agents "live on BSC" and Altana scores mainnet above
+  testnet, so the mainnet run is worth the gas.
+- **Altana DEMO activity is deliberately testnet (97)**: session grants, the
+  spike, the ERC-8183 SDK hire, and the x402 sell all live on testnet because
+  the mainnet demo wallet is unfunded and the Altana bounty accepts testnet.
+  See "Altana demo stack" below before touching any of it.
 
 ### APEX (ERC-8183 escrow), verified on chain
 
@@ -115,8 +118,19 @@ ourselves.
   pay — informative, but mutable. Re-read before quoting a cost.
 - The token symbol is **`U`, 18 decimals**, on both chains. The repo README calls the
   testnet one "USDC on testnet"; it is not. `addresses.ts` is authoritative over the
-  README, which publishes a **wrong** `OptimisticPolicy` address for testnet
-  (`0x4f4678d4…`); the address above is the one with code.
+  README.
+- **Testnet has TWO OptimisticPolicy deployments, and only one works with the
+  router.** `0x4f4678d4…` (24h dispute window, the Altana SDK registry's pick)
+  and `0xd6a42175…` (15-min window, GEBO's pick) run identical bytecode, but
+  `registerJob` reverts `PolicyNotWhitelisted` (selector `0xc94463e3`) for
+  `0x4f4678d4…`. Every GEBO testnet hire binds `0xd6a42175…`, chosen so the
+  Open → Funded → Submitted → Completed cycle finishes inside a demo.
+  `scripts/hire-altana-sdk.ts` documents this: SDK path first, one-address
+  fallback second.
+- **Testnet $U comes from the public faucet** `0x86e9197CC0F76E4e4aaa7082180945196bBAb5D3`
+  (`requestTokens()` pays 10 $U per address per 30 min). No DEX pool exists for
+  $U, so tBNB cannot be swapped into it. `scripts/claim-testnet-u.ts` claims via
+  the relay so the smart account is msg.sender.
 - One job is **7 transactions** on the happy path — 5 client, 1 provider, 1
   permissionless `settle` — or 6 if the ERC-20 allowance already covers the budget.
   The evaluator never sends a transaction; `complete()` is an internal call from the
@@ -124,6 +138,30 @@ ourselves.
 - Single fixed ERC-20 per deployment. **No native BNB**, no allowlist, no per-job
   token. Fee-on-transfer and rebasing tokens are out of scope and cause silent
   escrow drift. Zero-budget jobs are legal — a deliberate spec deviation.
+
+### Altana demo stack (all testnet 97, all verified on-chain)
+
+The demo wallet `0x688Fe953e20225e0542ED11a11C708437e71d40e` is an EOA
+(EIP-7702-delegated to the Altana account implementation, so the EOA address
+and the "smart account" address coincide). `DEMO_OWNER_PRIVATE_KEY` in `.env`
+is its key. The pieces, and the order they depend on:
+
+| Piece | Where | Proof |
+| --- | --- | --- |
+| $U faucet claim | `scripts/claim-testnet-u.ts` | 10 $U via relay tx |
+| Scoped session grants | `scripts/grant-demo-sessions.ts` + cron `regrant` | 8 grant txs; regrant now targets testnet |
+| ERC-8183 hire via Altana SDK | `scripts/hire-altana-sdk.ts` | job 788 FUNDED, tx `0xd48339a1…` |
+| x402 sell endpoint | `app/api/agent/health/paid/route.ts` | 0.01 $U/call, both rails |
+| x402 buyer test (session key pays) | `scripts/x402-buy-health.ts` | settlement tx `0xe110f574…` |
+
+x402 facts that cost an evening: **eip3009 rejects session-key signatures**
+("Invalid signature" from `transferWithAuthorization`) — Altana smart-account
+buyers need the **permit2-exact** rail, and buyer provisioning is three steps
+(`approveTokenForPermit2`, `approveSignatureChecker(PERMIT2_ADDRESS)`, then
+`fetchWithX402`). The merchant's `payTo` must differ from the buyer or
+settlement is a self-transfer; earnings go to `X402_PAY_TO` in `.env`
+(`0x2Fb9E5CfebadbC77a9c1a42D96655F46d09D493d`), while the facilitator (gas
+only) is the demo key.
 
 ## Invariants that must not be broken
 

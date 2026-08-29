@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   try {
     // Dynamic import avoids top-level SDK load when the endpoint is just being
     // imported for type checking or test stubs.
-    const [{ default: postgres }, { createClient: createAltanaClient, BNB, signerFromPrivateKey }, viem, scope] =
+    const [{ default: postgres }, { createClient: createAltanaClient, BNB_TESTNET, signerFromPrivateKey }, viem, scope] =
       await Promise.all([
         import("postgres"),
         import("@altananetwork/sdk"),
@@ -48,11 +48,17 @@ export async function GET(request: Request) {
     const sql = postgres(url, { prepare: false, max: 1, onnotice: () => {} });
     const { PRESETS, buildPermissions, canonicalise } = scope;
     const { createPublicClient, http, formatEther } = viem;
-    const { bsc } = await import("viem/chains");
+    const { bscTestnet } = await import("viem/chains");
 
-    const rpc = process.env.BSC_MAINNET_RPC ?? "https://bsc-rpc.publicnode.com";
-    const pub = createPublicClient({ chain: bsc, transport: http(rpc, { timeout: 30_000 }) });
-    const client = createAltanaClient({ chains: [BNB] });
+    // TESTNET, deliberately: every grant in the sessions table and every spike
+    // assertion lives on chain 97, because the mainnet wallet is unfunded (a
+    // documented funding constraint). Pointing the regrant at mainnet would
+    // either fail the gas check (no regrant, sessions decay during judging) or
+    // fragment grants across chains the authority console does not expect.
+    // The bounty accepts testnet; mainnet remains a flag away when funded.
+    const rpc = process.env.BSC_TESTNET_RPC ?? "https://bsc-testnet-rpc.publicnode.com";
+    const pub = createPublicClient({ chain: bscTestnet, transport: http(rpc, { timeout: 30_000 }) });
+    const client = createAltanaClient({ chains: [BNB_TESTNET] });
     const signer = signerFromPrivateKey(pk as `0x${string}`);
     const wallet = await client.createWallet({ signer });
     const owner = wallet.address as `0x${string}`;
@@ -61,10 +67,10 @@ export async function GET(request: Request) {
 
     if (bal === 0n) {
       await sql.end();
-      return NextResponse.json({ ok: false, error: `wallet ${owner} has no gas (${balEther} BNB)` }, { status: 503 });
+      return NextResponse.json({ ok: false, error: `wallet ${owner} has no gas (${balEther} tBNB)` }, { status: 503 });
     }
 
-    const CHAIN_ID = 56;
+    const CHAIN_ID = 97;
     const MAX_EXPIRY_HOURS = 48;
 
     const PLAN = [
@@ -162,7 +168,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: granted > 0 || skipped >= 4,
       wallet: owner,
-      balance: `${balEther} BNB`,
+      balance: `${balEther} tBNB (chain 97)`,
       granted,
       skipped,
       failed,

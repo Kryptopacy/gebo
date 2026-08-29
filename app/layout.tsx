@@ -5,6 +5,7 @@ import { loadCensus, loadAggregates, JUDGED_CATEGORIES, OTHER_CATEGORIES } from 
 import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
 import AssistantWidget from "./assistant/AssistantWidget";
+import { OverflowGuard } from "./overflow-guard";
 import "./globals.css";
 
 const sans = Geist({
@@ -146,6 +147,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         {children}
 
+        <OverflowGuard />
         <AssistantWidget />
 
         <footer className="colophon">
@@ -170,8 +172,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <div className="colophon-title">
                   <span>Agent Jobs</span>
                 </div>
+                {/* The four flagship jobs only - the full nine-category
+                    directory is a whole page (/categories), not a footer
+                    dump; a short list that reads as a front door beats a
+                    long one that reads as a sitemap. */}
                 <ul className="colophon-links">
-                  {allCategories.map((c) => (
+                  {allCategories.slice(0, 4).map((c) => (
                     <li key={c.slug}>
                       <a href={`/c/${c.slug}`}>
                         <span>{c.meta.job}</span>
@@ -180,8 +186,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     </li>
                   ))}
                   <li>
-                    <a href="/search" style={{ color: "var(--accent)" }}>
-                      + Explore all capabilities →
+                    <a href="/categories" style={{ color: "var(--accent)" }}>
+                      + View all categories →
                     </a>
                   </li>
                 </ul>

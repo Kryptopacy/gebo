@@ -286,32 +286,52 @@ async function main() {
   });
 
   /**
-   * Live Altana sessions, granted rather than described.
+   * Live Altana sessions, granted rather than described - measured ONCHAIN.
    *
    * The Altana bounty disqualifies submissions that cannot show live onchain
-   * transactions through a scoped session. A grant script that ran once proves
-   * nothing a week later if the rows vanished or were never persisted, so this
-   * measures the durable evidence: an active session row carrying a grant tx.
+   * sessions/transactions in the explorer. The old gate counted our own rows
+   * (state='active' and expiry>now), which is bookkeeping: the state column
+   * is not swept, and the chain is the only source of truth the judges can
+   * check. So the gate now reads getKeys/isValidKey per grant wallet through
+   * the same readAuthority() the authority console uses, and reports the DB
+   * count alongside for contrast. Thresholds unchanged: 4+ chain-valid keys
+   * (one per judged category) is DONE, 1-3 PARTIAL.
    */
-  const liveSessions = (await tableExists("sessions"))
-    ? await sql<{ n: number }[]>`
-      select count(*)::int as n
+  const grantWallets = (await tableExists("sessions"))
+    ? await sql<{ chain_id: number; wallet_address: string }[]>`
+      select distinct chain_id, wallet_address
       from sessions
-      where state = 'active' and grant_tx_hash is not null
-        and expiry > now()`
-    : null;
+      where grant_tx_hash is not null`
+    : [];
   const totalSessions = (await tableExists("sessions"))
     ? await count("sessions", "grant_tx_hash is not null")
     : null;
-  const sessionCount = liveSessions?.[0]?.n ?? null;
+  let onchainValid = 0;
+  let onchainNote = "";
+  if (grantWallets.length > 0) {
+    const { readAuthority, isAddress } = await import("../src/lib/keystore.ts");
+    for (const w of grantWallets) {
+      if (!isAddress(w.wallet_address)) continue;
+      if (w.chain_id !== 56 && w.chain_id !== 97) continue;
+      const auth = await readAuthority(w.wallet_address, w.chain_id);
+      if (auth.error) {
+        onchainNote += ` chain read failed (${w.chain_id}): ${auth.error.slice(0, 60)};`;
+        continue;
+      }
+      onchainValid += auth.activeKeys;
+    }
+  }
+  const onchainKnown = grantWallets.length > 0 && !onchainNote;
   gates.push({
     id: "altana-sessions",
-    item: "Live scoped Altana sessions (grant tx recorded, not expired)",
-    state: sessionCount && sessionCount >= 4 ? "DONE" : sessionCount && sessionCount > 0 ? "PARTIAL" : "MISSING",
+    item: "Live scoped Altana sessions (chain-valid keys, via getKeys/isValidKey)",
+    state: !onchainKnown
+      ? "MISSING"
+      : onchainValid >= 4 ? "DONE" : onchainValid > 0 ? "PARTIAL" : "MISSING",
     evidence:
-      sessionCount === null
+      grantWallets.length === 0
         ? "no sessions table"
-        : `${fmt(sessionCount)} live session(s), ${fmt(totalSessions)} total granted. Sessions expire <=48h by design.`,
+        : `${fmt(onchainValid)} chain-valid key(s) across ${fmt(grantWallets.length)} grant wallet(s), ${fmt(totalSessions)} grant tx(s) recorded. Sessions expire <=48h by design.${onchainNote ? ` ${onchainNote}` : ""}`,
   });
 
   /**

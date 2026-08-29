@@ -78,7 +78,7 @@
   --colophon-bg: #F1E9DC;
   --wordmark-color: #f0b90b;
   --search-bg: #FFFFFF;
-  --row-hover-bg: #FFFFFF;
+  --row-hover-bg: #f8f1e3;
   --row-hover-shadow: 0 6px 24px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 
   --card-bg: #FFFFFF;
@@ -254,21 +254,30 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 /* ── data rows (no cards) ───────────────────────────────────────────── */
 .rows { border-top: 1px solid var(--rule); }
 .row {
-  display: grid; gap: 20px; align-items: baseline;
+  display: grid; gap: 20px; align-items: center;
   padding: 15px 0; border-bottom: 1px solid var(--rule-soft);
 }
 .row:last-child { border-bottom: 0; }
+/* Hover is a flat tint plus a hairline accent - the Linear/Stripe pattern.
+   The old scale(1.01) + drop shadow read as gimmicky, shimmered subpixel
+   text, and no 2026-era data table ships it. Fast (130ms), flat, quiet.
+   No negative margins: rows stay inside their container, full stop. */
 .row-hover {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.13s ease-out, box-shadow 0.13s ease-out;
   border-radius: 8px;
-  margin: 0 -12px; padding-left: 12px; padding-right: 12px;
+  padding-left: 12px; padding-right: 12px;
 }
 .row-hover:hover {
   background: var(--row-hover-bg);
-  transform: scale(1.01);
-  box-shadow: var(--row-hover-shadow);
-  z-index: 2; position: relative; border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--accent);
+  z-index: 2; position: relative;
 }
+/* Grid overflow guard: a bare fr track's automatic minimum is min-content,
+   so one long hash or URL widens the whole table past its container. Every
+   cell collapses instead, and long tokens wrap rather than push. */
+.row { min-width: 0; }
+.row > * { min-width: 0; overflow-wrap: anywhere; }
+.rows-head > * { min-width: 0; }
 
 .r-jobs      { grid-template-columns: 2.1fr 1fr 1fr; }
 .r-operators { grid-template-columns: 1.6fr 5rem 5rem 1fr; }
@@ -299,25 +308,34 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
   box-shadow: var(--card-shadow);
   padding: 20px 24px;
 }
-
 .data-table-frame {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 10px;
   box-shadow: var(--card-shadow);
-  overflow: hidden;
+  /* clip, not hidden: overflow:hidden would create a scroll container and
+     silently kill the sticky header below it. clip still trims corners. */
+  overflow: clip;
 }
+/* Header pins under the sticky masthead on long tables - the standard
+   behavior for any list that outlives the first viewport. */
 .data-table-frame .rows-head {
+  position: sticky;
+  top: 59px; /* masthead is 60px; overlap by 1px so no hairline shows through */
+  z-index: 5;
   background: var(--table-head-bg);
   padding: 12px 20px;
   border-bottom: 1px solid var(--rule);
   margin-bottom: 0;
 }
+
 .data-table-frame .row {
-  padding: 14px 20px;
+  padding: 16px 20px;
+  transition: background-color 0.13s ease-out, box-shadow 0.13s ease-out;
 }
 .data-table-frame .row:hover {
   background: var(--row-hover-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .kpi-grid {
@@ -1174,8 +1192,15 @@ a.row-hover:focus-visible { outline-offset: -2px; }
 .nav-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: -20px;
-  width: 440px;
+  /* Right-anchored: the trigger lives in the right-aligned nav, and a
+     left-anchored 440px panel ran past the viewport edge, forcing a
+     horizontal scrollbar whenever the menu opened. Growing leftward keeps
+     the panel inside the screen; the width clamp handles narrow viewports. */
+  left: auto;
+  right: -20px;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
   background: var(--ink-850);
   border: 1px solid var(--rule);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.2);

@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@altananetwork/sdk": "^0.8.0",
+    "@altananetwork/x402-server": "^0.2.0",
     "@google/genai": "^2.17.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
