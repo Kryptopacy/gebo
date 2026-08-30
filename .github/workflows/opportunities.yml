@@ -5,8 +5,8 @@ name: opportunities
 # a stale surface is a wrong surface.
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
+  # Manual-only: pg_cron owns the live cadence (docs/OPERATIONS.md §3); a
+  # schedule here would double-index once repo Actions billing unlocks.
   workflow_dispatch:
 
 concurrency:

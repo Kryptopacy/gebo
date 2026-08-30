@@ -1,13 +1,18 @@
 /**
  * Regenerate the measured-figures section of docs/MEASUREMENTS.md from the
- * database.
+ * database, and the offline CENSUS_FALLBACK snapshot in src/lib/data.ts.
  *
  * The document previously carried figures typed by hand. They were accurate when
  * written and went stale within hours as the census advanced - the same fault
  * that was fixed twice in the application. A document whose entire claim is
  * "measured, not asserted" cannot contain assertions.
  *
- * Only the block between the GENERATED markers is rewritten. Everything else -
+ * The fallback snapshot is the same fault in source form: a dated copy of the
+ * funnel that only loads when the database is unreachable, but which drifted
+ * 11 days behind before anyone noticed. It regenerates here between GENERATED
+ * markers, on the same schedule, so demo mode tracks reality too.
+ *
+ * Only the blocks between the GENERATED markers are rewritten. Everything else -
  * method, known defects, the marketplace analysis, the corrections to earlier
  * conclusions - is prose and stays under human control.
  *
@@ -20,6 +25,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 const FILE = "docs/MEASUREMENTS.md";
 const BEGIN = "<!-- BEGIN GENERATED: measured figures -->";
 const END = "<!-- END GENERATED -->";
+const DATA_FILE = "src/lib/data.ts";
+const FB_BEGIN = "// BEGIN GENERATED: census fallback";
+const FB_END = "// END GENERATED";
 
 const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 2, onnotice: () => {} });
 
@@ -205,7 +213,64 @@ try {
   writeFileSync(FILE, out, "utf8");
   console.log(`\n  wrote ${FILE}`);
   console.log(`  generated block: ${lines.length} lines`);
-  console.log(`  census measured at ${measuredAt} UTC\n`);
+  console.log(`  census measured at ${measuredAt} UTC`);
+
+  // ── offline fallback snapshot in src/lib/data.ts ────────────────────────
+  // The GitHub Action runs `npx tsc --noEmit` before committing, so a malformed
+  // write here fails the job loudly instead of breaking master silently.
+  // Every integer is emitted with underscore separators: "12,220" in TS source
+  // is a comma expression that evaluates to 220 - silently wrong, the exact
+  // failure class this project exists to catch.
+  const u = (v: unknown) =>
+    Number(v ?? 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "_");
+  const numOr = (v: unknown, d: number) => (v == null ? d : Number(v));
+  const fbSchemes = Object.entries(schemes)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k}: ${u(v)}`)
+    .join(", ");
+  const fbKinds = Object.entries(kinds)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k}: ${u(v)}`)
+    .join(", ");
+  const fbLines = [
+    "export const CENSUS_FALLBACK = {",
+    `  tokensMinted: ${u(c.tokens_minted)},`,
+    `  censused: ${u(c.censused)},`,
+    `  resolved: ${u(c.resolved)},`,
+    `  named: ${u(c.named)},`,
+    `  claimActive: ${u(c.claim_active)},`,
+    `  withEndpoint: ${u(c.with_endpoint)},`,
+    `  callable: ${u(c.callable)},`,
+    `  operators: ${u(c.operators)},`,
+    `  owners: ${u(c.owners)},`,
+    `  ownersWithOneAgent: ${u(c.owners_with_one_agent)},`,
+    `  largestOperatorShare: ${numOr(c.largest_operator_share, 0)},`,
+    `  top5OperatorShare: ${numOr(c.top5_operator_share, 0)},`,
+    `  top10OwnerShare: ${numOr(c.top10_owner_share, 0)},`,
+    `  declaresReputationTrust: ${u(c.declares_reputation)},`,
+    `  emptyTokenUri: ${u(c.empty_token_uri)},`,
+    `  x402Supported: ${u(c.x402_supported)},`,
+    `  fatalDefects: ${u(c.fatal_defects)},`,
+    `  uriSchemes: { ${fbSchemes} } as Record<string, number>,`,
+    `  endpointKinds: { ${fbKinds} } as Record<string, number>,`,
+    `  topOperators: [] as { domain: string; endpoints: number; callable: number }[],`,
+    `  measuredAt: "${measuredAt.slice(0, 10)}",`,
+    `  registry: "${c.registry}",`,
+    "} as const;",
+  ];
+
+  const src = readFileSync(DATA_FILE, "utf8");
+  const fbStart = src.indexOf(FB_BEGIN);
+  const fbFinish = src.indexOf(FB_END, fbStart);
+  if (fbStart >= 0 && fbFinish > fbStart) {
+    const next = src.slice(0, fbStart + FB_BEGIN.length) + "\n" + fbLines.join("\n") + "\n" + src.slice(fbFinish);
+    writeFileSync(DATA_FILE, next, "utf8");
+    console.log(`  refreshed ${DATA_FILE} fallback snapshot (${measuredAt.slice(0, 10)})`);
+  } else {
+    console.log(`  WARN: ${FB_BEGIN} markers not found in ${DATA_FILE}; snapshot not refreshed`);
+    process.exitCode = 1;
+  }
+  console.log("");
 } catch (e: any) {
   console.error(`\n  FAILED: ${String(e?.message ?? e).slice(0, 240)}\n`);
   process.exitCode = 1;

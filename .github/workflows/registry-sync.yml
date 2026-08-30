@@ -9,10 +9,10 @@ name: registry-sync
 # over stored rows, never a hardcoded constant.
 
 on:
-  schedule:
-    # Hourly. BNB Chain adds roughly 250-350 identities a day, so this keeps the
-    # funnel within an hour of chain state at negligible cost.
-    - cron: "17 * * * *"
+  # Manual-only. pg_cron is the live scheduler (see docs/OPERATIONS.md §3); a
+  # cron trigger here would double-schedule the same pipeline the moment repo
+  # Actions billing unlocks - same jobs, twice the crawl against third-party
+  # endpoints. Run this by hand only when pg_cron itself is broken.
   workflow_dispatch:
     inputs:
       backfill:

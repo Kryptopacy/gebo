@@ -11,8 +11,8 @@ name: resolve-registrations
 # so progress accumulates across runs instead of needing one very long job.
 
 on:
-  schedule:
-    - cron: "40 */3 * * *"
+  # Manual-only: pg_cron owns the live cadence (docs/OPERATIONS.md §3); a
+  # schedule here would double-resolve once repo Actions billing unlocks.
   workflow_dispatch:
     inputs:
       limit:

@@ -11,7 +11,7 @@
  */
 import "dotenv/config";
 import postgres from "postgres";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { RULES_FINGERPRINT } from "../src/lib/classify.ts";
 
 const url = process.env.DATABASE_URL;
@@ -412,22 +412,29 @@ async function main() {
     try {
       const md = readFileSync("docs/MEASUREMENTS.md", "utf8");
       const m = md.match(/Census measured at ([0-9-]+ [0-9:]+) UTC/);
-      if (!m) {
+      // The offline CENSUS_FALLBACK snapshot in src/lib/data.ts is generated
+      // by the same script on the same schedule, and was found 11 days stale
+      // the same day. Freshness is gated together.
+      const data = readFileSync("src/lib/data.ts", "utf8");
+      const f = data.match(/measuredAt: "([0-9-]+)"/);
+      if (!m || !f) {
         state = "MISSING";
-        evidence = "generated block not found in docs/MEASUREMENTS.md";
+        evidence = !m
+          ? "generated block not found in docs/MEASUREMENTS.md"
+          : "CENSUS_FALLBACK measuredAt not found in src/lib/data.ts";
       } else {
         const stamp = m[1] ?? "";
-        const measured = Date.parse(`${stamp.replace(" ", "T")}Z`);
-        const ageH = (Date.now() - measured) / 3_600_000;
-        if (Number.isNaN(measured)) {
+        const docAge = (Date.now() - Date.parse(`${stamp.replace(" ", "T")}Z`)) / 3_600_000;
+        const fbAge = (Date.now() - Date.parse(`${f[1]}T00:00:00Z`)) / 3_600_000;
+        if (Number.isNaN(docAge) || Number.isNaN(fbAge)) {
           state = "UNKNOWN";
-          evidence = `unparseable timestamp: ${stamp}`;
-        } else if (ageH > MEASUREMENTS_MAX_AGE_HOURS) {
+          evidence = `unparseable timestamps: doc=${stamp} fallback=${f[1]}`;
+        } else if (docAge > MEASUREMENTS_MAX_AGE_HOURS || fbAge > MEASUREMENTS_MAX_AGE_HOURS) {
           state = "MISSING";
-          evidence = `generated block is ${Math.floor(ageH)}h old (> ${MEASUREMENTS_MAX_AGE_HOURS}h) - run npx tsx scripts/write-measurements.ts`;
+          evidence = `stale: doc block ${Math.floor(docAge)}h old, fallback ${Math.floor(fbAge)}h old (max ${MEASUREMENTS_MAX_AGE_HOURS}h) - run npx tsx scripts/write-measurements.ts`;
         } else {
           state = "DONE";
-          evidence = `generated block ${Math.floor(ageH)}h old (max ${MEASUREMENTS_MAX_AGE_HOURS}h)`;
+          evidence = `doc block ${Math.floor(docAge)}h old, fallback ${Math.floor(fbAge)}h old (max ${MEASUREMENTS_MAX_AGE_HOURS}h)`;
         }
       }
     } catch (e) {
@@ -436,7 +443,64 @@ async function main() {
     }
     gates.push({
       id: "measurements-fresh",
-      item: "docs/MEASUREMENTS.md generated block is fresh",
+      item: "Generated figure blocks (docs + fallback snapshot) are fresh",
+      state,
+      evidence,
+    });
+  }
+
+  // ------------------------------------------------- env documentation coverage
+  // .env.example is documentation, and documentation rots the same way the
+  // measurements block did: a var gets read in code but never documented, and
+  // the next deployment discovers it in production (X402_PAY_TO went missing
+  // exactly this way - the paid route silently fell back to the facilitator
+  // address and settlement became a self-transfer). Scan what the code reads
+  // and require each var to appear in .env.example, minus platform-provided
+  // vars that no .env can supply anyway.
+  {
+    const PLATFORM_PROVIDED = new Set([
+      "NODE_ENV", "VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_REGION",
+    ]);
+    let state: Gate["state"] = "UNKNOWN";
+    let evidence = "";
+    try {
+      const example = readFileSync(".env.example", "utf8");
+      const documented = new Set(
+        [...example.matchAll(/^([A-Z_0-9]+)=/gm)].map((m) => m[1]!),
+      );
+      const read = new Set<string>();
+      const roots = ["app", "src", "scripts"];
+      const walk = (dir: string) => {
+        for (const e of readdirSync(dir, { withFileTypes: true })) {
+          const p = `${dir}/${e.name}`;
+          if (e.isDirectory()) walk(p);
+          else if (/\.(ts|tsx|mts)$/.test(e.name)) {
+            const src = readFileSync(p, "utf8");
+            for (const m of src.matchAll(/process\.env\.([A-Z_0-9]+)/g)) {
+              read.add(m[1]!);
+            }
+          }
+        }
+      };
+      for (const r of roots) if (existsSync(r)) walk(r);
+
+      const missing = [...read]
+        .filter((v) => !documented.has(v) && !PLATFORM_PROVIDED.has(v))
+        .sort();
+      if (missing.length === 0) {
+        state = "DONE";
+        evidence = `${read.size} env vars read by code, all documented (or platform-provided)`;
+      } else {
+        state = "MISSING";
+        evidence = `read in code but absent from .env.example: ${missing.join(", ")}`;
+      }
+    } catch (e) {
+      state = "UNKNOWN";
+      evidence = `could not scan env coverage: ${String((e as Error).message).slice(0, 60)}`;
+    }
+    gates.push({
+      id: "env-docs",
+      item: ".env.example documents every var the code reads",
       state,
       evidence,
     });

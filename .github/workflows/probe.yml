@@ -6,10 +6,9 @@ name: probe
 # probe hundreds of endpoints instead of the ~45 a request handler manages.
 
 on:
-  schedule:
-    # Every 15 minutes. GitHub may delay scheduled runs under load; the tiered
-    # next_probe_at means a late run simply picks up whatever is due.
-    - cron: "*/15 * * * *"
+  # Manual-only: pg_cron owns the live cadence (docs/OPERATIONS.md §3), and a
+  # schedule here would double-probe every endpoint the moment repo Actions
+  # billing unlocks. Use this for long sweeps the cron slice cannot finish.
   workflow_dispatch:
     inputs:
       mode:

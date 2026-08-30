@@ -39,19 +39,22 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Regenerate the measurements block
+      - name: Regenerate the measurements block and fallback snapshot
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx tsx scripts/write-measurements.ts
 
-      - name: Commit if the block changed
+      - name: Typecheck the generated source change
+        run: npx tsc --noEmit
+
+      - name: Commit if anything changed
         run: |
           git config user.name "gebo-measurements-bot"
           git config user.email "actions@github.com"
-          if git diff --quiet docs/MEASUREMENTS.md; then
-            echo "block already current; nothing to commit"
+          if git diff --quiet docs/MEASUREMENTS.md src/lib/data.ts; then
+            echo "generated blocks already current; nothing to commit"
             exit 0
           fi
-          git add docs/MEASUREMENTS.md
-          git commit -m "docs(measurements): refresh generated block [skip ci]"
+          git add docs/MEASUREMENTS.md src/lib/data.ts
+          git commit -m "docs(measurements): refresh generated blocks [skip ci]"
           git push
