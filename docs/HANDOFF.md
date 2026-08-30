@@ -4,6 +4,47 @@ Supplement to AGENTS.md, not a replacement. `npm run readiness` remains the sour
 of truth for what is DONE; this file records what readiness cannot see: in-flight
 steps, session-specific gotchas, and the exact next actions.
 
+## Resume status - 2026-08-30 (second session: the trading track record)
+
+TermiX's 20% criterion demands trading agents carry "a real record: win rate,
+the window, and the risk taken". Nothing in the DB satisfied that (only
+uptime/latency + task attestations). Built this session, all verified:
+
+- **Grid trading record, replay-measured.** The grid reference agent's advised
+  strategy (+/-3% symmetric grid, 8 bands/side, deepest eligible pool) replayed
+  over the market that actually happened. `src/lib/grid-record.ts` (simulator,
+  pure, 15 tests) + `src/lib/grid-record-run.ts` (shared compute) +
+  `scripts/grid-track-record.ts` (CLI) + `/api/cron/grid-record` (daily 07:17
+  UTC, migration 0016) + a readiness gate. Renders on `/a/259575` in the Track
+  record tab with every defect disclosed inline.
+- **Honest 30d result on BTCB/WBNB 0.05% (deepest eligible venue):** 56/56
+  round-trips won (band width 0.375% vs 0.1% round-trip fees — mechanical, and
+  disclosed), total PnL +$27 on $1000, BUT holding beat it by ~$172 and
+  doing-nothing by ~$140; max drawdown 6.1%. A negative result, published as
+  one. 7d window had 0 closed trips (monotonic week) → win-rate row skipped,
+  rendered as explicit absence, never zero.
+- **"Deepest pool" ordering was silently ARBITRARY for weeks.** Every consumer
+  ordered by `(payload->>'tvlUsd')` — a field no writer ever produced
+  (the cron writes `liquidity`, raw V3 L). The grid agent had been advising a
+  1%-fee CAKE/USDT pool with 2000x less depth than the 0.01% tier. Fixed:
+  cron now computes `depthUsd` (2·L·√P priced in token1, a marginal-depth
+  proxy — labeled as such, not TVL), stable/stable pairs are ineligible for
+  grid ("nothing for a grid to trade"), and personas/run-advantage/the record
+  all order by it. The record ALSO recomputes selection from raw fields at
+  read time so a stale payload can't misdirect it again.
+- **Price path source:** free BSC RPCs cap getLogs lookback (~5k blocks /
+  publicnode), so no 7d+ pool-native swap history is reachable. The replay
+  uses Binance 1m closes for both pool tokens ratioed into pool orientation,
+  with a LIVE peg check (pool tick vs exchange ratio — currently -0.01%,
+  well inside the 0.05% fee tier) that ABORTS the write if deviation exceeds
+  the grid's own width. All disclosed in the metric qualifiers.
+- **git on this box:** `git log`/`show` hang because the PAGER spawn wedges —
+  always `cmd /c "git --no-pager ..."`. Separately, `.git\objects\e2`
+  directory ENUMERATION is oplocked by something (D: is a backup volume);
+  git opens objects by path so it works, but avoid `git gc`/`count-objects`
+  until that clears. Stuck `git.exe` processes cascade-block new git startups;
+  kill them first.
+
 ## Resume status - 2026-08-30
 
 Everything in the 2026-08-29 section below still holds. New this session (all
@@ -127,6 +168,10 @@ agents, 469 validated on the latest probe day.
 4. Optional hygiene: set `X402_PAY_TO=0x2Fb9E5CfebadbC77a9c1a42D96655F46d09D493d`
    in the Vercel project env. The code default is now correct without it, but
    the env var keeps prod and local `.env` symmetric.
+5. The grid trading record refreshes daily at 07:17 UTC (cron `gebo-grid-record`).
+   If it fails, the grid_* rows self-expire after 26h and the readiness gate
+   flips to PARTIAL/MISSING - that absence on the card is the designed signal,
+   not a bug to paper over.
 
 ## Gotchas carried forward
 

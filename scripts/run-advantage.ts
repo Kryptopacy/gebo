@@ -195,13 +195,22 @@ const TASKS: {
   },
 ];
 
-/** Deepest eligible WBNB/USDT pool straight from our own opportunities index. */
+/**
+ * Deepest WBNB/USDT pool straight from our own opportunities index.
+ *
+ * The pair filter is load-bearing: without it the query once returned an
+ * arbitrary pool (the old tvlUsd ordering never matched a real field), and the
+ * pcs-tick task asked agents about whatever row came first. Depth comes from
+ * the cron-computed depthUsd; within one pair it reduces to raw liquidity.
+ */
 async function deepestWbnbUsdtPool(): Promise<{ address: string; label: string } | null> {
   const rows = await sql<{ ref: string; label: string; payload: unknown }[]>`
     select ref, label, payload
     from opportunities
     where chain_id = 56 and category = 'rebalancing' and venue = 'pancakeswap-v3' and eligible
-    order by ((payload->>'tvlUsd')::numeric) desc nulls last
+      and ((payload->>'tokenA' = 'WBNB' and payload->>'tokenB' = 'USDT')
+        or (payload->>'tokenA' = 'USDT' and payload->>'tokenB' = 'WBNB'))
+    order by coalesce((payload->>'depthUsd')::numeric, (payload->>'liquidity')::numeric, 0) desc
     limit 1`;
   const r = rows[0];
   return r ? { address: r.ref, label: r.label } : null;

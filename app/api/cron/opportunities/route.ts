@@ -49,6 +49,20 @@ const poolAbi = parseAbi([
   "function slot0() view returns (uint160,int24,uint16,uint16,uint16,uint32,bool)",
   "function liquidity() view returns (uint128)",
 ]);
+/** Quotes that are ~$1; a pool of two of these never moves enough to grid. */
+const STABLES = new Set(["USDT", "USDC", "BUSD", "FDUSD"]);
+/**
+ * Marginal depth in USD: 2 * L * sqrt(P), priced in the pool's token1, which
+ * is the on-chain value of active in-range liquidity around the current tick.
+ * It is a DEPTH PROXY, not TVL - TVL needs full position ranges - but it ranks
+ * venues by the thing a grid or rebalance actually cares about: how much
+ * capital sits near the price. Every token in PAIRS is 18 decimals on BNB
+ * Chain, so the raw->human divisor is uniformly 1e18.
+ */
+function depthUsd(liquidity: bigint, sqrtPriceX96: bigint, token1Usd: number): number {
+  const sqrtP = Number(sqrtPriceX96) / 2 ** 96;
+  return (2 * Number(liquidity) * sqrtP * token1Usd) / 1e18;
+}
 const comptrollerAbi = parseAbi([
   "function getAllMarkets() view returns (address[])",
   "function markets(address) view returns (bool,uint256,bool)",
@@ -107,6 +121,33 @@ export async function GET(request: Request) {
       client.multicall({ contracts: live.map((p) => ({ address: p.pool!, abi: poolAbi, functionName: "liquidity" as const })), allowFailure: true }),
     ]);
 
+    // ── token1 USD prices, needed for depthUsd ───────────────────────────
+    // token0/token1 are the address-sorted pair, not the PAIRS order. For
+    // USDT-quoted pools token1 USD price is ~1; for WBNB-token1 pools (e.g.
+    // CAKE/WBNB) it comes from the deepest WBNB/USDT pool read in this batch.
+    let wbnbUsd: number | null = null;
+    let wbnbUsdLiq = 0n;
+    for (let i = 0; i < live.length; i++) {
+      const p = live[i]!;
+      if (!((p.a === "WBNB" && p.b === "USDT") || (p.a === "USDT" && p.b === "WBNB"))) continue;
+      if (slots[i]?.status !== "success" || liqs[i]?.status !== "success") continue;
+      const s = slots[i]!.result as readonly [bigint, number, number, number, number, number, boolean];
+      const liq = liqs[i]!.result as bigint;
+      if (liq <= wbnbUsdLiq) continue;
+      // Pool price P = token1 per token0. token0 is USDT here (lower address),
+      // so P = WBNB per USDT and 1/P = USDT per WBNB.
+      const sqrtP = Number(s[0]) / 2 ** 96;
+      wbnbUsd = 1 / (sqrtP * sqrtP);
+      wbnbUsdLiq = liq;
+    }
+    const token1Usd = (p: (typeof live)[number]): number => {
+      const [t0] = [TOKENS[p.a]!, TOKENS[p.b]!].sort((x, y) => (x.toLowerCase() < y.toLowerCase() ? -1 : 1));
+      const token1 = t0 === TOKENS[p.a]! ? p.b : p.a;
+      if (token1 === "WBNB") return wbnbUsd ?? 0;
+      if (STABLES.has(token1)) return 1;
+      return 0; // non-stable token1 without a known USD price: depth unpriceable
+    };
+
     for (let i = 0; i < live.length; i++) {
       const p = live[i]!;
       if (slots[i]?.status !== "success") continue;
@@ -114,10 +155,15 @@ export async function GET(request: Request) {
       const liquidity = liqs[i]?.status === "success" ? (liqs[i]!.result as bigint) : 0n;
       const hasLiq = liquidity > 0n;
       const label = `${p.a}/${p.b} ${(p.fee / 10_000).toFixed(2)}%`;
+      const dUsd = depthUsd(liquidity, s[0], token1Usd(p));
+      const stablePair = STABLES.has(p.a) && STABLES.has(p.b);
       const payload = {
         pool: p.pool, tokenA: p.a, tokenB: p.b,
         feeTier: p.fee, feePct: p.fee / 10_000, tickSpacing: TICK_SPACING[p.fee] ?? null,
         currentTick: s[1], sqrtPriceX96: s[0].toString(), liquidity: liquidity.toString(),
+        depthUsd: dUsd,
+        depthBasis: "2 * L * sqrt(P) priced in token1 - marginal in-range depth proxy, not TVL",
+        stablePair,
         unlocked: s[6], observationCardinality: s[3],
         masterChefV3: "0x556B9306565093C855AEA9AE92A594704c2Cd59e",
         readAtBlock: head.toString(),
@@ -127,12 +173,18 @@ export async function GET(request: Request) {
         venue: "pancakeswap-v3", ref: p.pool!, label, payload: sql.json(payload as any),
         eligible: hasLiq, ineligible_reason: hasLiq ? null : "pool exists but holds no active liquidity",
       });
-      const gridOk = hasLiq && p.fee <= 2500;
+      const gridOk = hasLiq && p.fee <= 2500 && !stablePair;
       rows.push({
         id: `grid:56:pancakeswap-v3:${p.pool}`, category: "grid", chain_id: 56,
         venue: "pancakeswap-v3", ref: p.pool!, label, payload: sql.json(payload as any),
         eligible: gridOk,
-        ineligible_reason: gridOk ? null : hasLiq ? "fee tier above 0.25% erodes grid edge" : "no active liquidity",
+        ineligible_reason: gridOk
+          ? null
+          : stablePair
+            ? "stable/stable pair stays within a few basis points - nothing for a grid to trade"
+            : hasLiq
+              ? "fee tier above 0.25% erodes grid edge"
+              : "no active liquidity",
       });
     }
 

@@ -613,6 +613,94 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             </dl>
           )}
 
+          {/* Trading record: replay-measured strategy economics for the grid
+              agent. Rendered only when the replay metrics exist; a missing
+              win rate renders as an explicit absence, never a zero. */}
+          {(() => {
+            const wr30 = byMetric.get("grid_win_rate_30d");
+            const wr7 = byMetric.get("grid_win_rate_7d");
+            const edge30 = byMetric.get("grid_edge_vs_hold_30d");
+            const edge7 = byMetric.get("grid_edge_vs_hold_7d");
+            const dd30 = byMetric.get("grid_max_drawdown_30d");
+            const dd7 = byMetric.get("grid_max_drawdown_7d");
+            if (!wr30 && !wr7 && !edge30 && !edge7 && !dd30 && !dd7) return null;
+            const q = edge30?.qualifiers ?? edge7?.qualifiers ?? wr30?.qualifiers ?? null;
+            const money = (v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
+            return (
+              <div className="surface-card mt-m" style={{ padding: "16px 18px", borderLeft: "3px solid var(--accent)" }}>
+                <h3 style={{ margin: "0 0 4px", fontSize: "1rem" }}>Trading record &mdash; its advised strategy, replayed over the market that happened</h3>
+                <p className="xs t-4" style={{ margin: "0 0 12px" }}>
+                  The agent advises a mechanical grid; the market graded it. Win rate is over closed
+                  round-trips only; edge is net of the pool&apos;s fees, against both doing-nothing and
+                  holding the traded asset.
+                </p>
+                <dl className="kpi-grid" style={{ marginTop: 0 }}>
+                  {wr30 && (
+                    <div className="kpi-card">
+                      <dt>Win rate, 30d</dt>
+                      <dd>{wr30.value.toFixed(1)}%</dd>
+                      <div className="qualifier">{wr30.qualifiers.formula}</div>
+                    </div>
+                  )}
+                  {!wr30 && wr7 && (
+                    <div className="kpi-card">
+                      <dt>Win rate, 7d</dt>
+                      <dd>{wr7.value.toFixed(1)}%</dd>
+                      <div className="qualifier">{wr7.qualifiers.formula}</div>
+                    </div>
+                  )}
+                  {!wr30 && !wr7 && (
+                    <div className="kpi-card">
+                      <dt>Win rate</dt>
+                      <dd>&mdash;</dd>
+                      <div className="qualifier">No round-trip closed in the window; a rate would be invented, not measured</div>
+                    </div>
+                  )}
+                  {edge30 && (
+                    <div className="kpi-card">
+                      <dt>Edge vs DIY, 30d</dt>
+                      <dd style={{ color: edge30.value >= 0 ? "var(--pass)" : "var(--fail)" }}>{money(edge30.value)}</dd>
+                      <div className="qualifier">{edge30.qualifiers.formula}</div>
+                    </div>
+                  )}
+                  {edge7 && (
+                    <div className="kpi-card">
+                      <dt>Edge vs DIY, 7d</dt>
+                      <dd style={{ color: edge7.value >= 0 ? "var(--pass)" : "var(--fail)" }}>{money(edge7.value)}</dd>
+                      <div className="qualifier">{edge7.qualifiers.formula}</div>
+                    </div>
+                  )}
+                  {dd30 && (
+                    <div className="kpi-card">
+                      <dt>Max drawdown, 30d</dt>
+                      <dd>{dd30.value.toFixed(2)}%</dd>
+                      <div className="qualifier">{dd30.qualifiers.formula}</div>
+                    </div>
+                  )}
+                  {dd7 && (
+                    <div className="kpi-card">
+                      <dt>Max drawdown, 7d</dt>
+                      <dd>{dd7.value.toFixed(2)}%</dd>
+                      <div className="qualifier">{dd7.qualifiers.formula}</div>
+                    </div>
+                  )}
+                </dl>
+                {q && (
+                  <details className="mt-m">
+                    <summary className="xs" style={{ cursor: "pointer" }}>How this was measured, and what it cannot see</summary>
+                    <p className="xs t-4" style={{ margin: "8px 0 0" }}>{q.denominator}</p>
+                    <ul className="xs t-4" style={{ margin: "8px 0 0", paddingLeft: "18px" }}>
+                      {q.knownDefects.map((d, i) => <li key={i}>{d}</li>)}
+                    </ul>
+                    <p className="xs t-4" style={{ margin: "8px 0 0" }}>
+                      Window {q.window}; {q.obsCount.toLocaleString()} observations (floor {q.obsFloor}); {q.costTreatment}.
+                    </p>
+                  </details>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Hire vs do-it-yourself, per agent, at the point of decision.
               The corpus-wide Advantage Report lives at /compare; this answers
               the question the visitor actually has: does THIS agent beat me. */}

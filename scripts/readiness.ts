@@ -262,6 +262,29 @@ async function main() {
   });
 
   /**
+   * Trading track record: the rubric's win-rate/window/risk demand, measured
+   * by replay for the grid reference agent.
+   *
+   * The grid_* rows self-expire after 26h so a broken refresh shows up HERE
+   * (and on the agent card) rather than as a quietly outdated number.
+   */
+  const gridRecord = (await tableExists("metric_values"))
+    ? await count("metric_values", "metric_id like 'grid\\_%'")
+    : null;
+  const gridRecordRoute = route("app/api/cron/grid-record/route.ts");
+  gates.push({
+    id: "grid-record",
+    item: "Trading track record (grid agent, win rate + window + risk)",
+    state:
+      gridRecord != null && gridRecord >= 4 && gridRecordRoute
+        ? "DONE"
+        : gridRecord != null && gridRecord > 0
+          ? "PARTIAL"
+          : "MISSING",
+    evidence: `grid_* rows=${gridRecord === null ? "no table" : fmt(gridRecord)}, refresh cron route=${gridRecordRoute ? "present" : "missing"}`,
+  });
+
+  /**
    * The reference agent has to be REACHABLE, not merely present.
    *
    * Five agents in this registry serve a valid card naming an endpoint only their

@@ -43,7 +43,15 @@ const slot0Abi = parseAbi([
   "function slot0() view returns (uint160, int24, uint16, uint16, uint8, uint8, bool)",
 ]);
 
-/** Deepest eligible V3 pool for a category, straight from our own index. */
+/**
+ * Deepest eligible V3 pool for a category, straight from our own index.
+ *
+ * Orders by depthUsd - marginal in-range liquidity priced in USD - which the
+ * opportunities cron computes from the pool's own liquidity and sqrtPriceX96.
+ * It previously ordered by a tvlUsd field no writer ever produced, so every
+ * "deepest" pick was an arbitrary tie-break; the grid persona once named a
+ * 1%-fee pool with 2000x less depth than the 0.01% tier on the same pair.
+ */
 async function deepestPool(category: string): Promise<{ address: string; label: string; feePct: number | null } | null> {
   const sql = db();
   if (!sql) return null;
@@ -52,7 +60,7 @@ async function deepestPool(category: string): Promise<{ address: string; label: 
     from opportunities
     where chain_id = 56 and venue = 'pancakeswap-v3' and eligible
       and category = ${category}
-    order by coalesce((payload->>'tvlUsd')::numeric, 0) desc
+    order by coalesce((payload->>'depthUsd')::numeric, 0) desc
     limit 1`;
   const r = rows[0];
   return r ? { address: r.ref, label: r.label, feePct: r.fee_pct == null ? null : Number(r.fee_pct) } : null;
@@ -160,7 +168,7 @@ export async function answerGrid(): Promise<PersonaAnswer> {
       suggestedGrid: { lowerTick: loTick, upperTick: hiTick, bandsPerSide: 8, widthPct: 3 },
       qualifiers: {
         source: "PancakeSwap V3 slot0 via our live opportunity index",
-        basis: "deepest eligible pool by TVL in the grid category",
+        basis: "deepest active in-range liquidity (on-chain L at the current tick, priced in USD), not TVL",
         limits:
           "reads-only: no inventory, no orders placed, no position taken. Bounds are symmetric-arithmetic, not optimised",
       },
@@ -191,7 +199,7 @@ export async function answerRebalance(): Promise<PersonaAnswer> {
       suggestedRange: { lowerTick: loTick, upperTick: hiTick, widthPct: 10 },
       qualifiers: {
         source: "PancakeSwap V3 slot0 via our live opportunity index",
-        basis: "deepest eligible pool by TVL in the rebalancing category",
+        basis: "deepest active in-range liquidity (on-chain L at the current tick, priced in USD), not TVL",
         limits:
           "reads-only: cannot see your LP NFT or MasterChefV3 stake, so 'needs rebalancing' is stated as the condition, not diagnosed per position",
       },
