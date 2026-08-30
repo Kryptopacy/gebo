@@ -1,8 +1,30 @@
-# Session handoff - 2026-08-29
+# Session handoff - 2026-08-30
 
 Supplement to AGENTS.md, not a replacement. `npm run readiness` remains the source
 of truth for what is DONE; this file records what readiness cannot see: in-flight
 steps, session-specific gotchas, and the exact next actions.
+
+## Resume status - 2026-08-30
+
+Everything in the 2026-08-29 section below still holds. New this session (all
+verified, not asserted):
+
+- Sessions regranted: 4 new grants (#9-#12), all `isValidKey=true` on chain;
+  readiness back to **24/24** with 6 chain-valid keys. Expiry ≤48h means this
+  needs a re-run before any judging window.
+- Advantage attestations refreshed (`run-advantage.ts --record`, 12 rows):
+  HealthGuard SUCCEEDED on venus-hf in 1843 ms vs 3515 ms manual; the grid
+  agents' canned replies are recorded as PARTIAL, honest declines as FAILED.
+- **x402 self-transfer bug found in PRODUCTION and fixed.** The deployed route
+  fell back to `payTo = facilitator` because `X402_PAY_TO` was never set in
+  Vercel's env; since the facilitator IS the demo owner, our own e2e buy
+  (tx `0x27c4fe65…`) moved 0.01 $U buyer→buyer and the old script printed
+  "paid 0" as success. Fixes: (1) the route's fallback is now the canonical
+  receive-only address `0x2Fb9E5Cf…`, never the facilitator; (2)
+  `scripts/x402-buy-health.ts` reads `payTo` from the 402 challenge and FAILS
+  unless that address's balance rose by the price. Verified locally end to
+  end: wallet 19.99 → 19.98, payTo 0.01 → 0.02 (tx `0x5c747feb…`).
+- Wallet top-up: claimed 10 $U from the faucet (`0xc8ede6f9…`), now 19.98.
 
 ## Resume status - 2026-08-29
 
@@ -96,12 +118,15 @@ agents, 469 validated on the latest probe day.
 
 ## IMMEDIATE next steps
 
-1. Run `npx tsx scripts/regrant-demo-sessions`-equivalent before judging (the
-   Sep 8 cron now targets testnet correctly) so ≥4 chain-valid keys exist.
+1. Sessions expire ≤48h by design - re-run `npx tsx scripts/grant-demo-sessions.ts`
+   before any judging window (last run 2026-08-30, sessions #9-#12).
 2. Consider funding the mainnet demo wallet (~0.002 BNB) to run
    `hire-altana-sdk.ts --mainnet` — stronger evidence, one flag, no code change.
 3. `npx tsx scripts/run-advantage.ts --record` for fresh attestations if judges
-   re-run the TermiX evaluation.
+   re-run the TermiX evaluation (last run 2026-08-30, 12 rows).
+4. Optional hygiene: set `X402_PAY_TO=0x2Fb9E5CfebadbC77a9c1a42D96655F46d09D493d`
+   in the Vercel project env. The code default is now correct without it, but
+   the env var keeps prod and local `.env` symmetric.
 
 ## Gotchas carried forward
 

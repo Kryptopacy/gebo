@@ -30,13 +30,23 @@ async function main() {
   });
 
   // 1. The unpaid request must produce the 402 challenge, not a free answer.
+  //    The challenge also names the payTo the merchant configured - kept for
+  //    the settlement check at the end, which fails loudly when earnings land
+  //    anywhere else (a buyer==payTo misconfiguration is a self-transfer that
+  //    leaves every balance unchanged and used to read as "paid 0" success).
   const url = `${BASE}/api/agent/health/paid?address=${TARGET}`;
   const bare = await fetch(url);
   console.log(`unpaid request: HTTP ${bare.status}`);
+  let payTo: string | null = null;
   if (bare.status === 402) {
-    const body = (await bare.json()) as { accepts?: unknown[]; error?: string };
+    const body = (await bare.json()) as {
+      accepts?: { payTo?: string; amount?: string }[];
+      error?: string;
+    };
+    payTo = body.accepts?.[0]?.payTo ?? null;
+    console.log(`challenge payTo: ${payTo ?? "(not advertised)"}`);
     console.log(`challenge: ${JSON.stringify(body).slice(0, 220)}...`);
-  } else if (bare.status !== 402) {
+  } else {
     console.log(`expected 402, got ${bare.status}: ${(await bare.text()).slice(0, 140)}`);
   }
 
@@ -65,6 +75,9 @@ async function main() {
   console.log(`permit2 approved, checker ${PERMIT2_ADDRESS} authorised for the session`);
 
   const uBefore = await pub.readContract({ address: U_TOKEN, abi: ERC20, functionName: "balanceOf", args: [wallet.address] });
+  const payToBefore = payTo
+    ? await pub.readContract({ address: U_TOKEN, abi: ERC20, functionName: "balanceOf", args: [payTo as `0x${string}`] })
+    : null;
 
   // 3. Buy through the SDK's x402 client: signs the eip3009 authorization
   //    with the session key, replays it, and settles on-chain.
@@ -82,7 +95,29 @@ async function main() {
   }
 
   const uAfter = await pub.readContract({ address: U_TOKEN, abi: ERC20, functionName: "balanceOf", args: [wallet.address] });
-  console.log(`wallet $U: ${formatUnits(uBefore, 18)} -> ${formatUnits(uAfter, 18)} (paid ${formatUnits(uBefore - uAfter, 18)})`);
+  const payToAfter = payTo
+    ? await pub.readContract({ address: U_TOKEN, abi: ERC20, functionName: "balanceOf", args: [payTo as `0x${string}`] })
+    : null;
+  const paidByBuyer = uBefore - uAfter;
+  const receivedByPayTo = payToAfter !== null && payToBefore !== null ? payToAfter - payToBefore : null;
+  const price = 10_000_000_000_000_000n;
+  console.log(`wallet $U: ${formatUnits(uBefore, 18)} -> ${formatUnits(uAfter, 18)} (paid ${formatUnits(paidByBuyer, 18)})`);
+  if (payTo) console.log(`payTo  $U: ${formatUnits(payToBefore!, 18)} -> ${formatUnits(payToAfter!, 18)} (received ${formatUnits(receivedByPayTo!, 18)})`);
+
+  // The settlement must have moved the price to the advertised payTo. A buyer
+  // balance that did not fall, or a payTo that did not rise, means the payment
+  // went in a circle (buyer == payTo) or nowhere - both are failures even
+  // though the HTTP layer said 200 with a receipt.
+  if (receivedByPayTo === null || receivedByPayTo < price) {
+    console.error(
+      `SETTLEMENT FAILED THE BALANCE CHECK: payTo ${payTo ?? "?"} received ` +
+        `${receivedByPayTo === null ? "nothing (not advertised)" : formatUnits(receivedByPayTo, 18) + " $U"}, ` +
+        `expected at least ${formatUnits(price, 18)}. If payTo equals the buyer, the merchant is ` +
+        `misconfigured and the settlement was a self-transfer.`,
+    );
+    process.exit(1);
+  }
+  console.log("settlement verified on-chain: the advertised payTo received the price.");
 }
 
 main().catch((e) => { console.error("BUY FAILED:", e?.shortMessage ?? e?.message ?? e); process.exit(1); });

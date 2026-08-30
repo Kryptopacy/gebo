@@ -44,8 +44,12 @@ function getMerchant(): Promise<Merchant> {
       // the facilitator: the facilitator pays gas and could be any funded
       // key, while payTo is bound into the buyer's signature. When both were
       // the demo key, the settlement became a self-transfer - mechanically
-      // correct, financially a circle. Separate the roles properly.
-      const payTo = (process.env.X402_PAY_TO ?? facilitator.address) as Address;
+      // correct, financially a circle. The fallback is therefore the
+      // canonical receive-only address, NEVER the facilitator: in production
+      // X402_PAY_TO went unset and the facilitator fallback silently restored
+      // the self-transfer the env var was introduced to stop (verified
+      // on-chain 2026-08-29: tx 0x27c4fe65... moved 0.01 $U buyer->buyer).
+      const payTo = (process.env.X402_PAY_TO ?? "0x2Fb9E5CfebadbC77a9c1a42D96655F46d09D493d") as Address;
       const siteBase =
         process.env.NEXT_PUBLIC_SITE_URL ??
         process.env.VERCEL_PROJECT_PRODUCTION_URL ??
