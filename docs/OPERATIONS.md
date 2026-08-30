@@ -47,7 +47,17 @@ npx tsx scripts/migrate.ts
 | `0002_census_stats.sql` | `census_stats` — the figures the site serves |
 | `0003_registry_tokens.sql` | Thin per-token ledger + `refresh_census_stats()` |
 | `0004_token_uri.sql` | Metadata pointer + resolver work queue |
-| `0005_schedule.sql` | `pg_cron` + `pg_net`, Vault helpers, four scheduled jobs |
+| `0005_schedule.sql` | `pg_cron` + `pg_net`, Vault helpers, scheduled jobs |
+| `0006_capability_text.sql` | `capability_doc` tsvector for search |
+| `0007_schedule_classify.sql` | Classification cron + rules-fingerprint invalidation |
+| `0008_attestations.sql` | Attestation ledger behind the evidence gate |
+| `0009_taxonomy_growth.sql` | Emerging-category candidates |
+| `0010_probe_daily_err_counts.sql` | Error-class counters per day |
+| `0011_lock_down_definer_functions.sql` | Revoke `PUBLIC` execute on definer fns (see AGENTS.md §11) |
+| `0012_pg_net_schema.sql` | Drop/recreate pg_net (non-relocatable) — run `verify:pgnet` after |
+| `0013`/`0014_strip_mojibake*.sql` | Repair double-encoded text |
+| `0015_regrant_sessions.sql` | Session regrant schedule (testnet) |
+| `0016_grid_record_schedule.sql` | Daily grid track-record refresh |
 
 ### Why two agent tables
 
@@ -80,7 +90,10 @@ lock), and Vercel's Hobby tier caps cron at once per day — useless for a
 five-minute probe cadence or a six-figure resolution backlog. `pg_cron` runs
 every minute, costs nothing on the free tier, and keeps the schedule beside the
 data it maintains. The GitHub workflows remain in `.github/workflows/` as an
-alternative if billing is restored.
+alternative if billing is restored; `refresh-measurements.yml` (daily docs
+refresh) also depends on Actions actually executing — if it does not run, the
+readiness freshness gate fails loudly rather than letting the published
+figures drift silently.
 
 ### One-time setup, after deploying
 
@@ -103,7 +116,11 @@ not a fault.
 | `gebo-resolve` | every minute | Remote registration backlog, bounded slice |
 | `gebo-probe` | every 5 min | A2A/MCP handshakes for endpoints past `next_probe_at` |
 | `gebo-sync` | every 5 min | New identities above the stored high-water mark |
+| `gebo-classify` | every 10 min | Capability classification + rules re-apply on rule change |
 | `gebo-opportunities` | every 10 min | PancakeSwap V3 ticks, Venus rates |
+| `gebo-emerging` | daily 03:17 | Emerging-category candidates |
+| `gebo-grid-record` | daily 07:17 | Replay-measured grid track record |
+| `gebo-regrant-1/2` | monthly (Sep) | Re-grant demo session keys before they expire |
 
 Probe cadence is tiered by last outcome, so a run only touches what is due:
 
@@ -211,7 +228,17 @@ active.
   endpoint-bearing and callable counts are lower bounds that rise over time.
 - **No automated backups on the free tier.** Everything is reproducible from
   chain, but the probe history is not.
-- **No tests.** The highest-value first targets are the `clean()` sanitiser, the
-  spend-cap decimals helper, and `registrableDomain()`.
 - **No error monitoring.** Failures surface only in platform logs and
   `cron.job_run_details`.
+
+### Verification commands
+
+- `npm run readiness` — 26 gates measured from the database and filesystem;
+  includes a freshness gate on the docs/MEASUREMENTS.md generated block.
+- `npm run verify:prod` — checks the deployed host actually serves.
+- `npm run verify:pgnet` — queues a real pg_net request and waits for the
+  response; the only trustworthy check after touching pg_net (a dead worker
+  leaves every job reporting `succeeded` while nothing is fetched).
+- `npm run verify` — `tsc --noEmit && vitest run && next build`. The suite is
+  153 tests; the highest-value historical targets (`clean()`, spend-cap
+  decimals, `registrableDomain()`) are all pinned.

@@ -4,6 +4,43 @@ Supplement to AGENTS.md, not a replacement. `npm run readiness` remains the sour
 of truth for what is DONE; this file records what readiness cannot see: in-flight
 steps, session-specific gotchas, and the exact next actions.
 
+## Resume status - 2026-08-30 (third session: hackathon audit + doc truth)
+
+Rubric-driven audit of the live product, fixes verified on prod, docs brought
+back in line with reality:
+
+- **Every hire page showed "Simulation failed" on prod.** Root cause: the inline
+  `defineChain` in `src/lib/simulate.ts` omitted `contracts.multicall3`, so
+  every viem multicall threw. Fixed by adding the canonical Multicall3 address
+  (block 17,422,723). All four category simulations verified live. The hire
+  flow was otherwise sound - this was the one break in the judged journey.
+- **Venus `liquidationIncentiveMantissa` reverts on the Diamond comptroller**
+  ("Function does not exist"), and both indexers coerced the failure to 0n,
+  printing "-100.0%" for every market - invariant 9 violation. Failed reads now
+  store null; the column renders "unmeasured". `closeFactorMantissa` works and
+  is kept.
+- **Search gap:** hyphenated skills ("health-factor-monitoring") never matched
+  the query "health factor", hiding the VERIFIED HealthGuard behind the
+  loopback-listed imposter. Hyphens normalised on both sides now.
+- **Opportunity columns:** 18-decimal mantissas compacted ("178.4k", via BigInt
+  division before float conversion), rebalancing shows USD in-range depth.
+  Pinned in tests/opportunity-columns.test.ts.
+- Footer "Audit Scripts" link pointed at bare github.com -> now
+  Kryptopacy/gebo. README rewritten (logo, live URL, marketplace journey,
+  current scripts/stack); OPERATIONS.md jobs+migrations tables current;
+  PRODUCT_SPEC IA route table corrected to as-built.
+- **MEASUREMENTS.md automation:** the generated block was 4 days stale and
+  nothing would have caught it. Now: `.github/workflows/refresh-measurements.yml`
+  regenerates daily and commits, AND `npm run readiness` has a freshness gate
+  (fails past 48h) - so if Actions is still billing-locked, staleness is loud,
+  not silent. Readiness is 26/26.
+- **node_modules pruning hit again** (tsx vanished): npm install hung twice
+  (~10 min each) on stale node processes; kill all node.exe first, then
+  `npm install --no-audit --no-fund --prefer-offline` (~12 min).
+- Commit 28f54f0 pushed to master and verified on origin; deploy went out.
+  Remaining risk: Actions billing lock means the refresh workflow may never
+  fire - watch the readiness gate on any machine with the repo.
+
 ## Resume status - 2026-08-30 (second session: the trading track record)
 
 TermiX's 20% criterion demands trading agents carry "a real record: win rate,

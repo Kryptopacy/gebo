@@ -29,16 +29,24 @@ Judged journey: **land → find by category → understand → activate**, with 
 
 ```
 /                              Landing = the discovery surface itself
-/c/[category]                  Category surface (4 of these, equal depth)
+/c/[category]                  Category surface (4 judged + 5 more, equal depth)
+/c/[category]                  Tabbed: Agents · Opportunities · How it works
+/categories                    All categories, one index
 /o/[opportunityId]             Opportunity detail (a pool / market / position)
-/a/[chainId]/[agentId]         Agent Card
-/a/[chainId]/[agentId]/dryrun  Dry run — simulate before authorising
-/a/[chainId]/[agentId]/hire    Activation flow (4 steps)
+/a/[tokenId]                   Agent Card (tokenId keys the ERC-8004 identity)
+/a/[tokenId]/hire              Activation flow: scope → simulate → hire → revoke
+                               (the dry run folded into step 02 — no separate route)
+/search                        Capability search (full-text over skills/docs/name)
 /authority                     My Agents — live sessions, blast radius, revoke
 /compare                       Agent Advantage — counterfactual engine (serves TermiX)
 /methodology                   Every definition + known defects
 /live                          Proof-of-Life ledger (public liveness feed)
 ```
+
+> As-built note (2026-08-30): routes are keyed by `tokenId` alone (chain is
+> fixed at 56 for the registry), the simulation lives inside the hire flow's
+> step 02, and background work runs as `pg_cron` jobs calling Next API routes
+> (see docs/OPERATIONS.md) rather than the Bun workers sketched in §8.
 
 ### 1.1 `/` — Landing
 

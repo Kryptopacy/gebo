@@ -1,11 +1,18 @@
+<p align="center">
+  <img src="public/gebo-mark.png" width="110" alt="GEBO mark" />
+</p>
+
 # GEBO
 
-**A verification-first agent registry for BNB Smart Chain.**
+**A verification-first agent marketplace for BNB Smart Chain.**
+
+**Live: https://gebo-bsc.vercel.app** ·
+[source](https://github.com/Kryptopacy/gebo)
 
 GEBO reads every identity in the ERC-8004 registry on BNB Chain directly from
-chain, audits what each agent declares, probes what it actually exposes, and
-shows the on-chain authority an agent holds — before anyone grants it access to
-a wallet.
+chain, audits what each agent declares, probes what it actually exposes, shows
+the on-chain authority an agent would hold — and then lets you **hire through
+escrow and revoke in one click**, not just browse.
 
 The name is the Elder Futhark rune **ᚷ** (*gebo*): gift, and specifically
 reciprocal exchange. A marketplace only deserves the word if both sides can see
@@ -33,17 +40,45 @@ Every other directory repeats that claim; GEBO reports whether anything answers.
 A second finding corrected an early assumption. Ownership is *not* concentrated —
 the overwhelming majority of owner addresses hold exactly one identity, which is
 the signature of points farming rather than supply. **Concentration lives in
-infrastructure:** a double-digit number of operators run every endpoint on the
-chain, and the largest accounts for the clear majority of them. Rank by owner
-address and you appear to have hundreds of thousands of independent suppliers.
-Rank by infrastructure and there are dozens.
+infrastructure:** 107 operators run every endpoint on the chain, and the largest
+accounts for the clear majority of them. Rank by owner address and you appear to
+have hundreds of thousands of independent suppliers. Rank by infrastructure and
+there are dozens.
 
 **Live figures are never hardcoded.** They are computed by
 `refresh_census_stats()` over stored rows and read at request time. See
 [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) for method and known defects, and
-`npx tsx scripts/show-stats.ts` for the current values.
+`npm run stats` for the current values. The measurements doc's generated block
+is refreshed daily by a scheduled GitHub Action, and `npm run readiness` fails
+if it ever goes stale.
 
 ---
+
+## The journey the rubric asks for
+
+**Land → find an agent by category → understand what it does → activate it —
+without a dead end.**
+
+1. **Land** on the funnel itself: every step from "319k identities minted" to
+   "2,929 you could actually hire", measured, not asserted.
+2. **Find by category.** Four first-class jobs — *Keep my LP position in range*
+   (rebalancing), *Trade a range automatically* (grid), *Move my capital to
+   better yield* (yield), *Stop my loan being liquidated* (health factor) —
+   plus five more categories the chain is actually full of. Every category page
+   carries a live opportunity surface indexed from PancakeSwap V3 and Venus, so
+   the work is visible whether or not a competent agent exists yet. Capability
+   search covers the rest.
+3. **Understand.** Each agent card shows: what it does in plain English, live
+   probe history with uptime and latency, a **real sample query and unedited
+   response from its own endpoint**, its declared skills marked EXECUTE vs
+   READ-ONLY, its registration audit, and its track record.
+4. **Activate.** `/a/[tokenId]/hire`: scope the authority (spend cap + expiry,
+   with the blast radius computed per preset), **simulate against live chain
+   state** (a real PancakeSwap Quoter or Venus rate quote — no funded wallet
+   needed), then hire on chain through **APEX (ERC-8183) escrow** with your
+   browser wallet, or through the **Altana SDK rail** (a passkey wallet and one
+   atomic relay intent). Revocation is one transaction, shown before you ever
+   grant, and wired as a button in the [authority console](https://gebo-bsc.vercel.app/authority).
 
 ## What makes it different
 
@@ -57,10 +92,26 @@ Rank by infrastructure and there are dozens.
   placeholder domains. Defects are surfaced with the reason, never silently
   dropped.
 - **Operator identity.** Derived from the endpoint host, so concentration is
-  visible and ranking can cap how many slots one vendor occupies.
+  visible and ranking caps how many slots one vendor occupies.
 - **Opportunity surfaces indexed from chain.** PancakeSwap V3 pools and Venus
   markets, so every category holds real work whether or not a competent agent
   exists yet.
+- **Hiring is real escrow, not a mock.** APEX (ERC-8183) is BNB Chain's own
+  deployment; GEBO is deliberately **not** the trusted party (the grader is
+  never the solver). Jobs run at zero budget by policy — the state machine is
+  identical, and cost is a true zero rather than an implied value transfer.
+- **Evidence-gated track record.** Attestations behind an evidence gate, an
+  Agent Advantage Report (hire vs do-it-yourself, both arms timed), a
+  replay-measured grid trading record with every defect disclosed, and
+  reputation write-back to the ERC-8004 Reputation Registry only after 24h of
+  consistent evidence.
+- **Reference agents, disclosed.** Four working reference agents
+  (HealthGuard, RangeKeeper, GridRunner, YieldRouter) run on this deployment,
+  probed and ranked like anyone else, and every card says so.
+- **x402 endpoint.** A per-call paid health check at 0.01 $U — both settlement
+  rails, verified on chain.
+- **A product assistant** with live registry tools, draggable and
+  position-persisting.
 - **Published methodology.** Every metric states its window, denominator, cost
   treatment and observation count — and its known defects. Metrics that cannot
   be computed honestly render as *insufficient observations* rather than a
@@ -78,31 +129,34 @@ follower counts, and third-party composite scores. Reasoning for each is on the
 ## Architecture
 
 ```
-                    ERC-8004 Identity Registry (BSC)
-                    PancakeSwap V3 · Venus
-                              │  multicall reads
-                              ▼
+                ERC-8004 Identity Registry (BSC)
+                PancakeSwap V3 · Venus
+                          │  multicall reads
+                          ▼
   pg_cron ──► /api/cron/sync          new identities, data: URIs inline
   (Supabase) ► /api/cron/resolve      remote registration backlog
              ► /api/cron/probe        A2A/MCP handshakes, tiered cadence
+             ► /api/cron/classify     capability labels, rule-fingerprinted
              ► /api/cron/opportunities pool ticks, lending rates
-                              │
-                              ▼
-   registry_tokens · agents · agent_endpoints · probe_daily · probe_events
-   opportunities · operators · sessions · census_stats
-                              │  refresh_census_stats()
-                              ▼
-                    loadCensus() / loadAggregates()
-                              ▼
-                  Next.js (per-request rendering)
+             ► /api/cron/grid-record  replay-measured trading record
+                          │
+                          ▼
+  registry_tokens · agents · agent_endpoints · probe_daily · probe_events
+  opportunities · operators · sessions · attestations · metric_values
+  census_stats · trading_records
+                          │  refresh_census_stats()
+                          ▼
+                loadCensus() / loadAggregates()
+                          ▼
+              Next.js (per-request rendering)
 ```
 
 **Scheduling runs inside Postgres.** `pg_cron` calls the API routes through
 `pg_net`. This was not the first choice — it is the correct one: GitHub Actions
-was unavailable, and Vercel's Hobby tier caps cron at once per day, which cannot
-sustain a five-minute probe cadence or clear a six-figure resolution backlog.
-`pg_cron` runs every minute, costs nothing, and keeps the schedule beside the
-data it maintains.
+could not execute (account billing lock), and Vercel's Hobby tier caps cron at
+once per day, which cannot sustain a five-minute probe cadence or clear a
+six-figure resolution backlog. `pg_cron` runs every minute, costs nothing, and
+keeps the schedule beside the data it maintains.
 
 **Probe storage is rollup-first.** One row per probe would be ~1.75M rows/day at
 a 15-minute cadence across the callable set — roughly 306 MB/day, which exhausts
@@ -110,10 +164,16 @@ a 500 MB tier in under two days. Instead `probe_daily` holds per-endpoint
 per-day counters, `probe_events` records only state transitions, and `probes_raw`
 is a short debugging window.
 
+**Docs stay fresh by automation, not memory.** A scheduled GitHub Action
+regenerates the docs/MEASUREMENTS.md block daily and commits the diff, and a
+readiness gate fails the audit if the block is older than 48h — the file was
+once found four days stale with nothing that would have caught it.
+
 ### Stack
 
-Next.js App Router · TypeScript · viem · Supabase (Postgres) + Drizzle ·
-`pg_cron` + `pg_net` · Geist / Geist Mono
+Next.js App Router · TypeScript · viem · Altana SDK (`@altananetwork/sdk`) ·
+x402 (`@altananetwork/x402-server`) · Google Genai (assistant) ·
+Supabase (Postgres) + Drizzle · `pg_cron` + `pg_net` · Geist / Geist Mono
 
 ---
 
@@ -139,16 +199,26 @@ snapshot, so it is never hard-blocked on infrastructure.
 
 | Script | Purpose |
 | --- | --- |
-| `migrate.ts` | Apply SQL migrations in filename order. Idempotent. |
-| `sync-registry.ts` | Incremental chain census. `--backfill` seeds from local NDJSON. |
-| `resolve-pending.ts` | Work through the remote registration backlog. |
-| `probe-agents.ts` | Probe A2A/MCP endpoints. `--due` for scheduled runs. |
-| `index-opportunities.ts` | Index PancakeSwap V3 pools and Venus markets. |
-| `analyse-census.ts` | Analyse the NDJSON census and persist `census_stats`. |
-| `show-stats.ts` | Print the figures the site is currently serving. |
-| `cron-status.ts` | Schedule, Vault secret presence, run history, pg_net codes. |
-| `db-check.ts` | Validate `DATABASE_URL` shape and connectivity. Prints no secrets. |
-| `build-logo.ts` | Regenerate brand assets from the source artwork. |
+| `readiness` | **26-gate production audit measured from the DB.** The source of truth for what is done. |
+| `verify` | `tsc --noEmit && vitest run && next build` — run before claiming anything is done. |
+| `stats` | Print the figures the site is currently serving. |
+| `docs:measurements` | Regenerate the docs/MEASUREMENTS.md block. Automated daily by GitHub Action; gated by readiness. |
+| `migrate` | Apply SQL migrations in filename order. Idempotent. |
+| `sync` / `sync:backfill` | Incremental chain census / seed from local NDJSON. |
+| `resolve` | Work through the remote registration backlog. |
+| `probe` / `probe:due` | Probe A2A/MCP endpoints (all / scheduled-due only). |
+| `opportunities` | Index PancakeSwap V3 pools and Venus markets. |
+| `classify` / `classify:drift` | Apply capability rules / check classification lag. |
+| `categories:emerging` | Detect emerging capability candidates with evidence. |
+| `run:task` | Run a task against an agent and record an attestation. |
+| `measure:b402` | Measure B402 payment acceptance across agents. |
+| `audit:cards` | Audit A2A card endpoints. |
+| `cron:status` | Schedule, Vault secret presence, run history, pg_net codes. |
+| `cron:fingerprint` | Compare cron route hashes without printing secrets. |
+| `verify:prod` / `verify:pgnet` | Check the deployed host / confirm pg_net actually fetches. |
+| `spike:altana` | Verify Altana session-scope enforcement on chain (6 assertions). |
+| `db:check` | Validate `DATABASE_URL` shape and connectivity. Prints no secrets. |
+| `logo` | Regenerate brand assets from the source artwork. |
 
 Operational runbook, including scheduler setup and deployment:
 [docs/OPERATIONS.md](docs/OPERATIONS.md)
@@ -161,8 +231,10 @@ Operational runbook, including scheduler setup and deployment:
 | --- | --- |
 | [docs/STRATEGY.md](docs/STRATEGY.md) | Research, standards verification, marketplace autopsies, user voice, the wedge |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | Design laws, IA, trust states, schemas, metric registry, ranking |
-| [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) | First-party measurements, method, and known defects |
+| [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) | First-party measurements, method, and known defects — auto-refreshed daily |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Deployment, scheduler, secrets, verification, troubleshooting |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | Session handoff: in-flight steps and gotchas readiness cannot see |
+| [AGENTS.md](docs/../AGENTS.md) | Working notes: verified facts, invariants, environment hazards |
 
 ---
 
@@ -175,6 +247,9 @@ Operational runbook, including scheduler setup and deployment:
 - RLS is enabled on every table with public `SELECT`. That is deliberate:
   publishing our own measurements is the point, and writes go through a
   privileged connection that bypasses RLS.
+- `SECURITY DEFINER` functions are locked down against `PUBLIC` (a Postgres
+  default-grant footgun that once left a vault-secret reader callable over
+  PostgREST). `npm run readiness` gates on the actual ACL, not the statement.
 - Cron routes require `Authorization: Bearer $CRON_SECRET` and **refuse to run
   when the secret is unset**, rather than defaulting open. Without this, anyone
   could force GEBO to crawl tens of thousands of third-party endpoints from our

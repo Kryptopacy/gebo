@@ -398,6 +398,50 @@ async function main() {
     });
   }
 
+  // ------------------------------------------------- published figures freshness
+  // docs/MEASUREMENTS.md embeds a generated block whose figures move daily.
+  // It regenerates only when someone runs scripts/write-measurements.ts, so
+  // without a gate it silently ships stale numbers (found 4 days stale,
+  // 2026-08-30). A scheduled GitHub Action refreshes it; this gate catches the
+  // case where that action has not run - failed schedule, disabled repo
+  // Actions, or a checkout regenerated from an old branch.
+  {
+    const MEASUREMENTS_MAX_AGE_HOURS = 48;
+    let state: Gate["state"] = "UNKNOWN";
+    let evidence = "";
+    try {
+      const md = readFileSync("docs/MEASUREMENTS.md", "utf8");
+      const m = md.match(/Census measured at ([0-9-]+ [0-9:]+) UTC/);
+      if (!m) {
+        state = "MISSING";
+        evidence = "generated block not found in docs/MEASUREMENTS.md";
+      } else {
+        const stamp = m[1] ?? "";
+        const measured = Date.parse(`${stamp.replace(" ", "T")}Z`);
+        const ageH = (Date.now() - measured) / 3_600_000;
+        if (Number.isNaN(measured)) {
+          state = "UNKNOWN";
+          evidence = `unparseable timestamp: ${stamp}`;
+        } else if (ageH > MEASUREMENTS_MAX_AGE_HOURS) {
+          state = "MISSING";
+          evidence = `generated block is ${Math.floor(ageH)}h old (> ${MEASUREMENTS_MAX_AGE_HOURS}h) - run npx tsx scripts/write-measurements.ts`;
+        } else {
+          state = "DONE";
+          evidence = `generated block ${Math.floor(ageH)}h old (max ${MEASUREMENTS_MAX_AGE_HOURS}h)`;
+        }
+      }
+    } catch (e) {
+      state = "UNKNOWN";
+      evidence = `could not read docs/MEASUREMENTS.md: ${String((e as Error).message).slice(0, 60)}`;
+    }
+    gates.push({
+      id: "measurements-fresh",
+      item: "docs/MEASUREMENTS.md generated block is fresh",
+      state,
+      evidence,
+    });
+  }
+
   // ---------------------------------------------------------------- print
   const pad = Math.max(...gates.map((g) => g.item.length));
   const order = { MISSING: 0, PARTIAL: 1, UNKNOWN: 2, DONE: 3 };

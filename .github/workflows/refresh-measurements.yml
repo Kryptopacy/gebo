@@ -1,0 +1,57 @@
+name: refresh-measurements
+
+# Keep docs/MEASUREMENTS.md's generated block from going stale.
+#
+# The block embeds live figures (registry census, probes, classification,
+# opportunities) that move daily, but it only changes when someone runs
+# scripts/write-measurements.ts by hand - found 4 days stale on 2026-08-30,
+# with nothing anywhere that would have caught it. This action regenerates
+# the block on a schedule and commits the diff, so the published doc tracks
+# the database without a human remembering. A readiness gate backstops this:
+# if the action stops running (failed schedule, disabled Actions), `npm run
+# readiness` fails on staleness rather than passing quietly.
+
+on:
+  schedule:
+    # Daily at 03:33 UTC, off the top of the hour to dodge cron congestion.
+    - cron: "33 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-measurements
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Regenerate the measurements block
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx tsx scripts/write-measurements.ts
+
+      - name: Commit if the block changed
+        run: |
+          git config user.name "gebo-measurements-bot"
+          git config user.email "actions@github.com"
+          if git diff --quiet docs/MEASUREMENTS.md; then
+            echo "block already current; nothing to commit"
+            exit 0
+          fi
+          git add docs/MEASUREMENTS.md
+          git commit -m "docs(measurements): refresh generated block [skip ci]"
+          git push
