@@ -258,20 +258,14 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
   padding: 15px 0; border-bottom: 1px solid var(--rule-soft);
 }
 .row:last-child { border-bottom: 0; }
-/* Hover is a flat tint plus a hairline accent - the Linear/Stripe pattern.
-   The old scale(1.01) + drop shadow read as gimmicky, shimmered subpixel
-   text, and no 2026-era data table ships it. Fast (130ms), flat, quiet.
-   No negative margins: rows stay inside their container, full stop. */
-.row-hover {
-  transition: background-color 0.13s ease-out, box-shadow 0.13s ease-out;
-  border-radius: 8px;
-  padding-left: 12px; padding-right: 12px;
-}
-.row-hover:hover {
-  background: var(--row-hover-bg);
-  box-shadow: inset 2px 0 0 var(--accent);
-  z-index: 2; position: relative;
-}
+/* Hover is a quiet flat tint and nothing else. The earlier treatment also
+   drew an inset accent bar down the row's left edge - which read as a
+   selection state, not a hover - and lit the entire table frame (border
+   glow + drop shadow) whenever the cursor was anywhere inside it. A data
+   table highlights the row under the cursor; everything else stays still.
+   Fast (120ms), flat, quiet. */
+.row-hover { transition: background-color 0.12s ease-out; }
+.row-hover:hover { background: var(--row-hover-bg); }
 /* Grid overflow guard: a bare fr track's automatic minimum is min-content,
    so one long hash or URL widens the whole table past its container. Every
    cell collapses instead, and long tokens wrap rather than push. */
@@ -287,8 +281,12 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 
 .rows-head {
   display: grid; gap: 20px;
-  font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
-  letter-spacing: 0.13em; color: var(--fg-4);
+  /* The header row is a header: heavier and brighter than body labels, not
+     the dimmest text on the page. fg-4 at 10.5px left it competing with
+     footnotes for the last place in the hierarchy. */
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--fg-2);
   padding-bottom: 10px;
 }
 
@@ -313,15 +311,37 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
   border: 1px solid var(--card-border);
   border-radius: 10px;
   box-shadow: var(--card-shadow);
-  /* clip, not hidden: overflow:hidden would create a scroll container and
-     silently kill the sticky header below it. clip still trims corners. */
   overflow: clip;
 }
-/* Header pins under the sticky masthead on long tables - the standard
-   behavior for any list that outlives the first viewport. */
+/* The rows region is the table's own scroll container, on BOTH axes.
+   Vertical: capped, so a long table keeps its header pinned in view while
+   the body scrolls underneath it INSIDE the table - the in-table scroll.
+   An earlier duplicate definition set overflow:hidden on the frame itself,
+   which created a scroll container that silently killed the sticky header
+   and clipped whatever did not fit: content wider than the frame (e.g. the
+   seven fixed 7.5rem opportunity columns plus a market column) was cut off
+   with no way to reach it. */
+.data-table-frame .rows {
+  overflow: auto;
+  max-height: min(68vh, 42rem);
+  border-top: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fg-4) transparent;
+}
+.data-table-frame .rows::-webkit-scrollbar { height: 10px; width: 10px; }
+.data-table-frame .rows::-webkit-scrollbar-track { background: transparent; }
+.data-table-frame .rows::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 5px;
+  border: 2px solid var(--card-bg);
+}
+/* Header pins inside the table's own scroll region, not the viewport: it
+   stays visible while the body scrolls beneath it, and carries the same
+   min-width floor as the rows, so columns stay aligned while scrolling
+   sideways. */
 .data-table-frame .rows-head {
   position: sticky;
-  top: 59px; /* masthead is 60px; overlap by 1px so no hairline shows through */
+  top: 0;
   z-index: 5;
   background: var(--table-head-bg);
   padding: 12px 20px;
@@ -331,11 +351,24 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 
 .data-table-frame .row {
   padding: 16px 20px;
-  transition: background-color 0.13s ease-out, box-shadow 0.13s ease-out;
+  transition: background-color 0.12s ease-out;
 }
 .data-table-frame .row:hover {
   background: var(--row-hover-bg);
-  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* Floor under every framed grid: below this width the flexible columns used
+   to be squeezed to unreadability (minmax(0,fr) tracks collapse toward zero
+   while fixed rem tracks keep their size), so cells wrapped mid-number.
+   Head and rows share the floor, and box-sizing is border-box globally, so
+   their columns stay aligned while the rows region scrolls sideways. The
+   900px breakpoint re-stacks these grids on purpose, so the floor and the
+   scroll cap lift there and mobile tables flow full-length instead. */
+.data-table-frame .rows-head,
+.data-table-frame .row { min-width: 40rem; }
+@media (max-width: 900px) {
+  .data-table-frame .rows { max-height: none; }
+  .data-table-frame .rows-head,
+  .data-table-frame .row { min-width: 0; }
 }
 
 .kpi-grid {
@@ -744,25 +777,12 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
   font-size: 13px;
   color: var(--fg-3);
   transition: color 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 .colophon-links a:hover {
   color: var(--fg);
 }
-.colophon-badge {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--ink-800);
-  border: 1px solid var(--rule);
-  color: var(--fg-4);
-}
-[data-theme="light"] .colophon-badge {
-  background: #F4ECE0;
-}
+/* No venue badges in the footer: the colophon is navigation, and the venue
+   chip belongs to the category page hero where it carries context. */
 
 /* ── on-chain spec panel in footer ──────────────────────────────────── */
 .colophon-spec-card {
@@ -1038,6 +1058,22 @@ a.row-hover:focus-visible { outline-offset: -2px; }
 
 /* ── the authorise CTA: tactile, single accent ──────────────────────── */
 .cta { position: relative; overflow: hidden; transform: translateZ(0); }
+/* Compact variant for table cells and dense rows (e.g. the revoke button
+   inside the authority console's key table). */
+.cta-sm {
+  font-size: 12px; font-weight: 560;
+  padding: 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 9%, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .14s ease, transform .1s ease;
+}
+.cta-sm:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.cta-sm:active { transform: translateY(1px); }
+.cta-sm:disabled { opacity: 0.55; cursor: default; }
 .cta::after {
   content: ""; position: absolute; inset: 0;
   background: var(--accent); opacity: 0;
@@ -1259,17 +1295,37 @@ a.row-hover:focus-visible { outline-offset: -2px; }
 [data-theme="light"] .nav-dropdown-item:hover {
   background: #F4EFE3;
 }
+.nav-dropdown-item-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
 .nav-dropdown-label {
   font-size: 12.5px;
   font-weight: 560;
   color: var(--fg);
   line-height: 1.3;
+  min-width: 0;
+}
+.nav-dropdown-count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+  flex: none;
 }
 .nav-dropdown-desc {
   font-size: 11px;
   color: var(--fg-3);
   margin-top: 1px;
-  line-height: 1.3;
+  line-height: 1.35;
+  /* Safety net: the desc is a purpose-written one-liner (CATEGORIES.nav),
+     but anything unexpected degrades to a deliberate two-line ellipsis
+     rather than a ragged wrap that reads as cut-off text. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .nav-dropdown-footer {
   border-top: 1px solid var(--rule-soft);
@@ -1482,23 +1538,12 @@ a.row-hover:focus-visible { outline-offset: -2px; }
   transform: translateY(-2px);
 }
 
-.data-table-frame {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  box-shadow: var(--card-shadow);
-  overflow: hidden;
-  max-width: 100%;
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.data-table-frame:hover {
-  border-color: var(--card-hover-border);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
-}
-[data-theme="light"] .data-table-frame:hover {
-  border-color: var(--card-hover-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-}
+/* .data-table-frame deliberately has NO duplicate definition here. A later
+   "polish" block once redefined it with overflow:hidden (which killed the
+   sticky header by turning the frame into a scroll container) and a
+   frame-level :hover that glowed the whole table's border and shadow while
+   the cursor was anywhere inside it. The single definition further up, with
+   the in-table scroll region, is the source of truth. */
 
 .kpi-grid {
   display: grid;

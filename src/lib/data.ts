@@ -95,6 +95,11 @@ export type Agent = {
 //
 // So: nine categories, all browsable. `judged: true` marks the four that carry
 // the guaranteed depth requirement and an indexed on-chain opportunity surface.
+//
+// `title` is the punchy domain name (Rebalancing, Grid Trading); `job` is the
+// plain-language line a non-specialist reads. Nav surfaces show them in tandem -
+// the title serves people who already know the vocabulary, the job line serves
+// everyone else. The full `blurb` stays on the category page.
 
 export const CATEGORIES = {
   rebalancing: {
@@ -102,6 +107,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Keep my LP position in range",
     blurb: "Manages concentrated-liquidity ranges and resets positions when price drifts out of band.",
+    title: "Rebalancing",
     venue: "PancakeSwap V3",
     counterfactual: "against an unmanaged position and against simply holding, net of impermanent loss, gas and the agent's fee",
     floor: "30 rebalance events",
@@ -111,6 +117,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Trade a range automatically",
     blurb: "Places and manages a ladder of orders inside a band, with a declared behaviour when price leaves it.",
+    title: "Grid Trading",
     venue: "PancakeSwap · DEX",
     counterfactual: "against holding over the same window, marked to market including open inventory",
     floor: "100 closed trades",
@@ -120,6 +127,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Move my capital to better yield",
     blurb: "Routes capital toward the highest sustainable rate, quoting the unboosted lower bound.",
+    title: "Yield Optimisation",
     venue: "Venus · Aave V3 · Lista",
     counterfactual: "against the best passive single-venue deposit, net of migration gas",
     floor: "10 migrations",
@@ -129,6 +137,7 @@ export const CATEGORIES = {
     judged: true,
     job: "Stop my loan being liquidated",
     blurb: "Watches health factor and acts before liquidation, with declared oracle sources.",
+    title: "Health Factor Monitoring",
     venue: "Venus · Aave V3",
     counterfactual: "against the no-agent outcome replayed over realised prices",
     floor: "one adverse regime observed",
@@ -141,6 +150,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Trade tokens on my behalf",
     blurb: "General on-chain trading: swaps, entries and exits, copy-trading and launchpad activity.",
+    title: "Trading",
     venue: "PancakeSwap · Four.meme",
     counterfactual: "against holding, marked to market including open positions",
     floor: "100 closed trades",
@@ -150,6 +160,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Tell me what is happening",
     blurb: "Screening, analysis and monitoring. Produces information rather than transactions.",
+    title: "Research",
     venue: "Off-chain data · on-chain reads",
     counterfactual: "against the same research done by hand, on time and cost",
     floor: "10 completed tasks",
@@ -159,6 +170,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Pay and get paid autonomously",
     blurb: "Per-call settlement and job escrow, over x402 or ERC-8183.",
+    title: "Payments",
     venue: "x402 · ERC-8183",
     counterfactual: "against a manual invoice-and-settle cycle",
     floor: "20 settled payments",
@@ -168,6 +180,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Watch the conversation",
     blurb: "Social signal, sentiment and community activity.",
+    title: "Social",
     venue: "Off-chain platforms",
     counterfactual: "against manual monitoring, on coverage and latency",
     floor: "10 completed tasks",
@@ -177,6 +190,7 @@ export const CATEGORIES = {
     judged: false,
     job: "Run agent infrastructure",
     blurb: "Registry, identity, deployment and wallet tooling that other agents depend on.",
+    title: "Infrastructure",
     venue: "ERC-8004 · tooling",
     counterfactual: "against operating the same tooling yourself",
     floor: "10 completed tasks",
@@ -732,6 +746,10 @@ export async function searchAgents(query: string, limit = 40): Promise<SearchHit
            a.capability_doc @@ websearch_to_tsquery('english', $1)
            or a.name ilike '%' || $1 || '%'
            or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
+           or exists (
+             select 1 from unnest(coalesce(a.skills,'{}')) s
+             where replace(s, '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'
+           )
          )
        order by
          case a.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
@@ -744,7 +762,10 @@ export async function searchAgents(query: string, limit = 40): Promise<SearchHit
     return rows.map((r) => {
       const agent = mapAgentRow(r);
       const needle = q.toLowerCase();
-      const skillHit = agent.skills?.find((s) => s.toLowerCase().includes(needle));
+      const flat = needle.replace(/-/g, " ");
+      const skillHit = agent.skills?.find(
+        (s) => s.toLowerCase().includes(needle) || s.toLowerCase().replace(/-/g, " ").includes(flat),
+      );
       const nameHit = agent.name?.toLowerCase().includes(needle);
       const why = skillHit
         ? `skill: ${skillHit.slice(0, 90)}`
@@ -848,6 +869,26 @@ export async function opportunitiesFor(category: CategorySlug): Promise<Opportun
  * pools, Venus markets), so this is intentionally partial rather than covering
  * all nine categories.
  */
+/**
+ * Compact rendering of an 18-decimal mantissa string: "178448389541009952872017"
+ * becomes "178.4M". Large floats lose integer precision, so this divides the
+ * BigInt by 1e18 before converting - Number(v)/1e18 was losing digits at the
+ * high end and toPrecision then printed scientific noise like "1.052e+5e18".
+ */
+function compact18(v: string | number): string {
+  try {
+    const whole = BigInt(v) / 10n ** 12n; // keep 6 decimals of the token amount
+    const n = Number(whole) / 1e6;
+    if (n === 0) return "0";
+    if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+    if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+    if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+    return n < 10 ? n.toFixed(2) : n.toFixed(0);
+  } catch {
+    return "—";
+  }
+}
+
 export const OPPORTUNITY_COLUMNS: Partial<Record<
   CategorySlug,
   { key: string; label: string; fmt: (v: any, p: Record<string, any>) => string; align?: "right" }[]
@@ -856,7 +897,9 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
     { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
     { key: "tickSpacing", label: "Tick spacing", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
     { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
-    { key: "liquidity", label: "Active liquidity", fmt: (v) => (!v || v === "0" ? "none" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
+    // depthUsd is already a JS number in USD from the indexer; the raw
+    // liquidity mantissa stays available on the opportunity detail page.
+    { key: "depthUsd", label: "In-range depth", fmt: (v) => (v == null ? "—" : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(0)}k` : `$${v.toFixed(0)}`), align: "right" },
   ],
   grid: [
     { key: "feePct", label: "Fee tier", fmt: (v) => (v == null ? "—" : `${v}%`), align: "right" },
@@ -864,8 +907,8 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
     { key: "currentTick", label: "Current tick", fmt: (v) => (v == null ? "—" : Number(v).toLocaleString()), align: "right" },
     { key: "observationCardinality", label: "Oracle slots", fmt: (v) => (v == null ? "—" : String(v)), align: "right" },
     { key: "unlocked", label: "Pool state", fmt: (v) => (v === false ? "locked" : "unlocked") },
-    { key: "reserveA", label: "Reserve A", fmt: (v, p) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18 ${p.tokenA ?? ""}`), align: "right" },
-    { key: "reserveB", label: "Reserve B", fmt: (v, p) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18 ${p.tokenB ?? ""}`), align: "right" },
+    { key: "reserveA", label: "Reserve A", fmt: (v, p) => (!v || v === "0" ? "—" : `${compact18(v)} ${p.tokenA ?? ""}`), align: "right" },
+    { key: "reserveB", label: "Reserve B", fmt: (v, p) => (!v || v === "0" ? "—" : `${compact18(v)} ${p.tokenB ?? ""}`), align: "right" },
   ],
   yield: [
     { key: "supplyAprPct", label: "Supply APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
@@ -875,11 +918,17 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
   ],
   health: [
     { key: "collateralFactor", label: "Collateral factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
-    { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
-    { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null ? "—" : `${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
+    { key: "closeFactor", label: "Close factor", fmt: (v) => (v == null ? "unmeasured" : `${(Number(v) * 100).toFixed(0)}%`), align: "right" },
+    // The incentive is never zero in reality, so a zero or null payload means
+    // the read failed (the Comptroller Diamond has no such getter). Rendering
+    // the arithmetic on a failed read once printed "-100.0%" for every market.
+    { key: "liquidationIncentive", label: "Liq. incentive", fmt: (v) => (v == null || Number(v) <= 0 ? "unmeasured" : `+${((Number(v) - 1) * 100).toFixed(1)}%`), align: "right" },
     { key: "borrowAprPct", label: "Borrow APR", fmt: (v) => (v == null ? "—" : `${Number(v).toFixed(2)}%`), align: "right" },
-    { key: "totalBorrows", label: "Total borrows", fmt: (v) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
-    { key: "cash", label: "Cash", fmt: (v) => (!v || v === "0" ? "—" : `${(Number(v) / 1e18).toPrecision(4)}e18`), align: "right" },
+    // Venus mantissas are 18 decimals on BSC (BSC tokens are 18-decimal, the
+    // same trap the decimals table guards). Raw "1.052e+5e18" strings read as
+    // machine noise; compact whole-token amounts read as market depth.
+    { key: "totalBorrows", label: "Total borrows", fmt: (v) => (!v || v === "0" ? "—" : compact18(v)), align: "right" },
+    { key: "cash", label: "Cash", fmt: (v) => (!v || v === "0" ? "—" : compact18(v)), align: "right" },
     { key: "reserveFactor", label: "Reserve factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
   ],
 };

@@ -51,8 +51,11 @@ export default async function CategoriesPage() {
                 return (
                   <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
                     <div>
-                      <h3>{c.job}</h3>
-                      <p className="xs t-3" style={{ margin: 0, maxWidth: "60ch" }}>{c.blurb}</p>
+                      {/* Tandem, same as the dropdown and footer: title for
+                          people who know the vocabulary, job line for everyone
+                          else. The fuller blurb lives on the category page. */}
+                      <h3>{c.title}</h3>
+                      <p className="xs t-3" style={{ margin: 0, maxWidth: "60ch" }}>{c.job}</p>
                     </div>
                     <div>
                       {known ? (

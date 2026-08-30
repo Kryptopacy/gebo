@@ -179,10 +179,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <ul className="colophon-links">
                   {allCategories.slice(0, 4).map((c) => (
                     <li key={c.slug}>
+                      {/* Tandem, same as the header dropdown: the punchy title
+                          serves people who know the vocabulary, the job line
+                          serves everyone else. No venue badges - the venue
+                          belongs on the category page hero where it has
+                          context. */}
                       <a href={`/c/${c.slug}`}>
-                        <span>{c.meta.job}</span>
-                        <span className="colophon-badge">{c.meta.venue}</span>
+                        <span>{c.meta.title}</span>
                       </a>
+                      <div className="xs t-4" style={{ marginTop: 1 }}>{c.meta.job}</div>
                     </li>
                   ))}
                   <li>
@@ -203,7 +208,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <li><a href="/methodology">Measurement & Defect Log</a></li>
                   <li>
                     <a
-                      href="https://github.com"
+                      href="https://github.com/Kryptopacy/gebo"
                       target="_blank"
                       rel="noreferrer"
                       className="link xs"

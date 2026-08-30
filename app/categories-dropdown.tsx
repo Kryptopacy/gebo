@@ -108,19 +108,33 @@ export function CategoriesDropdown({ categories }: CategoriesDropdownProps) {
                   className="nav-dropdown-item"
                   onClick={() => setOpen(false)}
                 >
-                  <span className="nav-dropdown-label">{c.meta.job}</span>
-                  <span className="nav-dropdown-desc">
-                    {c.meta.blurb}
-                    {c.count !== null ? ` · ${c.count} agents` : ""}
+                  {/* Tandem: the punchy domain title serves people who know the
+                      vocabulary; the plain-language job line beneath it serves
+                      everyone else. Count is a stable right-aligned figure
+                      instead of dangling after wrapped text. count === null
+                      means the read failed; render nothing rather than
+                      something that reads as zero (invariant 9). */}
+                  <span className="nav-dropdown-item-row">
+                    <span className="nav-dropdown-label">{c.meta.title}</span>
+                    {c.count !== null && (
+                      <span className="nav-dropdown-count" aria-label={`${c.count} agents`}>
+                        {c.count}
+                      </span>
+                    )}
                   </span>
+                  <span className="nav-dropdown-desc">{c.meta.job}</span>
                 </Link>
               ))}
             </div>
           </div>
 
           <div className="nav-dropdown-footer">
-            <Link href="/search" className="nav-dropdown-footer-link" onClick={() => setOpen(false)}>
-              Search capability keywords (A2A, MCP, x402) →
+            {/* The header already carries the search affordance, so a second
+                "search capability keywords" link here was redundant. The
+                useful destination from a categories menu is the full
+                directory page. */}
+            <Link href="/categories" className="nav-dropdown-footer-link" onClick={() => setOpen(false)}>
+              View all categories →
             </Link>
           </div>
         </div>

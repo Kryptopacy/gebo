@@ -1,4 +1,5 @@
 import { readAuthority, isAddress, revokeCall, KEYSTORE, type ChainId } from "@/lib/keystore";
+import { RevokeAction } from "./RevokeAction";
 import { getClient } from "@/db";
 import { CONTRACTS } from "@/lib/session-scope";
 
@@ -291,13 +292,13 @@ export default async function AuthorityPage({
               ) : (
                 <div className="data-table-frame mt-m">
                   <div className="rows">
-                    <div className="rows-head" style={{ gridTemplateColumns: "minmax(0,1.4fr) 6rem 8rem minmax(0,1fr)" }}>
+                    <div className="rows-head" style={{ gridTemplateColumns: "minmax(14rem,1.4fr) 6rem 8rem minmax(16rem,1fr)" }}>
                       <span>Key</span><span>State</span><span>Key id check</span><span>Revoke</span>
                     </div>
                     {authority.keys.map((k) => {
                       const call = revokeCall(authority.wallet, k.keyId, authority.chainId);
                       return (
-                        <div key={k.keyId} className="row" style={{ gridTemplateColumns: "minmax(0,1.4fr) 6rem 8rem minmax(0,1fr)" }}>
+                        <div key={k.keyId} className="row" style={{ gridTemplateColumns: "minmax(14rem,1.4fr) 6rem 8rem minmax(16rem,1fr)" }}>
                           <div>
                             <div className="num sm" style={{ wordBreak: "break-all" }}>{k.keyId}</div>
                             <div className="xs t-4 num">
@@ -317,8 +318,18 @@ export default async function AuthorityPage({
                           <div className="xs t-3">
                             {k.valid ? (
                               <>
-                                <span className="num">{call.signature.split("(")[0]}</span>
-                                <div className="xs t-4">on {call.to.slice(0, 12)}…</div>
+                                {/* The call stays visible next to the button that
+                                    sends it: verifiable and copyable, independent
+                                    of us - the same honesty as before, now with
+                                    the action the track asks for. */}
+                                <div className="xs t-4 num" style={{ marginBottom: 6 }}>
+                                  {call.signature.split("(")[0]} on {call.to.slice(0, 12)}...
+                                </div>
+                                <RevokeAction
+                                  wallet={authority.wallet}
+                                  keyId={k.keyId}
+                                  chainId={authority.chainId}
+                                />
                               </>
                             ) : (
                               <span className="t-4">already inactive</span>

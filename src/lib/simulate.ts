@@ -14,14 +14,21 @@ import { createPublicClient, http, fallback, parseAbi, formatUnits, defineChain,
 // Inline chain definition, not the "viem/chains" barrel: viem 2.55 has no
 // per-chain subpath export, and the barrel evaluates ~500 chain modules
 // (measured 15s+ per fresh dev worker on this machine - the cause of the hire
-// page "navigation keeps timing out"). viem's own bsc is a plain defineChain
-// object with no formatters, so this is equivalent.
+// page "navigation keeps timing out"). viem's own bsc is equivalent EXCEPT it
+// also carries the multicall3 contract address, which the multicall() calls
+// below require: without it every simulation died with
+// 'Chain "BNB Smart Chain" does not support contract "multicall3"' - the
+// "Simulation failed" seen on every hire page. Multicall3's canonical address
+// is identical on every chain; on BSC it was deployed at block 17,422,723.
 const bsc = defineChain({
   id: 56,
   name: "BNB Smart Chain",
   nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
   rpcUrls: { default: { http: ["https://bsc-rpc.publicnode.com"] } },
   blockExplorers: { default: { name: "BscScan", url: "https://bscscan.com" } },
+  contracts: {
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11", blockCreated: 17_422_723 },
+  },
 });
 import { TOKENS } from "./session-scope.ts";
 

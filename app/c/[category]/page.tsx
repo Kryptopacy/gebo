@@ -33,7 +33,12 @@ export default async function CategoryPage({
   }));
   const eligible = oppsWithCells.filter((o) => o.eligible);
   const ineligible = oppsWithCells.filter((o) => !o.eligible);
-  const oppGrid = `minmax(0,1.6fr) ${cols.map(() => "7.5rem").join(" ")}`;
+  // The market column keeps an 11rem floor: the grid and health categories
+  // carry seven fixed 7.5rem columns (52.5rem) before it, and a bare
+  // minmax(0, fr) track collapses to a sliver on narrower windows - the
+  // "cut off" failure. With the floor, the grid holds its minimum width and
+  // the table's rows region scrolls sideways instead of squeezing.
+  const oppGrid = `minmax(11rem,1.6fr) ${cols.map(() => "7.5rem").join(" ")}`;
 
   const tally = (s: string) => inCat.filter((a) => trustState(a).state === s).length;
   const counts = {

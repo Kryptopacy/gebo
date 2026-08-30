@@ -5,6 +5,7 @@ import { simulateForCategory } from "@/lib/simulate";
 import { attestationSummary } from "@/lib/attestations";
 import ScopePicker from "./ScopePicker";
 import { HireAction } from "./HireAction";
+import { AltanaRail } from "./AltanaRail";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -162,8 +163,11 @@ export default async function HirePage({ params }: { params: Promise<{ tokenId: 
             <div>
               <h2>Hire on chain</h2>
               <p className="prose sm" style={{ marginBottom: 0 }}>
-                Zero-budget APEX (ERC-8183) escrow. The job traverses Open → Funded → Submitted → Completed.
-                Only the two safeTransfer calls are skipped. Revocable anytime.
+                Two rails to the same escrow. Rail 1: your browser wallet signs the
+                APEX (ERC-8183) transactions directly. Rail 2: the Altana SDK&apos;s
+                buyer side - a passkey wallet and one atomic relay intent. Both are
+                zero-budget by policy: the job traverses Open → Funded → Submitted →
+                Completed, and cost is a true zero. Revocable anytime.
               </p>
             </div>
           </div>
@@ -192,7 +196,14 @@ export default async function HirePage({ params }: { params: Promise<{ tokenId: 
             </p>
           )}
 
+          <p className="section-label mt-m">Rail 1 - direct APEX with your browser wallet</p>
           <HireAction
+            agentTokenId={agent.token_id}
+            agentName={name}
+            categorySlug={slug}
+            providerAddress={agent.owner_address}
+          />
+          <AltanaRail
             agentTokenId={agent.token_id}
             agentName={name}
             categorySlug={slug}

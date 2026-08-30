@@ -194,9 +194,15 @@ export async function GET(request: Request) {
     }).catch(() => [])) as readonly Address[];
 
     if (vTokens.length) {
+      // A failed read must not become zero (invariant 9): the Comptroller on
+      // BSC is a Diamond proxy whose facets expose no
+      // liquidationIncentiveMantissa getter - the call reverts with
+      // "Diamond: Function does not exist". Coercing that to 0n made the
+      // opportunity table print "-100.0%" for every market: a failed
+      // measurement rendered as a number. Store null and say unmeasured.
       const [closeFactor, liqIncentive] = await Promise.all([
-        client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "closeFactorMantissa" }).catch(() => 0n),
-        client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "liquidationIncentiveMantissa" }).catch(() => 0n),
+        client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "closeFactorMantissa" }).catch(() => null),
+        client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "liquidationIncentiveMantissa" }).catch(() => null),
       ]);
       const fields = ["symbol", "supplyRatePerBlock", "borrowRatePerBlock", "totalBorrows", "getCash"] as const;
       const reads = await client.multicall({
@@ -232,8 +238,12 @@ export async function GET(request: Request) {
           blocksPerYearCaveat: "Venus core assumes 3s blocks; BSC is faster, so this understates the true rate",
           utilisation: Number(util.toFixed(4)),
           totalBorrows: totalBorrows.toString(), cash: cash.toString(),
-          collateralFactor, closeFactor: Number(closeFactor) / 1e18,
-          liquidationIncentive: Number(liqIncentive) / 1e18,
+          collateralFactor,
+          closeFactor: closeFactor == null ? null : Number(closeFactor) / 1e18,
+          liquidationIncentive: liqIncentive == null ? null : Number(liqIncentive) / 1e18,
+          liquidationIncentiveNote: liqIncentive == null
+            ? "unmeasured - the Comptroller's Diamond facets expose no incentive getter"
+            : null,
           isListed, readAtBlock: head.toString(),
         };
         const hasDepth = cash + totalBorrows > 0n;

@@ -45,3 +45,4 @@ data/*.json
 tsconfig.tsbuildinfo
 
 .playwright-mcp/
+.kilo/agent-manager.json.9016.1788084427034.tmp

@@ -222,9 +222,12 @@ try {
 }
 
 if (vTokens.length) {
+  // A failed read must not become zero (invariant 9): the Comptroller on BSC
+  // is a Diamond proxy with no liquidationIncentiveMantissa facet - the call
+  // reverts, and coercing it to 0n made the table print "-100.0%" everywhere.
   const [closeFactor, liqIncentive] = await Promise.all([
-    client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "closeFactorMantissa" }).catch(() => 0n),
-    client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "liquidationIncentiveMantissa" }).catch(() => 0n),
+    client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "closeFactorMantissa" }).catch(() => null),
+    client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "liquidationIncentiveMantissa" }).catch(() => null),
   ]);
 
   const fields = ["symbol", "supplyRatePerBlock", "borrowRatePerBlock", "totalBorrows", "getCash", "reserveFactorMantissa"] as const;
@@ -275,8 +278,11 @@ if (vTokens.length) {
       cash: cash.toString(),
       reserveFactor: Number(reserveFactor) / 1e18,
       collateralFactor,
-      closeFactor: Number(closeFactor) / 1e18,
-      liquidationIncentive: Number(liqIncentive) / 1e18,
+      closeFactor: closeFactor == null ? null : Number(closeFactor) / 1e18,
+      liquidationIncentive: liqIncentive == null ? null : Number(liqIncentive) / 1e18,
+      liquidationIncentiveNote: liqIncentive == null
+        ? "unmeasured - the Comptroller's Diamond facets expose no incentive getter"
+        : null,
       isListed,
       readAtBlock: head.toString(),
     };
