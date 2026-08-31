@@ -253,7 +253,12 @@ export default async function ComparePage() {
             <p className="prose sm">
               One row per task. The manual arm is what the same job took without an
               agent, and how it was done is stated so the baseline can be argued with.
-              A run that failed still occupies its full weight in the totals above.
+              A run that failed still occupies its full weight in the totals above. A
+              frozen, submission-ready export of this ledger is generated from the same
+              rows into the repository as{" "}
+              <a href="https://github.com/Kryptopacy/gebo/blob/master/docs/ADVANTAGE_REPORT.md" style={{ color: "var(--accent)" }}>
+                docs/ADVANTAGE_REPORT.md
+              </a>.
             </p>
           </div>
 

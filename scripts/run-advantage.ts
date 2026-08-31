@@ -190,6 +190,12 @@ const TASKS: {
           `Price of token1 in token0 is 1.0001^tick, so the sign of the tick says which side holds the active capital.`,
         ms: Date.now() - started,
         refKey: pool.address.slice(2, 10),
+        // The question must name the pool the manual arm just read. Without
+        // this override the fallback `task.question()` runs with no subject
+        // and the recorded ask - the string literally sent to agents - says
+        // "the pool undefined", which is how 2026-08-26's rows were recorded.
+        question:
+          `For the PancakeSwap V3 pool ${pool.label}: what is the current tick, and what does it imply about which side of the pool is token0 vs token1?`,
       };
     },
   },

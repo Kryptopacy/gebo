@@ -34,6 +34,7 @@
     "classify:drift": "tsx scripts/check-classify-drift.ts",
     "categories:emerging": "tsx scripts/emerging-categories.ts",
     "docs:measurements": "tsx scripts/write-measurements.ts",
+    "report:advantage": "tsx scripts/write-advantage-report.ts",
     "keys:gen": "tsx scripts/gen-keys.ts",
     "spike:altana": "tsx scripts/spike-altana.ts",
     "spike:altana:mainnet": "tsx scripts/spike-altana.ts --mainnet",
