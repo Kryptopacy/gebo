@@ -2,6 +2,7 @@ import { livenessSummary, recentTransitions, uptimeTable } from "@/lib/liveness"
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const metadata = { title: "Liveness ledger — GEBO" };
 
 const MIN_PROBES = 5;
 

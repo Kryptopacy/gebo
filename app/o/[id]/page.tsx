@@ -1,27 +1,32 @@
 import { notFound } from "next/navigation";
 import {
   CATEGORIES, agentsInCategory, rankAgentsByLiveEvidence, diversify,
-  trustState, classify, loadOpportunities, type CategorySlug,
+  trustState, classify, loadOpportunities, OPPORTUNITY_DETAIL_FIELDS,
+  type CategorySlug,
 } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const metadata = { title: "Chain state — GEBO" };
 
 const VENUE_LABEL: Record<string, string> = {
   "pancakeswap-v3": "PancakeSwap V3",
   venus: "Venus",
 };
 
-/** Human-ish formatting for arbitrary chain-state values. */
-function fmtValue(v: unknown): string {
+/**
+ * Fallback rendering for payload keys the detail spec does not recognise.
+ * Deliberately dumb: no digit-count guessing, no scaling. An earlier version
+ * divided any 15+ digit integer by 1e18 and printed "123.456e18", which was
+ * actively wrong for sqrtPriceX96 (a 2^96 fixed point) and V3 liquidity (not
+ * a token amount at all). Unknown means unknown - show it raw and say so.
+ */
+function rawValue(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "boolean") return v ? "yes" : "no";
-  if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString() : String(v);
-  const s = String(v);
-  // Big raw integers (liquidity, totals): render scaled where plausible.
-  if (/^\d{15,}$/.test(s)) return `${(Number(s) / 1e18).toPrecision(6)}e18`;
-  if (/^0x[0-9a-fA-F]{40}$/.test(s)) return `${s.slice(0, 10)}…${s.slice(-6)}`;
-  return s;
+  if (typeof v === "number") return v.toLocaleString("en-US");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
 }
 
 /**
@@ -51,8 +56,17 @@ export default async function OpportunityPage({
     ? diversify(await rankAgentsByLiveEvidence(await agentsInCategory(o.category as CategorySlug)), 3)
     : [];
 
-  const entries = Object.entries(o.payload ?? {}).sort(([a], [b]) => a.localeCompare(b));
-  const block = typeof o.payload?.readAtBlock === "string" ? o.payload.readAtBlock : null;
+  const payload: Record<string, any> = o.payload ?? {};
+  const block = typeof payload.readAtBlock === "string" ? payload.readAtBlock : null;
+  const spec = OPPORTUNITY_DETAIL_FIELDS[o.category as CategorySlug] ?? [];
+  const consumed = new Set(spec.map((f) => f.key));
+  const rows = spec.flatMap((f) => {
+    const cell = f.render(payload[f.key], payload);
+    return cell ? [{ f, cell }] : [];
+  });
+  const rest = Object.entries(payload)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .filter(([k]) => !consumed.has(k));
 
   return (
     <>
@@ -94,24 +108,51 @@ export default async function OpportunityPage({
         <div className="shell">
           <h2>Chain state at index time</h2>
           <p className="prose sm">
-            Every field the indexer captured for this row, unfiltered. Values are as read from
+            Every field the indexer captured for this row, translated: known fields carry their
+            units and the assumptions they were computed under, and anything this page does not
+            recognise is shown raw at the bottom - nothing is dropped. Values are as read from
             {` ${VENUE_LABEL[o.venue] ?? o.venue}`}
             {" "}at the block shown above; they age, so treat them as of that moment.
           </p>
           <div className="surface-card mt-m">
-            <dl className="spec">
-              {entries.map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k.replace(/([A-Z])/g, " $1").toLowerCase()}</dt>
-                  <dd className="mono" title={typeof v === "string" && v.length > 42 ? v : undefined}>
-                    {fmtValue(v)}
-                  </dd>
-                </div>
-              ))}
-              {entries.length === 0 && (
+            {rows.length === 0 && rest.length === 0 ? (
+              <dl className="spec">
                 <div><dt>payload</dt><dd>— the indexer recorded no fields for this row</dd></div>
-              )}
-            </dl>
+              </dl>
+            ) : (
+              <>
+                <dl className="spec">
+                  {rows.map(({ f, cell }) => (
+                    <div key={f.key}>
+                      <dt>{f.label}</dt>
+                      <dd className={cell.mono ? "mono" : undefined}>
+                        {cell.text}
+                        {cell.note && <div className="note">{cell.note}</div>}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                {rest.length > 0 && (
+                  <>
+                    <p className="section-label" style={{ margin: "18px 0 0" }}>Other recorded fields</p>
+                    <p className="xs t-4" style={{ margin: "4px 0 0" }}>
+                      Fields this page does not translate. Raw values, exactly as the indexer
+                      recorded them - unscaled and unrounded.
+                    </p>
+                    <dl className="spec">
+                      {rest.map(([k, v]) => (
+                        <div key={k}>
+                          <dt className="mono">{k}</dt>
+                          <dd className="mono" title={typeof v === "string" && v.length > 42 ? v : undefined}>
+                            {rawValue(v)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                )}
+              </>
+            )}
           </div>
           {cat?.judged && (
             <p className="xs t-4 mt-m" style={{ maxWidth: "78ch" }}>

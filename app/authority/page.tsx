@@ -5,6 +5,7 @@ import { CONTRACTS } from "@/lib/session-scope";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const metadata = { title: "Authority console — GEBO" };
 
 type DemoGrant = {
   id: number;
@@ -136,7 +137,17 @@ export default async function AuthorityPage({
             </p>
           </div>
 
-          <form method="get" action="/authority" className="lookup mt-l">
+          <form
+            method="get"
+            action="/authority"
+            className="lookup mt-l"
+            {...({
+              toolname: "check-wallet-authority",
+              tooldescription:
+                "Read which scoped session keys a BNB Chain wallet has registered in the Altana Keystore, what each permits (target contracts, spend caps, expiry), and whether it is still valid. The same query runs from anywhere; it covers keystore sessions only and the page states what it cannot see.",
+              toolautosubmit: "true",
+            } as Record<string, string>)}
+          >
             <input
               type="text"
               name="wallet"
@@ -147,8 +158,19 @@ export default async function AuthorityPage({
               defaultValue={raw}
               aria-label="Wallet address"
               className="lookup-input num"
+              {...({
+                toolparamdescription: "The BNB Chain address to check, e.g. 0x688Fe953e20225e0542ED11a11C708437e71d40e",
+              } as Record<string, string>)}
             />
-            <select name="chain" defaultValue={String(chainId)} aria-label="Network" className="lookup-select">
+            <select
+              name="chain"
+              defaultValue={String(chainId)}
+              aria-label="Network"
+              className="lookup-select"
+              {...({
+                toolparamdescription: "Which keystore to read: 56 for BNB Smart Chain, 97 for BNB Testnet",
+              } as Record<string, string>)}
+            >
               <option value="56">BNB Smart Chain</option>
               <option value="97">BNB Testnet</option>
             </select>

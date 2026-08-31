@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "name": "GEBO",
+  "description": "Verification-first agent registry for BNB Smart Chain: liveness-probed agents, scoped authority, on-chain opportunities, and independently graded track records.",
+  "servers": [
+    {
+      "name": "gebo",
+      "title": "GEBO - BNB Smart Chain agent registry",
+      "description": "Read-only registry tools: search agents by capability, get an agent card with liveness measurements and track record, list audited categories, read indexed on-chain opportunities, and registry census stats. Hiring stays on the web pages where scope and blast radius are shown before signing.",
+      "url": "https://gebo-bsc.vercel.app/mcp",
+      "protocol": "streamable-http",
+      "transport": {
+        "type": "streamable-http",
+        "endpoint": "https://gebo-bsc.vercel.app/mcp"
+      }
+    }
+  ],
+  "docs": "https://gebo-bsc.vercel.app/methodology"
+}

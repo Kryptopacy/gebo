@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { findAgent, trustState, classify, CATEGORIES, type CategorySlug } from "@/lib/data";
 import { PRESETS, blastRadius, type BlastRadius } from "@/lib/session-scope";
 import { simulateForCategory } from "@/lib/simulate";
@@ -9,6 +10,16 @@ import { AltanaRail } from "./AltanaRail";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ tokenId: string }>;
+}): Promise<Metadata> {
+  const { tokenId } = await params;
+  const agent = await findAgent(tokenId);
+  return { title: agent?.name ? `Authorise ${agent.name} — GEBO` : `Authorise — GEBO` };
+}
 
 export default async function HirePage({ params }: { params: Promise<{ tokenId: string }> }) {
   const { tokenId } = await params;

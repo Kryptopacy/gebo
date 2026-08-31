@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import {
   CATEGORIES, type CategorySlug, agentsInCategory, rankAgentsByLiveEvidence,
   diversify, trustState, classify, opportunitiesFor, OPPORTUNITY_COLUMNS,
@@ -7,6 +8,16 @@ import CategoryTabs from "./CategoryTabs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ category: string }>;
+}): Promise<Metadata> {
+  const { category } = await params;
+  const cat = CATEGORIES[category as CategorySlug];
+  return { title: cat ? `${cat.title} — agents — GEBO` : "Category — GEBO" };
+}
 
 export default async function CategoryPage({
   params,

@@ -175,6 +175,27 @@ Next.js App Router · TypeScript · viem · Altana SDK (`@altananetwork/sdk`) ·
 x402 (`@altananetwork/x402-server`) · Google Genai (assistant) ·
 Supabase (Postgres) + Drizzle · `pg_cron` + `pg_net` · Geist / Geist Mono
 
+### Agent-consumable surfaces
+
+The registry is itself an agent endpoint, not just a website for humans:
+
+| Surface | Path |
+| --- | --- |
+| MCP server (Streamable HTTP, JSON-RPC) | `POST /mcp` — tools: `search_agents`, `get_agent`, `list_categories`, `get_opportunities`, `get_registry_stats`, `get_track_record`. Stateless, read-only, protocol `2025-06-18`; protocol layer in `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, pinned by `tests/mcp-server.test.ts`. |
+| WebMCP discovery manifest | `/.well-known/mcp` (and `/.well-known/mcp.json`) |
+| `llms.txt` | `/llms.txt` — agent-readable site index |
+| A2A card (reference agent) | `/api/agent/health/card` |
+| A2A JSON-RPC | `/api/agent/health/a2a` |
+| x402/B402 paid read | `/api/agent/health/paid?address=0x...` (0.01 $U, BSC testnet) |
+
+Read-only on purpose: hiring moves money and stays on pages where the scope
+picker and blast radius are in front of the signature. The browser-native
+WebMCP layer (`app/WebMcpTools.tsx` + declarative `toolname`/`tooldescription`
+form annotations, behind `Origin-Agent-Cluster: ?1`) is feature-detected and
+inert in browsers without the API: it lets a Chrome agent-mode browser act on
+the page (search, open cards, open the hire flow, read data via `/mcp`) while
+the wallet steps stay human.
+
 ---
 
 ## Running it

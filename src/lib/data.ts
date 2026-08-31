@@ -875,7 +875,7 @@ export async function opportunitiesFor(category: CategorySlug): Promise<Opportun
  * BigInt by 1e18 before converting - Number(v)/1e18 was losing digits at the
  * high end and toPrecision then printed scientific noise like "1.052e+5e18".
  */
-function compact18(v: string | number): string {
+export function compact18(v: string | number): string {
   try {
     const whole = BigInt(v) / 10n ** 12n; // keep 6 decimals of the token amount
     const n = Number(whole) / 1e6;
@@ -931,6 +931,290 @@ export const OPPORTUNITY_COLUMNS: Partial<Record<
     { key: "cash", label: "Cash", fmt: (v) => (!v || v === "0" ? "—" : compact18(v)), align: "right" },
     { key: "reserveFactor", label: "Reserve factor", fmt: (v) => (v == null ? "—" : `${(Number(v) * 100).toFixed(1)}%`), align: "right" },
   ],
+};
+
+// ── opportunity detail fields ───────────────────────────────────────────────
+// The category listing shows a few labelled columns; the /o detail page shows
+// the whole payload. This spec is that page's presentation layer: labels,
+// units, and the assumptions each number was computed under, so a person can
+// read a row without knowing what "sqrtPriceX96" means. Anything the spec does
+// not recognise is still rendered, raw, in an "other recorded fields" group -
+// the translation layer must never become a filter.
+
+export type OpportunityDetailCell = { text: string; note?: string; mono?: boolean } | null;
+export type OpportunityDetailField = {
+  key: string;
+  label: string;
+  render: (v: any, p: Record<string, any>) => OpportunityDetailCell;
+};
+
+/**
+ * Mirrors the TOKENS map in scripts/index-opportunities.ts and the
+ * opportunities cron route. The cron payload records symbols only, so
+ * resolving the pool's address-sorted token0/token1 order (which decides
+ * which way round a V3 price reads) needs the addresses here. All three
+ * maps must stay in sync; all these tokens are 18-decimal on BNB Chain.
+ */
+const DETAIL_TOKENS: Record<string, string> = {
+  WBNB: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+  USDT: "0x55d398326f99059ff775485246999027b3197955",
+  USDC: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+  BUSD: "0xe9e7cea3dedca5984780bafc599bd69add087d56",
+  CAKE: "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
+  BTCB: "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
+  ETH: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+  FDUSD: "0xc5f0f7b66764f6ec8c8dff7ba683102295e16409",
+};
+
+function fmtPrice(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(2);
+  if (n >= 0.001) return n.toPrecision(4);
+  return n.toPrecision(3);
+}
+
+/**
+ * Human price from a V3 pool's raw sqrtPriceX96. The raw ratio is token1 per
+ * token0 where token0 is the address-sorted token - NOT the payload's
+ * tokenA/tokenB order - so the orientation has to be resolved before the
+ * number means anything. BigInt throughout: Number(sqrtPriceX96) loses
+ * integer precision at this magnitude.
+ */
+function poolPriceText(sqrtPriceX96: string, tokenA: unknown, tokenB: unknown): string | null {
+  let q: bigint;
+  try { q = BigInt(sqrtPriceX96); } catch { return null; }
+  if (q <= 0n) return null;
+  const scaled = (q * q * 1_000_000_000_000n) >> 192n; // ratio * 1e12
+  const p = Number(scaled) / 1e12;
+  if (!(p > 0)) return null;
+  const a = DETAIL_TOKENS[String(tokenA ?? "").toUpperCase()];
+  const b = DETAIL_TOKENS[String(tokenB ?? "").toUpperCase()];
+  if (!a || !b) return null;
+  const aIsToken0 = a < b;
+  return `1 ${tokenA} = ${fmtPrice(aIsToken0 ? p : 1 / p)} ${tokenB}`;
+}
+
+function bigRaw(v: unknown): string {
+  try { return BigInt(String(v)).toLocaleString("en-US"); } catch { return String(v); }
+}
+
+const PCS_DETAIL: OpportunityDetailField[] = [
+  { key: "pool", label: "Pool contract", render: (v) => (v == null ? null : { text: String(v), mono: true }) },
+  {
+    key: "tokenA", label: "Pair",
+    render: (v, p) => (v == null ? null : {
+      text: `${v} / ${p.tokenB ?? "?"}`,
+      note: "the pool's internal token0/token1 order is sorted by address and can differ from this order",
+    }),
+  },
+  { key: "tokenB", label: "Pair", render: () => null }, // shown in the Pair row
+  {
+    key: "feePct", label: "Fee tier",
+    render: (v, p) => (v == null ? null : {
+      text: `${v}%${p.feeTier != null ? ` (tier ${p.feeTier})` : ""}`,
+      note: "the per-swap fee paid to the pool's liquidity providers",
+    }),
+  },
+  {
+    key: "sqrtPriceX96", label: "Pool price",
+    render: (v, p) => {
+      if (v == null) return null;
+      const text = poolPriceText(String(v), p.tokenA, p.tokenB);
+      return text
+        ? {
+            text,
+            note: "derived from the pool's raw sqrtPriceX96 at the read block; both tokens are 18-decimal on BNB Chain",
+          }
+        : {
+            text: String(v), mono: true,
+            note: "raw sqrtPriceX96 (fixed point, 2^96 basis) - the price derivation needs a token pair this row does not carry",
+          };
+    },
+  },
+  {
+    key: "currentTick", label: "Current tick",
+    render: (v, p) => (v == null ? null : {
+      text: Number(v).toLocaleString("en-US"),
+      note: p.tickSpacing != null
+        ? `price moves in steps of ${p.tickSpacing} tick${p.tickSpacing === 1 ? "" : "s"}; the index maps to price via 1.0001^tick`
+        : "tick index; price = 1.0001^tick",
+    }),
+  },
+  {
+    key: "depthUsd", label: "In-range depth",
+    render: (v, p) => {
+      if (v == null) return null;
+      // token1Usd() returns 0 when the quote token has no USD price in the
+      // indexer's batch: that is an unpriced depth, not a zero one (invariant 9).
+      if (Number(v) === 0 && Number(p.liquidity) > 0) {
+        return { text: "unpriced", note: "the pool's quote token had no USD price in the indexer's batch" };
+      }
+      const n = Number(v);
+      return {
+        text: n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}k` : `$${n.toFixed(0)}`,
+        note: typeof p.depthBasis === "string" ? p.depthBasis : "marginal in-range depth priced in the quote token - a proxy, not TVL",
+      };
+    },
+  },
+  // Consumed into the fee row's text and the tick row's note.
+  { key: "feeTier", label: "Fee tier", render: () => null },
+  { key: "tickSpacing", label: "Tick spacing", render: () => null },
+  // Consumed into the depth note rather than shown as a bare row.
+  { key: "depthBasis", label: "Depth basis", render: () => null },
+  {
+    // Deliberately NOT divided by 1e18: V3 "liquidity" is concentrated
+    // liquidity in tick-space units, not a token amount. The old detail view
+    // guessed "e18" from digit count and printed a meaningless number.
+    key: "liquidity", label: "Active liquidity",
+    render: (v) => (v == null ? null : {
+      text: bigRaw(v),
+      note: "concentrated-liquidity units at the current tick - not a token amount",
+    }),
+  },
+  {
+    key: "reserveA", label: "Reserve A",
+    render: (v, p) => (v == null ? null : {
+      text: `${compact18(String(v))}${p.tokenA ? ` ${p.tokenA}` : ""}`,
+      note: "tokens held by the pool contract at the read block",
+    }),
+  },
+  {
+    key: "reserveB", label: "Reserve B",
+    render: (v, p) => (v == null ? null : {
+      text: `${compact18(String(v))}${p.tokenB ? ` ${p.tokenB}` : ""}`,
+    }),
+  },
+  {
+    key: "stablePair", label: "Stable pair",
+    render: (v) => (v == null ? null : { text: v ? "yes - both tokens are stablecoins, so price stays within basis points" : "no" }),
+  },
+  {
+    key: "unlocked", label: "Pool state",
+    render: (v) => (v == null ? null : { text: v === false ? "locked" : "unlocked - swaps enabled" }),
+  },
+  {
+    key: "observationCardinality", label: "Oracle slots",
+    render: (v) => (v == null ? null : {
+      text: String(v),
+      note: "price observations the pool retains, for time-weighted price proofs",
+    }),
+  },
+  {
+    key: "masterChefV3", label: "MasterChef V3",
+    render: (v) => (v == null ? null : {
+      text: String(v), mono: true,
+      note: "LP positions can be staked here; rebalancing a farmed position means withdraw, modify, re-stake - and the CAKE harvest enters the accounting",
+    }),
+  },
+  {
+    key: "readAtBlock", label: "Read at block",
+    render: (v) => (v == null ? null : {
+      text: Number(v).toLocaleString("en-US"),
+      note: "every value on this page was read at this block",
+    }),
+  },
+];
+
+/** The APR caveat travels with the row (design law L2); show it with the number. */
+function venusAprNote(p: Record<string, any>): string {
+  const basis = typeof p.rateBasis === "string" ? p.rateBasis : "simple annualisation of the per-block rate";
+  const assumed = p.blocksPerYearAssumed != null
+    ? ` (${Number(p.blocksPerYearAssumed).toLocaleString("en-US")} blocks/yr assumed)`
+    : "";
+  const caveat = typeof p.blocksPerYearCaveat === "string" ? `. ${p.blocksPerYearCaveat}` : "";
+  return `${basis}${assumed}${caveat}`;
+}
+
+const VENUS_DETAIL: OpportunityDetailField[] = [
+  {
+    key: "vToken", label: "vToken contract",
+    render: (v, p) => (v == null ? null : {
+      text: String(v), mono: true,
+      note: `the Venus market contract for ${typeof p.symbol === "string" ? p.symbol : "this asset"}`,
+    }),
+  },
+  { key: "symbol", label: "Market", render: (v) => (v == null ? null : { text: String(v) }) },
+  {
+    key: "supplyAprPct", label: "Supply APR",
+    render: (v, p) => (v == null ? null : { text: `${Number(v).toFixed(2)}%`, note: venusAprNote(p) }),
+  },
+  {
+    key: "borrowAprPct", label: "Borrow APR",
+    render: (v, p) => (v == null ? null : { text: `${Number(v).toFixed(2)}%`, note: venusAprNote(p) }),
+  },
+  // Consumed into the APR notes rather than shown as bare rows.
+  { key: "rateBasis", label: "Rate basis", render: () => null },
+  { key: "blocksPerYearAssumed", label: "Blocks per year", render: () => null },
+  { key: "blocksPerYearCaveat", label: "Blocks per year", render: () => null },
+  {
+    key: "utilisation", label: "Utilisation",
+    render: (v) => (v == null ? null : {
+      text: `${(Number(v) * 100).toFixed(1)}%`,
+      note: "share of the market's capital that is currently borrowed",
+    }),
+  },
+  {
+    key: "totalBorrows", label: "Total borrows",
+    render: (v, p) => (v == null ? null : {
+      text: `${compact18(String(v))}${p.symbol ? ` ${p.symbol}` : ""}`,
+      note: "underlying units; BSC tokens are 18-decimal",
+    }),
+  },
+  {
+    key: "cash", label: "Cash available",
+    render: (v, p) => (v == null ? null : {
+      text: `${compact18(String(v))}${p.symbol ? ` ${p.symbol}` : ""}`,
+      note: "underlying units; BSC tokens are 18-decimal",
+    }),
+  },
+  {
+    key: "collateralFactor", label: "Collateral factor",
+    render: (v) => (v == null ? null : {
+      text: `${(Number(v) * 100).toFixed(0)}%`,
+      note: "the max share of this asset's value that borrowing can count",
+    }),
+  },
+  {
+    // A null read is a failed read (the Comptroller Diamond has no getter),
+    // never a zero one - invariant 9.
+    key: "closeFactor", label: "Close factor",
+    render: (v) => (v == null
+      ? { text: "unmeasured", note: "the read failed - not zero" }
+      : { text: `${(Number(v) * 100).toFixed(0)}%`, note: "the max share of a borrow one liquidation may repay" }),
+  },
+  {
+    key: "liquidationIncentive", label: "Liquidation incentive",
+    render: (v, p) => (v == null || Number(v) <= 0
+      ? {
+          text: "unmeasured",
+          note: typeof p.liquidationIncentiveNote === "string" ? p.liquidationIncentiveNote : "the read failed - not zero",
+        }
+      : { text: `+${((Number(v) - 1) * 100).toFixed(1)}% above the debt repaid`, note: "the liquidator's premium" }),
+  },
+  { key: "liquidationIncentiveNote", label: "Liquidation incentive", render: () => null },
+  {
+    key: "reserveFactor", label: "Reserve factor",
+    render: (v) => (v == null ? null : {
+      text: `${(Number(v) * 100).toFixed(1)}%`,
+      note: "share of interest kept by the protocol, not paid to suppliers",
+    }),
+  },
+  { key: "isListed", label: "Listed on Venus", render: (v) => (v == null ? null : { text: v ? "yes" : "no" }) },
+  {
+    key: "readAtBlock", label: "Read at block",
+    render: (v) => (v == null ? null : {
+      text: Number(v).toLocaleString("en-US"),
+      note: "every value on this page was read at this block",
+    }),
+  },
+];
+
+export const OPPORTUNITY_DETAIL_FIELDS: Partial<Record<CategorySlug, OpportunityDetailField[]>> = {
+  rebalancing: PCS_DETAIL,
+  grid: PCS_DETAIL,
+  yield: VENUS_DETAIL,
+  health: VENUS_DETAIL,
 };
 
 // ── population ─────────────────────────────────────────────────────────────

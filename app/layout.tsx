@@ -6,6 +6,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
 import AssistantWidget from "./assistant/AssistantWidget";
 import { OverflowGuard } from "./overflow-guard";
+import WebMcpTools from "./WebMcpTools";
 import "./globals.css";
 
 const sans = Geist({
@@ -125,7 +126,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
               <span className="wordmark-text">GEBO</span>
             </a>
-            <form method="get" action="/search" className="masthead-search" role="search">
+            <form
+              method="get"
+              action="/search"
+              className="masthead-search"
+              role="search"
+              {...({
+                toolname: "search-agents",
+                tooldescription:
+                  "Search GEBO's registry of BNB Smart Chain agents by capability. Navigates to results ordered by trust state, then relevance.",
+                toolautosubmit: "true",
+              } as Record<string, string>)}
+            >
               <input
                 type="search"
                 name="q"
@@ -133,6 +145,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 aria-label="Search agents by capability"
                 autoComplete="off"
                 spellCheck={false}
+                {...({
+                  toolparamdescription:
+                    "What the agent should do, e.g. 'rebalance liquidity', 'watch my loan', 'x402 payments'",
+                } as Record<string, string>)}
               />
             </form>
             <nav aria-label="Primary Navigation">
@@ -149,6 +165,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         <OverflowGuard />
         <AssistantWidget />
+        <WebMcpTools />
 
         <footer className="colophon">
           <div className="shell">

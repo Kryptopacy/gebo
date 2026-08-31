@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
 import { attestationsFor, attestationSummary, taskRuns } from "@/lib/attestations";
@@ -9,6 +10,12 @@ import AgentTabs from "./AgentTabs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export async function generateMetadata({ params }: { params: Promise<{ tokenId: string }> }): Promise<Metadata> {
+  const { tokenId } = await params;
+  const agent = await findAgent(tokenId);
+  return { title: agent?.name ? `${agent.name} — agent — GEBO` : `Agent #${tokenId} — GEBO` };
+}
 
 const OUTCOME_TONE: Record<string, string> = {
   succeeded: "pass",
@@ -274,18 +281,122 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             })()}
           </dl>
 
-          {a.probe?.evidence && (
-            <div className="surface-card mt-m">
-              <dl className="spec">
-                {Object.entries(a.probe.evidence).map(([k, v]) => (
-                  <div key={k}>
-                    <dt>{k}</dt>
-                    <dd className="mono">{v === null ? "—" : String(v)}</dd>
+          {a.probe?.evidence && (() => {
+            /**
+             * The probe's evidence object, translated. The old view dumped
+             * Object.entries raw: "hasCapabilities", a skills array stringified
+             * into one comma blob, a 1200-char description in a mono cell. Keys
+             * this renderer does not know still appear, raw, at the bottom -
+             * translating is not filtering.
+             */
+            const ev: Record<string, unknown> = a.probe.evidence;
+            const str = (k: string): string | null =>
+              ev[k] == null || ev[k] === "" ? null : String(ev[k]);
+            const KNOWN = new Set([
+              "name", "description", "skillCount", "skills",
+              "hasCapabilities", "hasUrl", "hasVersion", "version",
+              "declaredEndpoint", "endpointDefect",
+            ]);
+            const skills = Array.isArray(ev.skills) ? (ev.skills as unknown[]).map((s) => String(s)) : [];
+            const skillCount = typeof ev.skillCount === "number" ? ev.skillCount : skills.length;
+            const present: string[] = [];
+            const missing: string[] = [];
+            (str("name") ? present : missing).push("name");
+            (skills.length > 0 || ev.skillCount != null ? present : missing).push("skills");
+            const boolChecks: [string, string][] = [
+              ["hasCapabilities", "capabilities"],
+              ["hasUrl", "url"],
+              ["hasVersion", "version"],
+            ];
+            for (const [k, label] of boolChecks) (ev[k] ? present : missing).push(label);
+            const endpoint = str("declaredEndpoint");
+            const defect = str("endpointDefect");
+            const rest = Object.entries(ev)
+              .filter(([k]) => !KNOWN.has(k))
+              .sort(([a], [b]) => a.localeCompare(b));
+            return (
+              <div className="surface-card mt-m">
+                <p className="section-label" style={{ marginBottom: 10 }}>
+                  What the last probe saw on the wire
+                </p>
+                <dl className="spec">
+                  {str("name") && (
+                    <div><dt>Card name</dt><dd>{str("name")}</dd></div>
+                  )}
+                  {str("version") && (
+                    <div><dt>Card version</dt><dd className="mono">{str("version")}</dd></div>
+                  )}
+                  <div>
+                    <dt>A2A card structure</dt>
+                    <dd>
+                      Has {present.length ? present.join(", ") : "none of the expected fields"}
+                      {missing.length > 0 && `; missing ${missing.join(", ")}`}
+                      <div className="note">structural checks the probe ran on the card JSON</div>
+                    </dd>
                   </div>
-                ))}
-              </dl>
-            </div>
-          )}
+                  {endpoint && (
+                    <div>
+                      <dt>Declared endpoint</dt>
+                      <dd>
+                        <Uri url={endpoint} />
+                        {defect && (
+                          <div className="note" style={{ color: "var(--fail)" }}>
+                            unusable: {defect}
+                          </div>
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                  {(skills.length > 0 || ev.skillCount != null) && (
+                    <div>
+                      <dt>Skills declared</dt>
+                      <dd>
+                        {skillCount > 0 ? `${skillCount} skill${skillCount === 1 ? "" : "s"}` : "none"}
+                        {skills.length > 0 && (
+                          <div className="inline-list" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            {skills.slice(0, 12).map((s, i) => (
+                              <span key={i} className="chip chip-flat">{s}</span>
+                            ))}
+                            {skills.length > 12 && (
+                              <span className="xs t-4">+{skills.length - 12} more</span>
+                            )}
+                          </div>
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                  {str("description") && (
+                    <div>
+                      <dt>Self-description</dt>
+                      <dd>
+                        {str("description")}
+                        <div className="note">the agent&apos;s own words, as the probe recorded them</div>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                {rest.length > 0 && (
+                  <>
+                    <p className="section-label" style={{ margin: "18px 0 0" }}>Other recorded fields</p>
+                    <dl className="spec">
+                      {rest.map(([k, v]) => (
+                        <div key={k}>
+                          <dt className="mono">{k}</dt>
+                          <dd className="mono">
+                            {v === null || v === undefined
+                              ? "—"
+                              : typeof v === "object"
+                                ? JSON.stringify(v)
+                                : String(v)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </section>
 
