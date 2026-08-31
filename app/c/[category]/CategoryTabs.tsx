@@ -210,8 +210,14 @@ export default function CategoryTabs({
           <div className="shell">
             <h2>Live on-chain opportunities</h2>
             <p className="prose sm" style={{ marginBottom: 0 }}>
-              Read directly from PancakeSwap and Venus. Visible whether or not a
-              competent agent exists yet.
+              {/* Venue names come from the rows themselves, not a hardcoded
+                  list, so the sentence can never claim a venue this category
+                  does not actually index. */}
+              Read directly from{" "}
+              {opps.length > 0
+                ? Array.from(new Set(opps.map((o) => VENUE_LABEL[o.venue] ?? o.venue))).join(" and ")
+                : "the venues this category indexes"}
+              . Visible whether or not a competent agent exists yet.
             </p>
 
             {opps.length === 0 ? (

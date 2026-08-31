@@ -15,6 +15,19 @@ const VENUE_LABEL: Record<string, string> = {
 };
 
 /**
+ * What a person who uses this venue does with the row - stated per venue, and
+ * only for venues whose contracts we actually read. A venue with no entry here
+ * gets no sentence rather than an invented one (invariant 3: no unscoped
+ * claims, and no benefit language for a venue we do not index).
+ */
+const VENUE_BENEFIT: Record<string, string> = {
+  "pancakeswap-v3":
+    "If you provide liquidity on PancakeSwap, this row is the re-ranging decision: where the pool's liquidity sits relative to the current tick, the fee tier a position earns, and the MasterChef stake a farmed position must unwind before it can move.",
+  venus:
+    "If you lend or borrow on Venus, this row is the rate-and-risk picture: the unboosted supply APR, utilisation, and the liquidation parameters that decide how close to the edge a position is.",
+};
+
+/**
  * Fallback rendering for payload keys the detail spec does not recognise.
  * Deliberately dumb: no digit-count guessing, no scaling. An earlier version
  * divided any 15+ digit integer by 1e18 and printed "123.456e18", which was
@@ -94,6 +107,11 @@ export default async function OpportunityPage({
             {block && <span className="chip chip-flat num">block {Number(block).toLocaleString()}</span>}
             <span className="chip chip-flat xs">{new Date(o.updatedAt).toISOString().slice(0, 16).replace("T", " ")} UTC</span>
           </div>
+          {VENUE_BENEFIT[o.venue] && (
+            <p className="sm t-3 mt-m" style={{ maxWidth: "78ch", marginBottom: 0 }}>
+              {VENUE_BENEFIT[o.venue]}
+            </p>
+          )}
           {!o.eligible && o.ineligibleReason && (
             <div className="notice mt-m" data-tone="fail">
               <strong>Excluded from the live surface:</strong> {o.ineligibleReason}. The row is

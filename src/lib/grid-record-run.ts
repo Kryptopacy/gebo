@@ -213,10 +213,11 @@ export async function runGridRecord(
   }
 
   const model =
-    `Replay of the agent's advised grid (+/-3%, 8 bands/side) over realized 1-minute ` +
-    `closes (Binance ${sym0} and ${sym1}, ratioed into the pool's ${token1}-per-${token0} ` +
-    `orientation), fees at ${pool.label}'s ${pool.fee_pct ?? "?"}% tier; peg deviation ` +
-    `pool-vs-exchange at compute time: ${pegDevPct.toFixed(3)}%.`;
+    `Replay of the agent's advised grid (+/-3%, 8 bands/side) on PancakeSwap V3 ` +
+    `(pool ${pool.label}) over realized 1-minute closes (Binance ${sym0} and ${sym1}, ` +
+    `ratioed into the pool's ${token1}-per-${token0} orientation), fees at the pool's ` +
+    `${pool.fee_pct ?? "?"}% tier; peg deviation pool-vs-exchange at compute time: ` +
+    `${pegDevPct.toFixed(3)}%.`;
   const defects = [
     "Simulated fills: no slippage, no MEV, no queue position; minute-closing prices approximate the intraminute path.",
     `Fees modeled at the pool's ${pool.fee_pct ?? "?"}% tier per leg on traded notional, in the input asset.`,

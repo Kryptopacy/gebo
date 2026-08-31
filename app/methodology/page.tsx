@@ -100,6 +100,72 @@ export default async function Methodology() {
     </>
   );
 
+  const venuesTab = (
+    <>
+      {/* ── Where every chain-derived number comes from ────────────── */}
+      <section className="band">
+        <div className="shell">
+          <h2>Venue coverage</h2>
+          <p className="prose sm">
+            Every chain-derived number on this site is read from one of these two
+            venues, directly from their contracts on BNB Smart Chain mainnet. Nothing
+            on any other venue has been measured: an opportunity on a venue not listed
+            here is unmeasured, not found absent.
+          </p>
+          <div className="surface-card mt-m">
+            <dl className="spec">
+              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                <dt style={{ color: "var(--fg-2)" }}>PancakeSwap V3</dt>
+                <dd className="t-3">
+                  Pool state read per indexed pool: tick, liquidity, fee tier, in-range
+                  state, MasterChef staking address. Feeds the rebalancing and grid
+                  opportunity rows, and the swap-quote side of the hire-flow simulation
+                  (PancakeSwap Quoter / SmartRouter). The pool rows double as a depth
+                  map - which pairs hold liquidity at which fee tier - the demand
+                  picture a new pool would enter.
+                </dd>
+              </div>
+              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                <dt style={{ color: "var(--fg-2)" }}>Venus</dt>
+                <dd className="t-3">
+                  Market state read per listed market: supply and borrow APR (unboosted
+                  lower bound), utilisation, collateral and close factors, liquidation
+                  incentive. Feeds the yield and health opportunity rows and the rate
+                  side of the hire-flow simulation.
+                </dd>
+              </div>
+              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                <dt style={{ color: "var(--fg-2)" }}>Grid trading record</dt>
+                <dd className="t-3">
+                  The reference grid agent&apos;s advised strategy, replayed over the
+                  realized price path of the PancakeSwap V3 pool its own depth rule
+                  selects, fees charged at that pool&apos;s tier on every leg. Edge vs
+                  DIY is what active re-ranging earned over passively holding the same
+                  assets - the comparison a liquidity provider actually faces.
+                </dd>
+              </div>
+              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                <dt style={{ color: "var(--fg-2)" }}>Hire-flow simulation</dt>
+                <dd className="t-3">
+                  A representative action quoted live from PancakeSwap&apos;s Quoter or
+                  Venus&apos;s rate model. No wallet is connected and no funds move; the
+                  scope presets in the same flow name the exact contracts the agent may
+                  call.
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <div className="notice mt-m">
+            <strong>What this coverage does not include:</strong> pool-level APRs on
+            PancakeSwap are not computed. The pool rows carry state - tick, liquidity,
+            fee tier - not a yield figure, and comparing a pool against a Venus market
+            is left to the reader, on the numbers both surfaces actually read.
+          </div>
+        </div>
+      </section>
+    </>
+  );
+
   const refusedTab = (
     <>
       {/* ── What this registry refuses to show ─────────────────────── */}
@@ -278,6 +344,7 @@ export default async function Methodology() {
 
       <MethodologyTabs
         measures={measuresTab}
+        venues={venuesTab}
         refused={refusedTab}
         ranking={rankingTab}
         categories={categoriesTab}

@@ -107,7 +107,7 @@ export default async function HirePage({ params }: { params: Promise<{ tokenId: 
               <p className="prose sm" style={{ marginBottom: 0 }}>
                 A representative action for this category, quoted from the chain as it stands
                 right now. This is a real quote from PancakeSwap&apos;s Quoter or Venus&apos;s rate
-                model, not an illustration.
+                model, not an illustration &mdash; no wallet is connected and nothing moves.
               </p>
             </div>
           </div>

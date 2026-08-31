@@ -4,10 +4,11 @@ import { useState, type ReactNode } from "react";
 
 /**
  * Switcher pills for the methodology page, matching the category/agent tabs pattern.
- * Five distinct sections that users reference independently.
+ * Six distinct sections that users reference independently.
  */
 const TABS = [
   "What is measured",
+  "Venues",
   "Refuses to show",
   "How ranking works",
   "How categories evolve",
@@ -17,6 +18,7 @@ type Tab = (typeof TABS)[number];
 
 export default function MethodologyTabs({
   measures,
+  venues,
   refused,
   ranking,
   categories,
@@ -24,6 +26,7 @@ export default function MethodologyTabs({
   stats,
 }: {
   measures: ReactNode;
+  venues: ReactNode;
   refused: ReactNode;
   ranking: ReactNode;
   categories: ReactNode;
@@ -73,6 +76,7 @@ export default function MethodologyTabs({
       </section>
 
       {tab === "What is measured" && measures}
+      {tab === "Venues" && venues}
       {tab === "Refuses to show" && refused}
       {tab === "How ranking works" && ranking}
       {tab === "How categories evolve" && categories}

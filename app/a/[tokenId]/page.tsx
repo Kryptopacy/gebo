@@ -741,9 +741,13 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               <div className="surface-card mt-m" style={{ padding: "16px 18px", borderLeft: "3px solid var(--accent)" }}>
                 <h3 style={{ margin: "0 0 4px", fontSize: "1rem" }}>Trading record &mdash; its advised strategy, replayed over the market that happened</h3>
                 <p className="xs t-4" style={{ margin: "0 0 12px" }}>
-                  The agent advises a mechanical grid; the market graded it. Win rate is over closed
-                  round-trips only; edge is net of the pool&apos;s fees, against both doing-nothing and
-                  holding the traded asset.
+                  The agent advises a mechanical grid; the market graded it. The venue is a
+                  PancakeSwap V3 pool picked by the agent&apos;s own depth rule, and every leg
+                  pays that pool&apos;s fee tier. For a liquidity provider, edge vs DIY is the
+                  measured value of actively re-ranging this position over leaving the same
+                  capital parked in it. Win rate is over closed round-trips only; edge is net
+                  of the pool&apos;s fees, against both doing-nothing and holding the traded
+                  asset.
                 </p>
                 <dl className="kpi-grid" style={{ marginTop: 0 }}>
                   {wr30 && (
