@@ -11,7 +11,7 @@ Nine rules. Violating any one of them reproduces a documented failure.
 
 | # | Law | Source |
 | --- | --- | --- |
-| **L1** | **No star ratings. Anywhere.** | Cor(usage, rating) = −0.153…+0.071 in the GPT Store — measured noise |
+| **L1** | **No unanchored ratings; no review-derived scores or ranking. Anywhere.** Verified reviews exist only as free-text comments gated on a completed escrow job — displayed as evidence, never aggregated, never a sort key. | Cor(usage, rating) = −0.153…+0.071 in the GPT Store — noise from self-selected, unverified raters; the completed-job anchor is what the GPT Store lacked |
 | **L2** | **No metric renders without all four of: denominator, window, cost treatment, observation count.** A metric missing any one renders as `—` with a reason. | TradingView cost-realism rules; DefiLlama typed fields |
 | **L3** | **Never rank by popularity, usage count, follower count, or TVL.** | Cor(usage, rating-count) = 0.33–0.71 → rich-get-richer, uncorrelated with quality |
 | **L4** | **Listings are named after the user's job, never the technology.** | Zapier's converting unit vs the GPT Store's "DALL·E" category |
@@ -20,6 +20,16 @@ Nine rules. Violating any one of them reproduces a documented failure.
 | **L7** | **Demote, never delete.** Three visibility states, severity-mapped. | TradingView Suggested/Unsuggested/Hidden |
 | **L8** | **Mark-to-market including open positions.** Closed-position-only PnL is banned. | Binance copy-trading's documented deception; "100% win rate if I never close my losers" |
 | **L9** | **Every number's definition and its known defects are published.** | Hugging Face publishes its own metric's defects (GGUF double-count) |
+
+> **L1 amendment (2026-08-31).** The GPT Store measurement condemns *unanchored*
+> ratings — self-selected raters, no proof of use — not reviews as such. A review
+> gated on a completed APEX escrow job changes the data-generating process: a fake
+> review then costs ~7 transactions + gas + a dispute window, instead of 0.01 $U
+> for an x402 interaction. Reviews are therefore permitted as hire-anchored
+> **comments** (off-chain storage, the jobId as the on-chain anchor) carrying the
+> one dimension neither probes nor the escrow evaluator measure —
+> did-it-do-what-the-brief-said. Stars, scores, averages and review-derived
+> ranking remain banned; L3 blocks the count-based variant independently.
 
 ---
 
@@ -411,7 +421,7 @@ ERC-8004 feedback is `int128 value` + `uint8 valueDecimals` + `tag1`/`tag2`. **8
 
 | Banned | Why |
 | --- | --- |
-| Star rating | Cor ≈ 0 with usage (GPT Store, measured). Note 8004scan exposes `star_count` and `sortBy=stars` — we ingest it, we never display or rank on it. |
+| Star rating | Cor ≈ 0 with usage (GPT Store, measured). Note 8004scan exposes `star_count` and `sortBy=stars` — we ingest it, we never display or rank on it. Unanchored stars specifically; hire-anchored comments are the L1 amendment, and they never become numbers. |
 | "Win rate" as profitable-days | Binance's own formula is `Profit Days / days since first trade` — the most gameable displayed metric in the category |
 | Closed-position-only PnL | Hides the unrealised book (L8) |
 | Headline APY with boosts / locked / pre-TGE rewards | L6 |
@@ -442,6 +452,11 @@ reputation_writes      agentId, tag1, value, valueDecimals, txHash, ts
 
 reviewers              address, trusted, note
                        ── ERC-8004 getSummary REQUIRES a non-empty clientAddresses filter
+
+verified_reviews       agentId, jobId (APEX escrow id = the anchor), clientAddress,
+                       body, createdAt, disputed
+                       ── L1 amendment: comments gated on a COMPLETED escrow job;
+                         evidence only, never aggregated, never a sort key
 
 opportunities          id, category, chainId, venue, ref, label, payload jsonb,
                        eligible, ineligibleReason, updatedAt

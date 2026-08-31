@@ -128,9 +128,11 @@ ourselves.
   `scripts/hire-altana-sdk.ts` documents this: SDK path first, one-address
   fallback second.
 - **Testnet $U comes from the public faucet** `0x86e9197CC0F76E4e4aaa7082180945196bBAb5D3`
-  (`requestTokens()` pays 10 $U per address per 30 min). No DEX pool exists for
-  $U, so tBNB cannot be swapped into it. `scripts/claim-testnet-u.ts` claims via
-  the relay so the smart account is msg.sender.
+  (`requestTokens()` pays 10 $U per address per 30 min). No testnet DEX pool
+  exists for $U, so tBNB cannot be swapped into it. `scripts/claim-testnet-u.ts`
+  claims via the relay so the smart account is msg.sender. Mainnet $U has no
+  faucet but IS swap-acquirable on PancakeSwap V3 — measured pool depth in
+  "Verified reviews".
 - One job is **7 transactions** on the happy path — 5 client, 1 provider, 1
   permissionless `settle` — or 6 if the ERC-20 allowance already covers the budget.
   The evaluator never sends a transaction; `complete()` is an internal call from the
@@ -163,6 +165,57 @@ settlement is a self-transfer; earnings go to `X402_PAY_TO` in `.env`
 (`0x2Fb9E5CfebadbC77a9c1a42D96655F46d09D493d`), while the facilitator (gas
 only) is the demo key.
 
+### Verified reviews (the L1 amendment, 2026-08-31)
+
+The GPT Store autopsy measures *unanchored* ratings: self-selected raters with
+no proof of use. That r ≈ 0 finding does not condemn reviews — it locates where
+review information actually lives: comments from wallets that provably completed
+a job. ERC-8004 reaches the same conclusion from the attack side (`getSummary`
+requires a non-empty `clientAddresses` filter). The anchor is GEBO's strength:
+
+- **"Proven" means a COMPLETED escrow job, not any interaction.** Cost-of-attack
+  is the whole game: an x402 call costs 0.01 $U, so interaction-gated reviews
+  are Sybil-cheap; a completed APEX job costs ~7 transactions, gas, and a
+  dispute window. Put the gate at the expensive door.
+- **Comments, not numbers.** Free text keyed to the on-chain jobId, stored
+  off-chain. The comment carries the net-new information — instruction-following,
+  communication, did-it-do-what-the-brief-said — which neither probes (liveness)
+  nor the APEX evaluator (mechanical completion) can measure. Stars, averages
+  and review-derived ranking stay banned; L3 blocks the count variant
+  independently (review count tracks hire volume, not quality).
+- **Off-chain storage, on-chain anchor.** Invariant 6's logic applies to
+  reviews: on-chain text is undeletable, and at our hire volumes one angry
+  review is 33–100% of the visible signal.
+- **Empty state is explicit:** "no verified reviews — reviews require a
+  completed hire." Never a blank section, never a zero (invariant 9 generalizes
+  to this).
+- Reviews from jobs that went to dispute are marked or excluded.
+
+**$U acquisition must be integrated, not a scavenger hunt.** The $U-denominated
+surfaces (x402 paid calls at 0.01 $U, non-zero job budgets) fail as UX if users
+must hunt for the token. Acquisition is chain-specific, and both paths are now
+verified:
+
+- **Testnet (97):** the public faucet is the only source — no testnet DEX pool
+  exists for $U, so tBNB cannot be swapped into it. The surface offers a
+  one-click claim: a prepared `requestTokens()` call from the connected wallet
+  (direct write for EOAs, the `scripts/claim-testnet-u.ts` relay pattern for
+  Altana smart accounts so the account is msg.sender), disclosing the faucet
+  limit — 10 $U per address per 30 min — and the resulting balance.
+- **Mainnet (56):** no faucet, but $U IS swap-acquirable. Measured at block
+  119,221,595 (`scripts/tmp-mainnet-u-check.ts`, factory controls validated):
+  PancakeSwap V3 $U/USDT 0.01% pool `0xA0909f81785f87f3e79309F0E73A7d82208094E4`
+  holds ~10.79M $U / ~10.23M USDT (deepest), V3 $U/WBNB 0.05%
+  `0x882e23dbA77BFe0e514cF5BcDad7a58acEB01522` holds ~2.05M $U / ~2287 WBNB,
+  V2 pair `0x108752b2A22C731edE3EdAC2205c63ae553E221a` ~81k $U; every other
+  fee tier is dust or empty. The surface offers a swap route: v1 deep-links
+  PancakeSwap with `outputCurrency` prefilled (zero custody, zero new contract
+  surface of ours); an in-app V3 swap is the later upgrade. Take the WBNB
+  constant from `src/lib/session-scope.ts`
+  (`0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c`) — a from-memory address
+  produced silently-wrong "no pool" answers here, and only the WBNB/USDT
+  controls caught it.
+
 ## Invariants that must not be broken
 
 These encode failures already made and corrected. Breaking one silently undoes
@@ -171,8 +224,12 @@ real work.
 1. **No bare numbers in the UI.** A metric renders with denominator, window, cost
    treatment and observation count, or not at all. `metric_values.qualifiers` is
    `NOT NULL` to make this structural rather than a matter of discipline.
-2. **Never rank by popularity.** GPT Store data measured Cor(usage, rating) at
-   −0.153 to +0.071 — ratings carry no information. There are no star ratings here.
+2. **Never rank by popularity; never render an unanchored rating.** GPT Store
+   data measured Cor(usage, rating) at −0.153 to +0.071 — ratings from
+   self-selected, unverified raters are noise. There are no star ratings here.
+   Amended 2026-08-31: verified reviews are allowed as comments gated on a
+   completed APEX escrow job (see "Verified reviews") — evidence, never a
+   score, never a sort key.
 3. **Absence of evidence is never rendered as evidence of absence.** Any claim
    scoped to one data source must say so in the UI. `/authority` does this: it
    declares it reads one authority system (Altana Keystore) and renders an
@@ -278,7 +335,9 @@ its contents.
 
 Recorded so nobody "fixes" a decision.
 
-- **No star ratings, ever.** See invariant 2.
+- **No unanchored star ratings, ever.** Amended 2026-08-31: hire-anchored
+  verified comments are allowed (see "Verified reviews"); stars, scores and
+  review-derived ranking remain banned. See invariant 2.
 - **No unfiltered ERC-8004 aggregation.** The spec requires a non-empty
   `clientAddresses` filter on `getSummary` because otherwise it is Sybil-farmable.
   Competitors rendering aggregate scores are violating the standard they cite.

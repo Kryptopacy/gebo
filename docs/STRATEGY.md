@@ -185,7 +185,7 @@ Primary: OpenAI announcement (10 Jan 2024); *GPT Store Mining and Analysis*, arX
 
 **Three transferable conclusions:**
 
-1. **Star ratings carry literally zero information about usage** (r ≈ 0). Do not ship a star rating. It is measured noise.
+1. **Star ratings carry literally zero information about usage** (r ≈ 0). Do not ship a star rating. It is measured noise. *Amendment (2026-08-31): the noise is a property of unanchored raters, not of reviews per se — GEBO gates reviews on completed escrow jobs, where a fake costs ~7 transactions + gas + a dispute window instead of 0.01 $U for an x402 interaction. The autopsy becomes a design strength: it tells us where review information actually lives.*
 2. **Popularity ranking is self-reinforcing** (r = 0.33–0.71 with its own rating count), so ranking on usage manufactures a rich-get-richer loop uncorrelated with quality.
 3. **Staleness is the strongest quality separator that was measured.** Freshness/liveness beats every other signal available. This is precisely the signal ERC-8004's `uptime`/`reachable` tags encode, and precisely the complaint at the top of the user-pain list.
 

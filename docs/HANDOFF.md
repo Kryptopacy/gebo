@@ -220,9 +220,21 @@ agents, 469 validated on the latest probe day.
    in the Vercel project env. The code default is now correct without it, but
    the env var keeps prod and local `.env` symmetric.
 5. The grid trading record refreshes daily at 07:17 UTC (cron `gebo-grid-record`).
-   If it fails, the grid_* rows self-expire after 26h and the readiness gate
-   flips to PARTIAL/MISSING - that absence on the card is the designed signal,
-   not a bug to paper over.
+    If it fails, the grid_* rows self-expire after 26h and the readiness gate
+    flips to PARTIAL/MISSING - that absence on the card is the designed signal,
+    not a bug to paper over.
+6. Verified reviews (L1 amendment, AGENTS.md "Verified reviews"): add
+   `verified_reviews` (anchored on APEX jobId), gate = COMPLETED escrow job,
+   comment-only UI with the explicit "reviews require a completed hire" empty
+   state; dispute-marked jobs flagged or excluded. Never a score, never a sort
+   key.
+7. Integrated $U acquisition on the hire/pay surface, per chain: testnet =
+   one-click faucet claim (`requestTokens()`, direct write for EOAs, the
+   `claim-testnet-u.ts` relay pattern for Altana smart accounts; 10 $U / 30 min
+   disclosed; no testnet DEX pool for $U). Mainnet = swap route, now VERIFIED
+   (block 119,221,595): PancakeSwap V3 $U/USDT 0.01% holds ~10.8M $U / ~10.2M
+   USDT, $U/WBNB 0.05% ~2.05M $U — v1 deep-links PCS with outputCurrency
+   prefilled; in-app V3 swap later. See AGENTS.md "Verified reviews".
 
 ## Gotchas carried forward
 
