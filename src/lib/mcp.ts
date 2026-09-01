@@ -152,6 +152,22 @@ export const MCP_TOOLS: McpToolDef[] = [
       required: ["token_id"],
     },
   },
+  {
+    name: "get_verified_reviews",
+    description:
+      "Verified reviews for one agent: free-text comments from wallets that completed an APEX escrow " +
+      "job as its client, each anchored to an on-chain job id verified at a specific block. Comments " +
+      "are evidence, not scores - there are no star ratings or aggregates by design, and reviews " +
+      "never affect ordering. Agents can POST their own review via the /api/reviews endpoint with " +
+      "the same evidence gate.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        token_id: { type: "number", description: "ERC-8004 token id" },
+      },
+      required: ["token_id"],
+    },
+  },
 ];
 
 const ERR_PARSE = -32700;

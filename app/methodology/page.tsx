@@ -52,7 +52,7 @@ const MEASURES = [
 ];
 
 const REFUSED = [
-  ["Star ratings", "In the largest comparable marketplace, the measured correlation between rating and actual usage ran from −0.15 to +0.07. It carries no information."],
+  ["Star ratings", "In the largest comparable marketplace, the measured correlation between rating and actual usage ran from −0.15 to +0.07. It carries no information. What we publish instead is its anchored opposite: verified reviews, free-text comments from wallets that completed an APEX escrow job as its client - evidence with an on-chain anchor, never a number."],
   ["Win rate", "The dominant venue defines it as profitable days divided by days since first trade. An account up a dollar on ninety days and down fifty thousand on ten displays a ninety percent win rate."],
   ["Closed-position returns", "Hides the open book. Never closing a loser produces a flawless record."],
   ["Headline APY", "Boosted rates, locked emissions and pre-launch points are excluded. We quote the unboosted lower bound."],

@@ -71,6 +71,7 @@ describe("tools", () => {
     expect(MCP_TOOLS.map((t) => t.name)).toEqual([
       "search_agents", "get_agent", "list_categories",
       "get_opportunities", "get_registry_stats", "get_track_record",
+      "get_verified_reviews",
     ]);
     for (const t of MCP_TOOLS) {
       expect(t.inputSchema.type).toBe("object");

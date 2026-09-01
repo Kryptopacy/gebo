@@ -223,11 +223,19 @@ agents, 469 validated on the latest probe day.
     If it fails, the grid_* rows self-expire after 26h and the readiness gate
     flips to PARTIAL/MISSING - that absence on the card is the designed signal,
     not a bug to paper over.
-6. Verified reviews (L1 amendment, AGENTS.md "Verified reviews"): add
-   `verified_reviews` (anchored on APEX jobId), gate = COMPLETED escrow job,
-   comment-only UI with the explicit "reviews require a completed hire" empty
-   state; dispute-marked jobs flagged or excluded. Never a score, never a sort
-   key.
+6. Verified reviews (L1 amendment, AGENTS.md "Verified reviews"): BUILT
+   2026-09-01. Migration 0017 applied (`scripts/tmp-apply-0017.ts`), gate in
+   `src/lib/reviews.ts` (wallet signature -> on-chain job: Completed status,
+   client = signer, provider = agent owner/wallet), `POST /api/reviews`
+   (humans AND agents - the gate is the evidence, not the caller's nature),
+   `GET /api/reviews?tokenId=`, MCP tool `get_verified_reviews`, form + panel
+   on the agent card Track record tab. E2E (`scripts/tmp-review-e2e.ts`):
+   all refusals verified live - self-hired demo jobs (provider mismatch),
+   Funded-not-Completed job 788, forged signature. No qualifying job exists
+   yet (HealthGuard's owner key is not in .env, and no indexed agent is owned
+   by a held key), so the card honestly shows the empty state. The first real
+   review lands when a hire with the agent as provider completes - job 788
+   is one submit+settle away if the provider key is ever recovered.
 7. Integrated $U acquisition on the hire/pay surface, per chain: testnet =
    one-click faucet claim (`requestTokens()`, direct write for EOAs, the
    `claim-testnet-u.ts` relay pattern for Altana smart accounts; 10 $U / 30 min

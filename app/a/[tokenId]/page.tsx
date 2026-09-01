@@ -6,7 +6,9 @@ import { attestationsFor, attestationSummary, taskRuns } from "@/lib/attestation
 import { agentMetrics, type MetricValue } from "@/lib/metrics";
 import { fetchSampleOutput } from "@/lib/sample-output";
 import { probeHistoryFor, type ProbeHistory } from "@/lib/probe-history";
+import { reviewsFor, type Review } from "@/lib/reviews";
 import AgentTabs from "./AgentTabs";
+import { ReviewForm } from "./ReviewForm";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -54,13 +56,14 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
    * this page, and a failure there must not blank the agent card. That exact
    * coupling once blanked every counter on /live when a single malformed row threw.
    */
-  const [attRes, sumRes, metRes, sampleRes, probeRes, runsRes] = await Promise.allSettled([
+  const [attRes, sumRes, metRes, sampleRes, probeRes, runsRes, revRes] = await Promise.allSettled([
     attestationsFor(tokenId, 56, 12),
     attestationSummary(tokenId, 56),
     agentMetrics(56, tokenId),
     fetchSampleOutput(a),
     probeHistoryFor(tokenId, 56),
     taskRuns(56, 50, tokenId),
+    reviewsFor(tokenId, 20),
   ]);
   const attestations = attRes.status === "fulfilled" ? attRes.value : [];
   const attSummary = sumRes.status === "fulfilled" ? sumRes.value : null;
@@ -70,6 +73,9 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
   const sampleOutput = sampleRes.status === "fulfilled" ? sampleRes.value : null;
   const probeHistory: ProbeHistory | null = probeRes.status === "fulfilled" ? probeRes.value : null;
   const advantageRuns = runsRes.status === "fulfilled" ? runsRes.value : null;
+  const reviews: { reviews: Review[]; unavailable: boolean } = revRes.status === "fulfilled"
+    ? revRes.value
+    : { reviews: [], unavailable: true };
 
   const st = trustState(a);
   const m = classify(a);
@@ -922,6 +928,59 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               </div>
             </>
           )}
+
+          {/* ── verified reviews: the L1 amendment ─────────────────────────
+              Comments from wallets that provably completed an APEX escrow
+              job with this agent as provider. Evidence, not a score: no
+              stars, no averages, and never an ordering input - review count
+              tracks hire volume, not quality (L3). The empty state is
+              explicit by law (invariant 9 generalised here): a blank section
+              would read as "reviewed and found mediocre". */}
+          <div className="surface-card mt-m" style={{ borderLeft: "3px solid var(--accent)", padding: "14px 18px" }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: "1rem" }}>Verified reviews</h3>
+            <p className="xs t-4" style={{ margin: "0 0 12px" }}>
+              Comments from the wallet that hired, each anchored to an APEX escrow job
+              that reached Completed with that wallet as its client - verified on chain,
+              not taken on trust. What the probes cannot measure (liveness) and the
+              escrow evaluator cannot grade (did it do what the brief said) lives here,
+              in words. There is no score, and reviews never affect ordering.
+            </p>
+            {reviews.unavailable ? (
+              <div className="notice" data-tone="hold">
+                <span className="xs">
+                  Verified reviews could not be read right now - unmeasured, not zero.
+                  {" "}No agent is treated as unreviewed because our read failed.
+                </span>
+              </div>
+            ) : reviews.reviews.length === 0 ? (
+              <div className="notice" data-tone="hold">
+                <span className="xs">
+                  <strong>No verified reviews yet.</strong>{" "}
+                  Reviews require a completed hire: an APEX escrow job that reached
+                  Completed with the reviewer as its client.{" "}
+                  <a href={`/a/${tokenId}/hire`} style={{ color: "var(--accent)" }}>
+                    Complete a hire first
+                  </a>{" "}
+                  - then this section fills with evidence.
+                </span>
+              </div>
+            ) : (
+              <div className="stack-sm">
+                {reviews.reviews.map((r) => (
+                  <div key={r.id} style={{ borderTop: "1px solid var(--ink-850)", paddingTop: 10 }}>
+                    <p className="sm" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{r.comment}</p>
+                    <p className="xs t-4 num" style={{ margin: "6px 0 0" }}>
+                      {r.reviewer.slice(0, 8)}...{r.reviewer.slice(-6)}
+                      {" \u00b7 "}job #{r.jobId} on {r.chainId === 56 ? "BSC" : "BSC testnet"}
+                      {" \u00b7 "}gate verified at block {r.checkedBlock}
+                      {" \u00b7 "}{ago(r.createdAt)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <ReviewForm tokenId={tokenId} agentName={a.name} />
+          </div>
 
           {/* Probe history — shown for ALL agents with endpoints */}
           {probeHistory && probeHistory.days.length > 0 && (

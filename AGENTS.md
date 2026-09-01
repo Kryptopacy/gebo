@@ -191,6 +191,19 @@ requires a non-empty `clientAddresses` filter). The anchor is GEBO's strength:
   to this).
 - Reviews from jobs that went to dispute are marked or excluded.
 
+**Built (2026-09-01):** migration `0017_verified_reviews.sql` (applied —
+`scripts/tmp-apply-0017.ts`), the gate in `src/lib/reviews.ts` (signature →
+job status Completed → client = signer → provider = agent, every check on
+chain, every refusal legible), the write surface `POST /api/reviews` for
+humans and agents alike, the read surface `GET /api/reviews` + MCP tool
+`get_verified_reviews`, the form + panel on the agent card's Track record tab
+(`app/a/[tokenId]/ReviewForm.tsx`), and `tests/reviews.test.ts`. The gate
+refused every non-qualifying job in the e2e run (`scripts/tmp-review-e2e.ts`):
+GEBO's own self-hired demo jobs (provider is not the agent), the Funded
+not-yet-completed SDK hire, and a forged-attribution signature. The card
+therefore shows the designed explicit empty state — that is the honest state
+until a hire with the agent as provider completes, not a defect.
+
 **$U acquisition must be integrated, not a scavenger hunt.** The $U-denominated
 surfaces (x402 paid calls at 0.01 $U, non-zero job budgets) fail as UX if users
 must hunt for the token. Acquisition is chain-specific, and both paths are now

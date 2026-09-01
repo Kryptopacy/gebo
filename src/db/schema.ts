@@ -202,6 +202,26 @@ export const reviewers = pgTable("reviewers", {
   note: text("note"),
 });
 
+// ── verified reviews: the L1 amendment — comments gated on completed escrow ─
+export const verifiedReviews = pgTable(
+  "verified_reviews",
+  {
+    id: bigint("id", { mode: "number" }).generatedAlwaysAsIdentity().primaryKey(),
+    chainId: integer("chain_id").notNull(),              // APEX deployment the job lives on
+    jobId: bigint("job_id", { mode: "bigint" }).notNull(), // the on-chain anchor
+    tokenId: bigint("token_id", { mode: "bigint" }).notNull(),
+    reviewer: text("reviewer").notNull(),                // the job's client, read from chain
+    comment: text("comment").notNull(),                  // 16..2000 chars, evidence never a score
+    jobStatus: smallint("job_status").notNull(),         // 3 = Completed at verification
+    checkedBlock: bigint("checked_block", { mode: "bigint" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("verified_reviews_one_per_job").on(t.chainId, t.jobId),
+    index("verified_reviews_agent_idx").on(t.tokenId, t.createdAt),
+  ],
+);
+
 // ── opportunity surface: indexed reality, not submissions ──────────────────
 export const opportunities = pgTable(
   "opportunities",

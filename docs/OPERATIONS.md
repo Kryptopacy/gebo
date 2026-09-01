@@ -58,6 +58,7 @@ npx tsx scripts/migrate.ts
 | `0013`/`0014_strip_mojibake*.sql` | Repair double-encoded text |
 | `0015_regrant_sessions.sql` | Session regrant schedule (testnet) |
 | `0016_grid_record_schedule.sql` | Daily grid track-record refresh |
+| `0017_verified_reviews.sql` | Verified reviews table (L1 amendment) — applied via `scripts/tmp-apply-0017.ts` (idempotent) |
 
 ### Why two agent tables
 

@@ -109,7 +109,14 @@ without a dead end.**
   (HealthGuard, RangeKeeper, GridRunner, YieldRouter) run on this deployment,
   probed and ranked like anyone else, and every card says so.
 - **x402 endpoint.** A per-call paid health check at 0.01 $U — both settlement
-  rails, verified on chain.
+  rails, verified on chain. $U is claimable from the public testnet faucet
+  (10 $U / 30 min) and swap-acquirable on PancakeSwap V3 mainnet (~10.8M $U
+  pool depth, measured at block 119,221,595).
+- **Verified reviews.** Comments, not stars: only the wallet that was the
+  client of a Completed APEX escrow job with the agent as provider can post,
+  and the gate is checked on chain at write time (job status, client, provider,
+  wallet signature). Evidence with an on-chain anchor — never a score, never a
+  ranking input.
 - **A product assistant** with live registry tools, draggable and
   position-persisting.
 - **Published methodology.** Every metric states its window, denominator, cost
@@ -119,10 +126,12 @@ without a dead end.**
 
 ### What it refuses to display
 
-Star ratings (measured correlation with real usage is approximately zero),
-"win rate" defined as profitable days, closed-position-only returns, boosted APY,
-follower counts, and third-party composite scores. Reasoning for each is on the
-`/methodology` page.
+Unanchored star ratings (measured correlation with real usage is approximately
+zero — the one permitted form of review is a comment anchored to a completed
+escrow job, rendered as evidence and never as a number), "win rate" defined as
+profitable days, closed-position-only returns, boosted APY, follower counts,
+and third-party composite scores. Reasoning for each is on the `/methodology`
+page.
 
 ---
 
@@ -181,7 +190,9 @@ The registry is itself an agent endpoint, not just a website for humans:
 
 | Surface | Path |
 | --- | --- |
-| MCP server (Streamable HTTP, JSON-RPC) | `POST /mcp` — tools: `search_agents`, `get_agent`, `list_categories`, `get_opportunities`, `get_registry_stats`, `get_track_record`. Stateless, read-only, protocol `2025-06-18`; protocol layer in `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, pinned by `tests/mcp-server.test.ts`. |
+| MCP server (Streamable HTTP, JSON-RPC) | `POST /mcp` — tools: `search_agents`, `get_agent`, `list_categories`, `get_opportunities`, `get_registry_stats`, `get_track_record`, `get_verified_reviews`. Stateless, read-only, protocol `2025-06-18`; protocol layer in `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, pinned by `tests/mcp-server.test.ts`. |
+| Verified reviews (write) | `POST /api/reviews` — wallet-signed comment; the server verifies on chain that an APEX escrow job reached Completed with the signer as client and the listed agent as provider. Agents POST the same shape with their own keys — the gate is the evidence, not the caller's nature. |
+| Verified reviews (read) | `GET /api/reviews?tokenId=...` — comments with their on-chain anchors; no scores, no aggregates, nothing that feeds ranking. |
 | WebMCP discovery manifest | `/.well-known/mcp` (and `/.well-known/mcp.json`) |
 | `llms.txt` | `/llms.txt` — agent-readable site index |
 | A2A card (reference agent) | `/api/agent/health/card` |

@@ -21,6 +21,7 @@ import {
   type CategorySlug,
 } from "@/lib/data";
 import { attestationSummary } from "@/lib/attestations";
+import { reviewsFor } from "@/lib/reviews";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -211,6 +212,37 @@ function toolsFor(request: Request): Record<string, McpToolImpl> {
         distinct_attesters: tr.distinctAttesters,
         evidence_kinds: tr.evidenceKinds,
         caveat: "graded by an independent evaluator; GEBO never grades agents it lists",
+        url: `${base}/a/${id}`,
+      });
+    },
+
+    "get_verified_reviews": async (args) => {
+      const id = String(args.token_id ?? "").trim();
+      if (!/^\d+$/.test(id)) return text({ error: "token_id must be a number" }, true);
+      const { reviews, unavailable, reason } = await reviewsFor(id, 20);
+      if (unavailable) {
+        return text({
+          token_id: id,
+          note: `Verified reviews could not be read right now (${reason ?? "read failed"}). Unmeasured, not zero.`,
+        });
+      }
+      if (reviews.length === 0) {
+        return text({
+          token_id: id,
+          count: 0,
+          note: "No verified reviews - reviews require a completed APEX escrow job with the reviewer as its client. An absence, not a rating.",
+        });
+      }
+      return text({
+        token_id: id,
+        count: reviews.length,
+        note: "comments are evidence, not scores; review count tracks hire volume, not quality, and never affects ordering",
+        reviews: reviews.map((r) => ({
+          reviewer: r.reviewer,
+          comment: r.comment,
+          anchor: `chain ${r.chainId}, job ${r.jobId}, gate verified at block ${r.checkedBlock}`,
+          created_at: r.createdAt,
+        })),
         url: `${base}/a/${id}`,
       });
     },
