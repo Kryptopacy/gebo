@@ -79,6 +79,43 @@ describe("tools", () => {
     }
   });
 
+  it("declares an output schema with non-empty required fields for every tool", () => {
+    // An output schema without required fields validates anything; that is
+    // documentation pretending to be a contract. The tuple type enforces
+    // non-emptiness at compile time; this pins it against regression.
+    for (const t of MCP_TOOLS) {
+      expect(t.outputSchema.type).toBe("object");
+      expect(t.outputSchema.required.length).toBeGreaterThan(0);
+      // every required field must be declared in properties
+      for (const field of t.outputSchema.required) {
+        expect(t.outputSchema.properties[field]).toBeDefined();
+      }
+    }
+  });
+
+  it("passes structuredContent through tool calls untouched", async () => {
+    // The route emits text and structuredContent from one payload; the
+    // dispatcher must forward the structured half, not strip it.
+    const r = await handleJsonRpc(
+      {
+        jsonrpc: "2.0",
+        id: 9,
+        method: "tools/call",
+        params: { name: "echo_tool", arguments: {} },
+      },
+      {
+        echo_tool: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          structuredContent: { ok: true },
+        }),
+      },
+    );
+    expect(r!.result).toEqual({
+      content: [{ type: "text", text: "ok" }],
+      structuredContent: { ok: true },
+    });
+  });
+
   it("dispatches a call and returns the tool text", async () => {
     const r = await handleJsonRpc(
       { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "search_agents", arguments: { q: "grid" } } },

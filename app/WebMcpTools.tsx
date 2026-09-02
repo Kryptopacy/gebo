@@ -20,10 +20,23 @@
  */
 import { useEffect } from "react";
 
+/**
+ * Minimal JSON Schema subset used by the registrations below - concretely
+ * typed so a loosely typed schema object cannot be registered by accident:
+ * every property declares its type, and the schema itself is required.
+ */
+type JsonSchemaProperty = { type: "string" | "number"; description?: string };
+
+type JsonSchemaObject = {
+  type: "object";
+  properties: Record<string, JsonSchemaProperty>;
+  required?: string[];
+};
+
 type ModelContextTool = {
   name: string;
   description: string;
-  inputSchema?: Record<string, unknown>;
+  inputSchema: JsonSchemaObject;
   execute: (args: Record<string, unknown>) => unknown;
 };
 

@@ -33,10 +33,16 @@ const CORS = {
   "Access-Control-Expose-Headers": "mcp-protocol-version",
 };
 
+/**
+ * Build a tool result. The structured payload is the same object as the text
+ * payload, emitted under structuredContent per MCP 2025-06-18 - generated from
+ * one source so the two representations cannot drift apart. Error results
+ * carry no structuredContent: their shape is { error }, not the tool's schema.
+ */
 function text(payload: unknown, isError = false): McpToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
-    ...(isError ? { isError: true } : {}),
+    ...(isError ? { isError: true } : { structuredContent: payload }),
   };
 }
 

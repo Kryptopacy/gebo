@@ -34,11 +34,18 @@ import {
 import { bsc, bscTestnet } from "viem/chains";
 import { buildReviewMessage, validateComment } from "./review-message";
 
+/** The two chains with a known APEX deployment - anything else is a config error, not a lookup. */
+export type ApexChainId = 56 | 97;
+
 /** APEX AgenticCommerce proxies, verified on chain (AGENTS.md "APEX"). */
-const APEX_COMMERCE: Record<number, Address> = {
+const APEX_COMMERCE: Record<ApexChainId, Address> = {
   56: "0xEa4DAa3100A767e86FDed867729ae7446476EBA6",
   97: "0xa206c0517B6371C6638CD9e4a42Cc9f02A33B0DE",
 };
+
+export function isApexChainId(n: number): n is ApexChainId {
+  return n === 56 || n === 97;
+}
 
 /** Open, Funded, Submitted, Completed, Rejected, Expired - index 3 is the gate. */
 const JOB_STATUS_COMPLETED = 3;
@@ -90,9 +97,8 @@ function chainClient(chainId: number): PublicClient {
   }) as PublicClient;
 }
 
-export async function getApexJob(chainId: number, jobId: bigint): Promise<ApexJob> {
+export async function getApexJob(chainId: ApexChainId, jobId: bigint): Promise<ApexJob> {
   const commerce = APEX_COMMERCE[chainId];
-  if (!commerce) throw new Error(`no APEX deployment is known for chain ${chainId}`);
   const job = (await chainClient(chainId).readContract({
     address: commerce, abi: COMMERCE_ABI, functionName: "getJob", args: [jobId],
   })) as ApexJob;
@@ -101,7 +107,7 @@ export async function getApexJob(chainId: number, jobId: bigint): Promise<ApexJo
 
 export type ReviewRequest = {
   tokenId: string;
-  chainId: number;
+  chainId: ApexChainId;
   jobId: string;
   comment: string;
   reviewer: Address;
@@ -120,7 +126,7 @@ export async function recordReview(req: ReviewRequest): Promise<ReviewResult> {
   const sql = db();
   if (!sql) return { ok: false, reason: "no database configured" };
 
-  if (req.chainId !== 56 && req.chainId !== 97) {
+  if (!isApexChainId(req.chainId)) {
     return { ok: false, reason: "chain must be 56 (BSC) or 97 (BSC testnet) - the two chains with an APEX deployment" };
   }
   if (!/^\d+$/.test(req.jobId) || req.jobId.length > 20) {

@@ -239,7 +239,11 @@ pinned in one place:
   `tests/mcp-server.test.ts`): `search_agents`, `get_agent`,
   `list_categories`, `get_opportunities`, `get_registry_stats`,
   `get_track_record`, `get_verified_reviews`. Every response carries its
-  caveats (L2 applies to tool output too).
+  caveats (L2 applies to tool output too). Every tool declares an input AND
+  an output schema — `outputSchema.required` is a non-empty tuple by type,
+  because a schema that validates anything is documentation pretending to be
+  a contract — and non-error results carry `structuredContent` alongside the
+  text, generated from one payload so the two representations cannot drift.
 - **Product assistant** (`app/api/assistant/route.ts` +
   `src/lib/assistant-tools.ts`) — the same read set through its own executors
   over the same data layer, plus product knowledge in its system prompt. It

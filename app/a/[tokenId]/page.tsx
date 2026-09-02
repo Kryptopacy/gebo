@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { loadAgents, findAgent, trustState, classify, CATEGORIES } from "@/lib/data";
-import { attestationsFor, attestationSummary, taskRuns } from "@/lib/attestations";
+import { attestationsFor, attestationSummary, taskRuns, type Outcome } from "@/lib/attestations";
 import { agentMetrics, type MetricValue } from "@/lib/metrics";
 import { fetchSampleOutput } from "@/lib/sample-output";
 import { probeHistoryFor, type ProbeHistory } from "@/lib/probe-history";
@@ -19,7 +19,8 @@ export async function generateMetadata({ params }: { params: Promise<{ tokenId: 
   return { title: agent?.name ? `${agent.name} — agent — GEBO` : `Agent #${tokenId} — GEBO` };
 }
 
-const OUTCOME_TONE: Record<string, string> = {
+/** Tone per attestation outcome - keyed by the union, so an unknown outcome is a type error, not a silent miss. */
+const OUTCOME_TONE: Record<Outcome, string> = {
   succeeded: "pass",
   partial: "hold",
   failed: "fail",

@@ -58,6 +58,18 @@ export type JsonRpcResponse = {
   error?: JsonRpcError;
 };
 
+/**
+ * Output schema for a tool result. `required` is a non-empty tuple BY TYPE -
+ * [string, ...string[]] cannot be constructed empty - because an output
+ * schema without required fields validates anything, and a schema that
+ * validates anything is documentation pretending to be a contract.
+ */
+export type McpOutputSchema = {
+  type: "object";
+  properties: Record<string, unknown>;
+  required: [string, ...string[]];
+};
+
 export type McpToolDef = {
   name: string;
   description: string;
@@ -66,10 +78,14 @@ export type McpToolDef = {
     properties: Record<string, unknown>;
     required?: string[];
   };
+  /** Declared for every tool: structured results are part of the contract. */
+  outputSchema: McpOutputSchema;
 };
 
 export type McpToolResult = {
   content: { type: "text"; text: string }[];
+  /** Structured payload conforming to the tool's outputSchema. */
+  structuredContent?: unknown;
   isError?: boolean;
 };
 
@@ -91,6 +107,30 @@ export const MCP_TOOLS: McpToolDef[] = [
       },
       required: ["query"],
     },
+    outputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        result_count: { type: "number" },
+        ordering: { type: "string" },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              token_id: { type: "string", description: "ERC-8004 token id" },
+              name: { type: "string" },
+              trust_state: { type: "string" },
+              operator_domain: { type: ["string", "null"] },
+              why_it_matched: { type: "string" },
+              url: { type: "string" },
+            },
+            required: ["token_id", "name", "trust_state", "why_it_matched", "url"],
+          },
+        },
+      },
+      required: ["query", "result_count", "ordering", "results"],
+    },
   },
   {
     name: "get_agent",
@@ -105,6 +145,27 @@ export const MCP_TOOLS: McpToolDef[] = [
       },
       required: ["token_id"],
     },
+    outputSchema: {
+      type: "object",
+      properties: {
+        found: { type: "boolean" },
+        token_id: { type: "string", description: "ERC-8004 token id" },
+        note: { type: "string", description: "present when found is false" },
+        name: { type: "string" },
+        url: { type: "string" },
+        hire_url: { type: "string" },
+        trust_state: { type: "string" },
+        trust_reason: { type: "string" },
+        category: { type: "string" },
+        operator_domain: { type: ["string", "null"] },
+        endpoints: { type: "array" },
+        liveness: { type: ["object", "null"] },
+        skills: { type: ["array", "null"] },
+        self_description: { type: ["string", "null"] },
+        track_record: { type: "object" },
+      },
+      required: ["found", "token_id"],
+    },
   },
   {
     name: "list_categories",
@@ -112,6 +173,28 @@ export const MCP_TOOLS: McpToolDef[] = [
       "The job categories GEBO audits agents into: four judged categories (fixed by the BNB rubric) " +
       "and the adjacent categories detected from verified capability text.",
     inputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      properties: {
+        categories: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              slug: { type: "string" },
+              title: { type: "string" },
+              job: { type: "string" },
+              judged: { type: "boolean" },
+              agents_audited: { type: "number" },
+              url: { type: "string" },
+            },
+            required: ["slug", "title", "judged", "agents_audited", "url"],
+          },
+        },
+        note: { type: "string" },
+      },
+      required: ["categories", "note"],
+    },
   },
   {
     name: "get_opportunities",
@@ -129,6 +212,32 @@ export const MCP_TOOLS: McpToolDef[] = [
         limit: { type: "number", description: "Max rows (default 15, capped at 50)" },
       },
     },
+    outputSchema: {
+      type: "object",
+      properties: {
+        total_indexed: { type: "number" },
+        returned: { type: "number" },
+        category: { type: "string" },
+        caveat: { type: "string" },
+        opportunities: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+              category: { type: "string" },
+              venue: { type: "string" },
+              eligible: { type: "boolean" },
+              ineligible_reason: { type: ["string", "null"] },
+              url: { type: "string" },
+            },
+            required: ["id", "label", "category", "venue", "eligible", "url"],
+          },
+        },
+      },
+      required: ["total_indexed", "returned", "category", "caveat", "opportunities"],
+    },
   },
   {
     name: "get_registry_stats",
@@ -137,6 +246,27 @@ export const MCP_TOOLS: McpToolDef[] = [
       "operators, and how many agents answer a live protocol handshake. Carries read-window qualifiers " +
       "and the single-region probing caveat.",
     inputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      properties: {
+        tokens_minted: { type: "number" },
+        censused: { type: "number" },
+        agents_with_endpoint: { type: "number" },
+        callable: { type: "number" },
+        distinct_owners: { type: "number" },
+        endpoint_operators: { type: "number" },
+        top5_operator_share: { type: "string" },
+        x402_supported: { type: "number" },
+        live_read: { type: "boolean" },
+        measured_at: { type: "string" },
+        caveats: { type: "array", items: { type: "string" } },
+      },
+      required: [
+        "tokens_minted", "censused", "agents_with_endpoint", "callable",
+        "distinct_owners", "endpoint_operators", "top5_operator_share",
+        "x402_supported", "live_read", "measured_at", "caveats",
+      ],
+    },
   },
   {
     name: "get_track_record",
@@ -148,6 +278,24 @@ export const MCP_TOOLS: McpToolDef[] = [
       type: "object",
       properties: {
         token_id: { type: "number", description: "ERC-8004 token id" },
+      },
+      required: ["token_id"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        token_id: { type: "string", description: "ERC-8004 token id" },
+        note: { type: "string", description: "present when the ledger could not be read" },
+        attestations: { type: "number" },
+        succeeded: { type: "number" },
+        partial: { type: "number" },
+        failed: { type: "number" },
+        disputed: { type: "number" },
+        verified_evidence: { type: "number" },
+        distinct_attesters: { type: "number" },
+        evidence_kinds: { type: "object", additionalProperties: { type: "number" } },
+        caveat: { type: "string" },
+        url: { type: "string" },
       },
       required: ["token_id"],
     },
@@ -166,6 +314,30 @@ export const MCP_TOOLS: McpToolDef[] = [
         token_id: { type: "number", description: "ERC-8004 token id" },
       },
       required: ["token_id"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        token_id: { type: "string", description: "ERC-8004 token id" },
+        note: { type: "string" },
+        count: { type: "number", description: "present when the read succeeded" },
+        reviews: {
+          type: "array",
+          description: "present when count > 0",
+          items: {
+            type: "object",
+            properties: {
+              reviewer: { type: "string" },
+              comment: { type: "string" },
+              anchor: { type: "string" },
+              created_at: { type: "string" },
+            },
+            required: ["reviewer", "comment", "anchor", "created_at"],
+          },
+        },
+        url: { type: "string" },
+      },
+      required: ["token_id", "note"],
     },
   },
 ];
