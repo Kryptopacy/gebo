@@ -16,6 +16,8 @@ import {
   type CategorySlug,
 } from "./data";
 import { agentMetrics } from "./metrics";
+import { attestationSummary } from "./attestations";
+import { reviewsFor } from "./reviews";
 
 /**
  * Tool declarations for the Interactions API: plain lowercase JSON Schema
@@ -85,6 +87,37 @@ export const TOOL_DECLARATIONS = [
       "declare endpoints, how many are actually callable. Use for any question about the " +
       "size or shape of the BNB Chain agent ecosystem.",
     parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    type: "function" as const,
+    name: "get_track_record",
+    description:
+      "Attestation ledger summary for one agent: tasks recorded, succeeded, independently " +
+      "verified evidence, distinct attesters. Graded by an independent evaluator contract; " +
+      "GEBO never grades agents it lists.",
+    parameters: {
+      type: "object",
+      properties: {
+        token_id: { type: "string", description: "The agent's numeric token id, e.g. 259573" },
+      },
+      required: ["token_id"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_verified_reviews",
+    description:
+      "Verified reviews for one agent: free-text comments from wallets that completed an " +
+      "APEX escrow job as its client, each anchored to an on-chain job id. Comments are " +
+      "evidence, not scores - GEBO has no ratings, and reviews never affect ordering. " +
+      "An empty result means no completed hire exists yet, not that the agent is bad.",
+    parameters: {
+      type: "object",
+      properties: {
+        token_id: { type: "string", description: "The agent's numeric token id, e.g. 259573" },
+      },
+      required: ["token_id"],
+    },
   },
 ];
 
@@ -195,6 +228,55 @@ export async function executeAssistantTool(
           note:
             "callable = declares A2A or MCP and survives a registration audit. " +
             "claimActive is self-declared and unverified.",
+        };
+      }
+
+      case "get_track_record": {
+        const tokenId = String(args.token_id ?? "").replace(/[^0-9]/g, "");
+        if (!tokenId) return { error: "token_id required" };
+        const tr = await attestationSummary(tokenId, 56);
+        if (!tr) {
+          // Unmeasured, not zero - the assistant must say it could not read,
+          // never that the agent has no record.
+          return { error: `track record for ${tokenId} could not be read right now` };
+        }
+        return {
+          tokenId,
+          attestations: tr.total,
+          succeeded: tr.succeeded,
+          partial: tr.partial,
+          failed: tr.failed,
+          disputed: tr.disputed,
+          verifiedEvidence: tr.verified,
+          distinctAttesters: tr.distinctAttesters,
+          note: "graded by an independent evaluator; GEBO never grades agents it lists",
+        };
+      }
+
+      case "get_verified_reviews": {
+        const tokenId = String(args.token_id ?? "").replace(/[^0-9]/g, "");
+        if (!tokenId) return { error: "token_id required" };
+        const { reviews, unavailable, reason } = await reviewsFor(tokenId, 10);
+        if (unavailable) {
+          return { error: `verified reviews for ${tokenId} could not be read right now (${reason ?? "read failed"})` };
+        }
+        if (reviews.length === 0) {
+          return {
+            tokenId,
+            count: 0,
+            note: "no verified reviews - reviews require a completed APEX escrow job with the reviewer as its client. An absence, not a rating.",
+          };
+        }
+        return {
+          tokenId,
+          count: reviews.length,
+          reviews: reviews.map((r) => ({
+            reviewer: r.reviewer,
+            comment: r.comment,
+            anchor: `chain ${r.chainId} job ${r.jobId}, verified at block ${r.checkedBlock}`,
+            createdAt: r.createdAt,
+          })),
+          note: "comments are evidence, not scores; they never affect ordering",
         };
       }
 

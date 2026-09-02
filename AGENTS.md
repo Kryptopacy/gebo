@@ -229,6 +229,34 @@ verified:
   produced silently-wrong "no pool" answers here, and only the WBNB/USDT
   controls caught it.
 
+### Agent-consumable surfaces (the tool inventory)
+
+Canonical list, because three surfaces serve agents and they drift if not
+pinned in one place:
+
+- **MCP server**, `POST /mcp` — **seven read-only tools** (defs in
+  `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, list pinned by
+  `tests/mcp-server.test.ts`): `search_agents`, `get_agent`,
+  `list_categories`, `get_opportunities`, `get_registry_stats`,
+  `get_track_record`, `get_verified_reviews`. Every response carries its
+  caveats (L2 applies to tool output too).
+- **Product assistant** (`app/api/assistant/route.ts` +
+  `src/lib/assistant-tools.ts`) — the same read set through its own executors
+  over the same data layer, plus product knowledge in its system prompt. It
+  must never quote registry numbers from memory; a stale number spoken
+  confidently is worse than no assistant. Read-only by the same law as MCP.
+- **Browser WebMCP** (`app/WebMcpTools.tsx`) — a navigation-and-read subset
+  registered on `document.modelContext` (search-agents, open-agent-card,
+  open-hire-flow, read-agent, get-registry-stats, get-verified-reviews),
+  proxying reads to this origin's own /mcp so the two surfaces cannot
+  disagree. Inert without the WebMCP API. Never signs.
+- **Write surfaces for agents** (the only ones): `POST /api/reviews`
+  (wallet-signed, completed-escrow-gated — same gate as humans) and the x402
+  paid read at `/api/agent/health/paid`. Everything that moves money or
+  authority stays on human-visible pages by law.
+- **Static index**: `public/llms.txt` lists all of the above for
+  agent crawlers — keep it in sync when a tool or surface is added.
+
 ## Invariants that must not be broken
 
 These encode failures already made and corrected. Breaking one silently undoes

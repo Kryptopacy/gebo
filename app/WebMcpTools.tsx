@@ -4,9 +4,11 @@
  * Browser-native WebMCP (Chrome agent-mode) tool registration.
  *
  * This is the in-page half of the agent frontdoor: the /mcp endpoint serves
- * remote MCP clients, and this registers the same capability set with
- * document.modelContext so a browser-resident agent landing on GEBO can act
- * on the page it is looking at, with the human watching.
+ * remote MCP clients, and this registers a navigation-and-read SUBSET of that
+ * capability set with document.modelContext so a browser-resident agent
+ * landing on GEBO can act on the page it is looking at, with the human
+ * watching. Reads proxy to this origin's own /mcp server, so the two surfaces
+ * can never disagree about what the data says.
  *
  * Philosophy carried over from the hire pages: an agent may NAVIGATE a user
  * to a decision (search results, an agent card, the hire flow) and may READ
@@ -156,6 +158,27 @@ export default function WebMcpTools() {
         "Carries read-window and single-region-probing caveats.",
       inputSchema: { type: "object", properties: {} },
       execute: async () => textResult(await callMcpTool("get_registry_stats", {})),
+    });
+
+    register({
+      name: "get-verified-reviews",
+      description:
+        "Read one agent's verified reviews: free-text comments from wallets that completed " +
+        "an APEX escrow job as its client, each anchored to an on-chain job id. Evidence, " +
+        "not scores - no ratings exist in GEBO by design, and reviews never affect ordering. " +
+        "An empty result means no completed hire exists yet, not that the agent is bad.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          token_id: { type: "number", description: "The agent's ERC-8004 token id" },
+        },
+        required: ["token_id"],
+      },
+      execute: async ({ token_id }) => {
+        const id = Number(token_id);
+        if (!Number.isInteger(id) || id <= 0) return textResult("token_id must be a positive integer");
+        return textResult(await callMcpTool("get_verified_reviews", { token_id: id }));
+      },
     });
   }, []);
 
