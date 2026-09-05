@@ -412,6 +412,20 @@ Recorded so nobody "fixes" a decision.
 
 - Comments explain **why**, especially where a non-obvious choice encodes a bug
   already hit. Migrations carry the same standard.
+- **No inline `gridTemplateColumns` on `.row`/`.rows-head`** (or `.spec`
+  children). An inline grid beats every media query, so the table silently
+  loses its mobile stacking and the rows region swipes sideways — this is
+  exactly how `/compare` (232px), `/live` (34px) and `/methodology` (78px)
+  shipped broken on phones while the class-based tables stacked fine. Column
+  tracks live in `globals.css` as `.r-*` classes (`.r-runs`, `.r-uptime`, …);
+  the one variable-column table (`.r-opps`) receives its tracks via an inline
+  `--opp-grid` custom property, which the 900px breakpoint overrides
+  wholesale. `npm run audit:mobile` (or `node scripts/mobile-audit.mjs
+  [width] [height]`) audits every route (and the tab-hidden tables, by clicking each tab) at a phone viewport
+  against the running server, measuring real overflow per element; run it
+  after touching any table layout. `data-m="Label"` on a figure cell renders
+  a small label above it inside the 900px breakpoint only, so stacked numbers
+  stay legible without changing the desktop table.
 - Every script prints what it measured, and says so when it cannot measure
   something rather than passing quietly.
 - Never print a secret. `scripts/cron-fingerprint.ts` compares hashes because an

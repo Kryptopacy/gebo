@@ -638,11 +638,11 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             <h2>Registration audit</h2>
             <div className="data-table-frame mt-m">
               <div className="rows">
-                <div className="rows-head" style={{ gridTemplateColumns: "6rem 11rem minmax(0,1fr)" }}>
+                <div className="rows-head r-lint">
                   <span>Severity</span><span>Code</span><span>Detail</span>
                 </div>
                 {a.lint.defects.map((d, i) => (
-                  <div key={i} className="row" style={{ gridTemplateColumns: "6rem 11rem minmax(0,1fr)" }}>
+                  <div key={i} className="row r-lint">
                     <div>
                       <span className="chip" data-state={d.severity === "fatal" ? "SHADOWED" : d.severity === "major" ? "LISTED" : "DORMANT"}>
                         {d.severity}
@@ -874,10 +874,7 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               <h3 className="mt-l" style={{ fontSize: "1rem" }}>Hired tasks</h3>
               <div className="data-table-frame mt-m">
                 <div className="rows">
-                  <div
-                    className="rows-head"
-                    style={{ gridTemplateColumns: "minmax(0,1.4fr) 7rem 7rem 6rem" }}
-                  >
+                  <div className="rows-head r-hired">
                     <span>Task and result</span>
                     <span>Outcome</span>
                     <span style={{ textAlign: "right" }}>Took</span>
@@ -886,8 +883,7 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                   {attestations.map((t) => (
                     <div
                       key={t.id}
-                      className="row"
-                      style={{ gridTemplateColumns: "minmax(0,1.4fr) 7rem 7rem 6rem" }}
+                      className="row r-hired"
                     >
                       <div>
                         <h3>{t.task ?? "(task not recorded)"}</h3>
@@ -908,21 +904,21 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                           )}
                         </div>
                       </div>
-                      <div className="xs">
+                      <div className="xs" data-m="Outcome">
                         <span
                           className="pulse-dot"
                           data-status={OUTCOME_TONE[t.outcome] ?? "hold"}
                         />{" "}
                         {t.outcome}
                       </div>
-                      <div className="num xs t-3" style={{ textAlign: "right" }}>
+                      <div className="num xs t-3" data-m="Took" style={{ textAlign: "right" }}>
                         {t.durationMs == null
                           ? "\u2014"
                           : t.durationMs < 1000
                             ? `${t.durationMs} ms`
                             : `${(t.durationMs / 1000).toFixed(1)}s`}
                       </div>
-                      <div className="xs t-3">{ago(t.createdAt)}</div>
+                      <div className="xs t-3" data-m="When">{ago(t.createdAt)}</div>
                     </div>
                   ))}
                 </div>
@@ -996,10 +992,7 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
               </p>
               <div className="data-table-frame mt-m">
                 <div className="rows">
-                  <div
-                    className="rows-head"
-                    style={{ gridTemplateColumns: "7rem 5rem 5rem 6rem 5rem 6rem" }}
-                  >
+                  <div className="rows-head r-probe">
                     <span>Date</span>
                     <span style={{ textAlign: "right" }}>Probes</span>
                     <span style={{ textAlign: "right" }}>Passed</span>
@@ -1010,14 +1003,14 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                   {probeHistory.days.map((d) => (
                     <div
                       key={d.date}
-                      className="row"
-                      style={{ gridTemplateColumns: "7rem 5rem 5rem 6rem 5rem 6rem" }}
+                      className="row r-probe"
                     >
                       <div className="xs t-3 num">{d.date}</div>
-                      <div className="num xs t-3" style={{ textAlign: "right" }}>{d.probes}</div>
-                      <div className="num xs t-3" style={{ textAlign: "right" }}>{d.okCount}</div>
+                      <div className="num xs t-3" data-m="Probes" style={{ textAlign: "right" }}>{d.probes}</div>
+                      <div className="num xs t-3" data-m="Passed" style={{ textAlign: "right" }}>{d.okCount}</div>
                       <div
                         className="num xs"
+                        data-m="Uptime"
                         style={{
                           textAlign: "right",
                           color: (d.uptimePct ?? 0) >= 99 ? "var(--pass)" : (d.uptimePct ?? 0) >= 90 ? "var(--hold)" : "var(--fail)",
@@ -1025,10 +1018,10 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
                       >
                         {d.uptimePct != null ? `${d.uptimePct}%` : "\u2014"}
                       </div>
-                      <div className="num xs t-3" style={{ textAlign: "right" }}>
+                      <div className="num xs t-3" data-m="p50" style={{ textAlign: "right" }}>
                         {d.p50Ms > 0 ? `${d.p50Ms} ms` : "\u2014"}
                       </div>
-                      <div className="xs t-3" style={{ color: d.failStreak > 0 ? "var(--fail)" : undefined }}>
+                      <div className="xs t-3" data-m="Fail streak" style={{ color: d.failStreak > 0 ? "var(--fail)" : undefined }}>
                         {d.failStreak > 0 ? `${d.failStreak} day${d.failStreak > 1 ? "s" : ""}` : "\u2014"}
                       </div>
                     </div>

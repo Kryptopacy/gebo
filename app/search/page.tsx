@@ -211,7 +211,7 @@ export default async function SearchPage({
                     ["x402", "Agents that charge per call"],
                   ] as const
                 ).map(([term, note]) => (
-                  <a key={term} href={`/search?q=${encodeURIComponent(term)}`} className="row row-hover" style={{ gridTemplateColumns: "14rem minmax(0,1fr)" }}>
+                  <a key={term} href={`/search?q=${encodeURIComponent(term)}`} className="row row-hover r-suggest">
                     <div className="num sm" style={{ color: "var(--accent)" }}>{term}</div>
                     <div className="sm t-3">{note}</div>
                   </a>

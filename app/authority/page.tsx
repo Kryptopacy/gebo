@@ -201,7 +201,7 @@ export default async function AuthorityPage({
               <div className="data-table-frame mt-m">
                 <div className="rows">
                   {demo.grants.map((g) => (
-                    <div key={g.id} className="row" style={{ gridTemplateColumns: "4rem minmax(0,1.6fr) minmax(0,1.6fr) 7rem 5rem" }}>
+                    <div key={g.id} className="row r-grants">
                       <div>
                         <span className="chip chip-flat num">{g.chainId}</span>
                       </div>
@@ -314,13 +314,13 @@ export default async function AuthorityPage({
               ) : (
                 <div className="data-table-frame mt-m">
                   <div className="rows">
-                    <div className="rows-head" style={{ gridTemplateColumns: "minmax(14rem,1.4fr) 6rem 8rem minmax(16rem,1fr)" }}>
+                    <div className="rows-head r-keys">
                       <span>Key</span><span>State</span><span>Key id check</span><span>Revoke</span>
                     </div>
                     {authority.keys.map((k) => {
                       const call = revokeCall(authority.wallet, k.keyId, authority.chainId);
                       return (
-                        <div key={k.keyId} className="row" style={{ gridTemplateColumns: "minmax(14rem,1.4fr) 6rem 8rem minmax(16rem,1fr)" }}>
+                        <div key={k.keyId} className="row r-keys">
                           <div>
                             <div className="num sm" style={{ wordBreak: "break-all" }}>{k.keyId}</div>
                             <div className="xs t-4 num">

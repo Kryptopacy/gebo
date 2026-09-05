@@ -82,11 +82,11 @@ export default async function Methodology() {
           <h2>What is measured</h2>
           <div className="data-table-frame mt-m">
             <div className="rows">
-              <div className="rows-head" style={{ gridTemplateColumns: "11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr)" }}>
+              <div className="rows-head r-measures">
                 <span>Measure</span><span>Definition</span><span>Window</span><span>Known defect</span>
               </div>
               {MEASURES.map((m) => (
-                <div key={m.name} className="row" style={{ gridTemplateColumns: "11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr)" }}>
+                <div key={m.name} className="row r-measures">
                   <div className="num sm">{m.name}</div>
                   <div className="sm t-2">{m.definition}</div>
                   <div className="xs t-4 num">{m.window}</div>
@@ -114,7 +114,7 @@ export default async function Methodology() {
           </p>
           <div className="surface-card mt-m">
             <dl className="spec">
-              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+              <div className="r-venue">
                 <dt style={{ color: "var(--fg-2)" }}>PancakeSwap V3</dt>
                 <dd className="t-3">
                   Pool state read per indexed pool: tick, liquidity, fee tier, in-range
@@ -125,7 +125,7 @@ export default async function Methodology() {
                   picture a new pool would enter.
                 </dd>
               </div>
-              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+              <div className="r-venue">
                 <dt style={{ color: "var(--fg-2)" }}>Venus</dt>
                 <dd className="t-3">
                   Market state read per listed market: supply and borrow APR (unboosted
@@ -134,7 +134,7 @@ export default async function Methodology() {
                   side of the hire-flow simulation.
                 </dd>
               </div>
-              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+              <div className="r-venue">
                 <dt style={{ color: "var(--fg-2)" }}>Grid trading record</dt>
                 <dd className="t-3">
                   The reference grid agent&apos;s advised strategy, replayed over the
@@ -144,7 +144,7 @@ export default async function Methodology() {
                   assets - the comparison a liquidity provider actually faces.
                 </dd>
               </div>
-              <div style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+              <div className="r-venue">
                 <dt style={{ color: "var(--fg-2)" }}>Hire-flow simulation</dt>
                 <dd className="t-3">
                   A representative action quoted live from PancakeSwap&apos;s Quoter or
@@ -175,7 +175,7 @@ export default async function Methodology() {
           <div className="surface-card mt-m">
             <dl className="spec">
               {REFUSED.map(([k, v]) => (
-                <div key={k} style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                <div key={k} className="r-venue">
                   <dt style={{ color: "var(--fg-2)" }}>{k}</dt>
                   <dd className="t-3">{v}</dd>
                 </div>
@@ -205,7 +205,7 @@ export default async function Methodology() {
                 ["03", "Dormant", "No usable response."],
                 ["04", "Shadowed", "Fatal registration defect. Reachable by direct link, absent from discovery, never deleted."],
               ].map(([n, tier, desc]) => (
-                <div key={n} className="row" style={{ gridTemplateColumns: "3.5rem 8rem minmax(0,1fr)" }}>
+                <div key={n} className="row r-tier">
                   <div className="step-badge">{n}</div>
                   <div><h3>{tier}</h3></div>
                   <div className="sm t-3">{desc}</div>
@@ -269,17 +269,17 @@ export default async function Methodology() {
               {candReport.candidates.length > 0 ? (
                 <div className="data-table-frame mt-m">
                   <div className="rows">
-                    <div className="rows-head" style={{ gridTemplateColumns: "minmax(0,1.2fr) 5rem 6rem 6rem minmax(0,1.4fr) 6rem" }}>
+                    <div className="rows-head r-terms">
                       <span>Term</span><span>Texts</span><span>Verified</span><span>Operators</span><span>Examples</span><span>Last seen</span>
                     </div>
                     {candReport.candidates.map((c) => (
-                      <div key={c.term} className="row" style={{ gridTemplateColumns: "minmax(0,1.2fr) 5rem 6rem 6rem minmax(0,1.4fr) 6rem" }}>
+                      <div key={c.term} className="row r-terms">
                         <div className="sm">{c.term} <span className="xs t-4">[{c.status}]</span></div>
-                        <div className="num sm">{c.distinctTexts}</div>
-                        <div className="num sm">{c.verifiedTexts}</div>
-                        <div className="num sm">{c.distinctOperators}</div>
+                        <div className="num sm" data-m="Texts">{c.distinctTexts}</div>
+                        <div className="num sm" data-m="Verified">{c.verifiedTexts}</div>
+                        <div className="num sm" data-m="Operators">{c.distinctOperators}</div>
                         <div className="xs t-3">{c.exampleAgents.slice(0, 3).join(", ")}</div>
-                        <div className="xs t-4 num">{c.lastSeenAt}</div>
+                        <div className="xs t-4 num" data-m="Last seen">{c.lastSeenAt}</div>
                       </div>
                     ))}
                   </div>
@@ -308,7 +308,7 @@ export default async function Methodology() {
           <div className="surface-card mt-m">
             <dl className="spec">
               {defects.map(([k, v]) => (
-                <div key={k} style={{ gridTemplateColumns: "16rem minmax(0,1fr)" }}>
+                <div key={k} className="r-venue">
                   <dt style={{ color: "var(--fg-2)" }}>{k}</dt>
                   <dd className="t-3">{v}</dd>
                 </div>

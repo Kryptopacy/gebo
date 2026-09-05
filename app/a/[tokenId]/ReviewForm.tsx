@@ -119,7 +119,14 @@ export function ReviewForm({ tokenId, agentName }: { tokenId: string; agentName?
 
   if (!address) {
     return (
-      <button onClick={connect} className="cta" style={{ marginTop: 14, padding: "10px 16px" }}>
+      /* whiteSpace normal: .cta is nowrap by default, and this label is
+         long enough that at 360px the button ran past the card and was
+         clipped by its overflow:hidden. */
+      <button
+        onClick={connect}
+        className="cta"
+        style={{ marginTop: 14, padding: "10px 16px", whiteSpace: "normal", maxWidth: "100%" }}
+      >
         Connect the wallet that hired, to leave a review
       </button>
     );

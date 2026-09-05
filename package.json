@@ -25,6 +25,7 @@
     "readiness": "tsx scripts/readiness.ts",
     "measure:b402": "tsx scripts/measure-b402.ts",
     "audit:cards": "tsx scripts/audit-card-endpoints.ts",
+    "audit:mobile": "node scripts/mobile-audit.mjs",
     "run:task": "tsx scripts/run-task.ts",
     "verify:prod": "tsx scripts/verify-prod.ts",
     "verify:pgnet": "tsx scripts/verify-pgnet.ts",

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { loadCensus, loadAggregates, JUDGED_CATEGORIES, OTHER_CATEGORIES } from "@/lib/data";
 import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
+import { MobileNav } from "./mobile-nav";
 import AssistantWidget from "./assistant/AssistantWidget";
 import { OverflowGuard } from "./overflow-guard";
 import WebMcpTools from "./WebMcpTools";
@@ -158,6 +159,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <a href="/methodology">Methodology</a>
             </nav>
             <ThemeToggle />
+            <MobileNav categories={allCategories} />
           </div>
         </header>
 

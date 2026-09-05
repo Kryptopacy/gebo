@@ -42,14 +42,14 @@ export default async function CategoriesPage() {
         <div className="shell">
           <div className="data-table-frame mt-m">
             <div className="rows">
-              <div className="rows-head" style={{ gridTemplateColumns: "minmax(0,1.8fr) 8rem minmax(0,0.9fr)" }}>
+              <div className="rows-head r-dir">
                 <span>Job</span><span>Agents</span><span>Venue</span>
               </div>
               {all.map((c) => {
                 const known = agg.live;
                 const n = agg.categories[c.slug] ?? 0;
                 return (
-                  <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-jobs">
+                  <a key={c.slug} href={`/c/${c.slug}`} className="row row-hover r-dir">
                     <div>
                       {/* Tandem, same as the dropdown and footer: title for
                           people who know the vocabulary, job line for everyone

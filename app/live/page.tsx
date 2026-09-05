@@ -191,7 +191,7 @@ export default async function LivePage() {
           ) : (
             <div className="data-table-frame mt-m">
               <div className="rows">
-                <div className="rows-head" style={{ gridTemplateColumns: "7rem minmax(0,1.3fr) 1fr 9rem minmax(0,1fr)" }}>
+                <div className="rows-head r-transitions">
                   <span>When</span><span>Agent</span><span>Operator</span><span>Change</span><span>Reason</span>
                 </div>
                 {transitions.map((t, i) => {
@@ -218,7 +218,7 @@ export default async function LivePage() {
                           : undefined;
                   const worse = t.to === "DORMANT" || t.to === "SHADOWED";
                   return (
-                    <div key={`${t.at}-${i}`} className="row" style={{ gridTemplateColumns: "7rem minmax(0,1.3fr) 1fr 9rem minmax(0,1fr)" }}>
+                    <div key={`${t.at}-${i}`} className="row r-transitions">
                       <div className="num xs t-4">{ago(t.at)}</div>
                       <div>
                         {t.tokenId ? (
@@ -275,7 +275,7 @@ export default async function LivePage() {
           ) : (
             <div className="data-table-frame mt-m">
               <div className="rows">
-                <div className="rows-head" style={{ gridTemplateColumns: "minmax(0,1.3fr) 1fr 6rem 6rem 7rem 7rem" }}>
+                <div className="rows-head r-uptime">
                   <span>Agent</span><span>Operator</span>
                   <span style={{ textAlign: "right" }}>Uptime</span>
                   <span style={{ textAlign: "right" }}>Probes</span>
@@ -283,23 +283,23 @@ export default async function LivePage() {
                   <span>Last answer</span>
                 </div>
                 {uptime.map((u) => (
-                  <a key={`${u.tokenId}-${u.kind}`} href={`/a/${u.tokenId}`} className="row row-hover" style={{ gridTemplateColumns: "minmax(0,1.3fr) 1fr 6rem 6rem 7rem 7rem" }}>
+                  <a key={`${u.tokenId}-${u.kind}`} href={`/a/${u.tokenId}`} className="row row-hover r-uptime">
                     <div>
                       <h3>{u.name ?? `Agent ${u.tokenId}`}</h3>
                       <div className="xs t-4 num">#{u.tokenId} · {u.kind.toUpperCase()}</div>
                     </div>
                     <div className="num xs t-3">{u.operator ?? "—"}</div>
-                    <div className="num sm" style={{ textAlign: "right", color: u.uptimePct >= 95 ? "var(--pass)" : u.uptimePct >= 50 ? "var(--hold)" : "var(--fail)" }}>
+                    <div className="num sm" data-m="Uptime" style={{ textAlign: "right", color: u.uptimePct >= 95 ? "var(--pass)" : u.uptimePct >= 50 ? "var(--hold)" : "var(--fail)" }}>
                       {u.uptimePct}%
                     </div>
-                    <div className="num xs t-3" style={{ textAlign: "right" }}>
+                    <div className="num xs t-3" data-m="Probes" style={{ textAlign: "right" }}>
                       {u.probes}
                       <span className="t-4"> / {u.days}d</span>
                     </div>
-                    <div className="num xs t-3" style={{ textAlign: "right" }}>
+                    <div className="num xs t-3" data-m="Typical" style={{ textAlign: "right" }}>
                       {u.p50Ms != null ? `${u.p50Ms} ms` : "—"}
                     </div>
-                    <div className="xs t-3">
+                    <div className="xs t-3" data-m="Last answer">
                       {u.lastOkAt ? ago(u.lastOkAt) : <span style={{ color: "var(--fail)" }}>never</span>}
                       {u.failStreak > 0 && (
                         <div className="xs" style={{ color: "var(--fail)" }}>{u.failStreak} consecutive failures</div>
@@ -327,11 +327,11 @@ export default async function LivePage() {
               </p>
               <div className="data-table-frame mt-m">
                 <div className="rows">
-                  <div className="rows-head" style={{ gridTemplateColumns: "12rem 8rem minmax(0,1fr)" }}>
+                  <div className="rows-head r-errclass">
                     <span>Outcome</span><span style={{ textAlign: "right" }}>Count</span><span>Meaning</span>
                   </div>
                   {s.errorClasses.map((e) => (
-                    <div key={e.cls} className="row" style={{ gridTemplateColumns: "12rem 8rem minmax(0,1fr)" }}>
+                    <div key={e.cls} className="row r-errclass">
                       <div className="num sm">{e.cls}</div>
                       <div className="num sm" style={{ textAlign: "right" }}>{e.n.toLocaleString()}</div>
                       <div className="xs t-3">

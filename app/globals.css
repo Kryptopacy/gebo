@@ -279,6 +279,33 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 .r-spec      { grid-template-columns: 13rem minmax(0, 1fr); }
 .r-steps     { grid-template-columns: 3.5rem minmax(0, 1fr); }
 
+/* Per-table column tracks. Every table that once carried its grid as an
+   inline style carries it here instead, because an inline
+   gridTemplateColumns beats any media query - which is how /compare,
+   /live and /methodology ended up sideways-scrolling on phones while the
+   class-based tables stacked correctly. Desktop values are byte-identical
+   to the inline styles they replace. */
+.r-dir         { grid-template-columns: minmax(0,1.8fr) 8rem minmax(0,0.9fr); }
+.r-runs        { grid-template-columns: minmax(0,1.5fr) 8rem 7rem 7rem 7rem; }
+.r-transitions { grid-template-columns: 7rem minmax(0,1.3fr) 1fr 9rem minmax(0,1fr); }
+.r-uptime      { grid-template-columns: minmax(0,1.3fr) 1fr 6rem 6rem 7rem 7rem; }
+.r-errclass    { grid-template-columns: 12rem 8rem minmax(0,1fr); }
+.r-measures    { grid-template-columns: 11rem minmax(0,1.5fr) 9rem minmax(0,1.2fr); }
+.r-tier        { grid-template-columns: 3.5rem 8rem minmax(0,1fr); }
+.r-terms       { grid-template-columns: minmax(0,1.2fr) 5rem 6rem 6rem minmax(0,1.4fr) 6rem; }
+.r-grants      { grid-template-columns: 4rem minmax(0,1.6fr) minmax(0,1.6fr) 7rem 5rem; }
+.r-keys        { grid-template-columns: minmax(14rem,1.4fr) 6rem 8rem minmax(16rem,1fr); }
+.r-lint        { grid-template-columns: 6rem 11rem minmax(0,1fr); }
+.r-hired       { grid-template-columns: minmax(0,1.4fr) 7rem 7rem 6rem; }
+.r-probe       { grid-template-columns: 7rem 5rem 5rem 6rem 5rem 6rem; }
+.r-suggest     { grid-template-columns: 14rem minmax(0,1fr); }
+.r-excluded    { grid-template-columns: minmax(0,1fr) minmax(0,1.4fr); }
+.spec > div.r-venue { grid-template-columns: 16rem minmax(0,1fr); }
+/* The opportunity table's column count varies by category, so its tracks
+   arrive as a custom property set inline by the page; the mobile breakpoint
+   overrides grid-template-columns itself, not the variable. */
+.r-opps        { grid-template-columns: var(--opp-grid); }
+
 .rows-head {
   display: grid; gap: 20px;
   /* The header row is a header: heavier and brighter than body labels, not
@@ -772,8 +799,54 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
   .rows-head { display: none; }
   .r-jobs { grid-template-columns: 1fr; gap: 8px; }
   .readout { border-right: 0; }
-  .spec > div, .r-spec, .r-steps { grid-template-columns: 1fr; gap: 4px; }
-  .masthead .shell { gap: 18px; overflow-x: auto; }
+  .spec > div, .spec > div.r-venue, .r-spec, .r-steps { grid-template-columns: 1fr; gap: 4px; }
+  /* The masthead bar itself never scrolls sideways; below 860px its nav
+     moves into the mobile panel instead (see the mobile-nav section). The
+     overflow-x:auto that used to sit here hid 161px of links behind a
+     swipe, which reads as an accident rather than a layout. */
+  .masthead .shell { gap: 18px; }
+
+  /* Framed tables stack. Narrative cells carry their own words; figure
+     cells carry a data-m attribute whose label renders only inside this
+     breakpoint, so a stacked number still says what it is. Desktop never
+     sees the label. */
+  .row [data-m]::before {
+    content: attr(data-m);
+    display: block;
+    font-family: var(--mono);
+    font-size: 9.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--fg-4);
+    margin-bottom: 3px;
+    white-space: normal;
+  }
+  /* Right alignment is per-column on the desktop grid and inline; on the
+     stacked grid values read better flush left. !important is deliberate
+     here - it is the only thing that beats an inline style. */
+  .row [data-m] { text-align: left !important; }
+
+  .r-dir, .r-transitions, .r-grants, .r-keys, .r-suggest,
+  .r-excluded, .r-measures {
+    grid-template-columns: 1fr; gap: 6px;
+  }
+  .r-runs { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px 14px; }
+  .r-runs > :nth-child(-n+2) { grid-column: 1 / -1; }
+  .r-uptime { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .r-uptime > :nth-child(-n+2) { grid-column: 1 / -1; }
+  .r-probe { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .r-probe > :first-child { grid-column: 1 / -1; }
+  .r-terms { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .r-terms > :first-child, .r-terms > :nth-child(5) { grid-column: 1 / -1; }
+  .r-hired { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px 14px; }
+  .r-hired > :first-child { grid-column: 1 / -1; }
+  .r-lint { grid-template-columns: auto minmax(0,1fr); gap: 6px 14px; }
+  .r-lint > :last-child { grid-column: 1 / -1; }
+  .r-errclass { grid-template-columns: minmax(0,1fr) auto; gap: 6px 14px; }
+  .r-errclass > :last-child { grid-column: 1 / -1; }
+  .r-tier { grid-template-columns: auto minmax(0,1fr); gap: 6px 14px; }
+  .r-tier > :last-child { grid-column: 1 / -1; }
+  .r-opps { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .r-opps > :first-child { grid-column: 1 / -1; }
   .masthead nav { gap: 16px; }
   .masthead nav .nav-sep { padding-left: 16px; }
 }
@@ -1151,6 +1224,12 @@ a.row-hover:focus-visible { outline-offset: -2px; }
   .masthead nav { font-size: 12.5px; gap: 13px; }
   .readout { padding: 14px 16px 16px; }
   .readout dd { font-size: 1.4rem; }
+  /* Phone gutters: 28px each side leaves 334px of a 390px screen; 20px
+     leaves 350px, which whole tables and KPI numbers need. Bands lose
+     vertical weight at the same time so the page does not feel padded. */
+  .shell { padding: 0 20px; }
+  .band { padding: 48px 0; }
+  .band-tight { padding: 32px 0; }
 }
 
 /* ── authority lookup ───────────────────────────────────────────────── */
@@ -1213,7 +1292,15 @@ a.row-hover:focus-visible { outline-offset: -2px; }
 /* Nav no longer needs to claim the free space; search does. */
 .masthead nav.main, .masthead nav { margin-left: 0; }
 @media (max-width: 1080px) { .masthead-search input { width: 140px; } .masthead-search input:focus { width: 180px; } }
-@media (max-width: 860px)  { .masthead-search { display: none; } .masthead nav { margin-left: auto; } }
+/* Below 860px the bar carries wordmark + theme toggle + menu; search and
+   the nav move into the mobile panel (see the mobile-nav section below).
+   This replaced display:none on search alone, which left a 551px nav row
+   scrolling sideways inside a 390px header. */
+@media (max-width: 860px) {
+  .masthead-search { display: none; }
+  .masthead nav { display: none; }
+  .mobile-nav { display: inline-flex; }
+}
 
 /* ── theme toggle ───────────────────────────────────────────────────── */
 .theme-toggle {
@@ -1402,6 +1489,84 @@ a.row-hover:focus-visible { outline-offset: -2px; }
   .nav-dropdown-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── mobile nav: the masthead's third state ──────────────────────────── */
+/* Hidden on desktop. Below 860px the bar carries wordmark + theme + this
+   menu; the desktop nav and the header search move into the panel. The
+   panel is a child of the masthead, fixed under its 60px sticky bar. */
+.mobile-nav { display: none; position: relative; margin-left: auto; }
+.mobile-nav-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 38px;
+  background: var(--theme-btn-bg);
+  border: 1px solid var(--theme-btn-border);
+  border-radius: 9px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.mobile-nav-trigger.is-open { color: var(--fg); border-color: var(--accent); }
+.mobile-nav-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mobile-nav-panel {
+  position: fixed; top: 60px; left: 0; right: 0;
+  max-height: calc(100dvh - 60px);
+  overflow-y: auto;
+  background: var(--ink-850);
+  border-bottom: 1px solid var(--rule);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+  padding: 16px 20px 22px;
+  /* Under the masthead's own z-index (20) so the sticky bar stays visible
+     above the sheet that drops from it. */
+  z-index: 19;
+  animation: fade-in-up 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+[data-theme="light"] .mobile-nav-panel {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+}
+.mobile-nav-search { display: flex; margin-bottom: 8px; }
+.mobile-nav-search input {
+  width: 100%;
+  background: var(--search-bg); color: var(--fg);
+  border: 1px solid var(--rule);
+  border-radius: 9999px;
+  padding: 10px 16px;
+  font-family: var(--sans); font-size: 14px;
+}
+.mobile-nav-search input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.mobile-nav-search input::placeholder { color: var(--fg-4); }
+/* Deliberately not a <nav> element: .masthead nav is display:none below
+   860px and this panel lives inside the masthead. */
+.mobile-nav-links { display: flex; flex-direction: column; }
+.mobile-nav-links a {
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 14px;
+  color: var(--fg-2);
+}
+.mobile-nav-links a:hover { color: var(--fg); }
+.mobile-nav-cats { display: flex; flex-direction: column; }
+.mobile-nav-cat {
+  display: flex; flex-direction: column;
+  padding: 10px 8px;
+  border-radius: 8px;
+}
+.mobile-nav-cat:hover { background: var(--ink-800); }
+[data-theme="light"] .mobile-nav-cat:hover { background: #F4EFE3; }
+.mobile-nav-cat-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.mobile-nav-cat-title { font-size: 14px; font-weight: 560; color: var(--fg); line-height: 1.3; }
+.mobile-nav-cat-job { font-size: 12px; color: var(--fg-3); margin-top: 2px; line-height: 1.35; }
+.mobile-nav-more {
+  display: block;
+  margin-top: 10px;
+  padding: 8px;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
 }
 
 /* ── hire & authorization flow ──────────────────────────────────────── */

@@ -265,8 +265,7 @@ export default async function ComparePage() {
           <div className="data-table-frame mt-l">
             <div className="rows">
               <div
-                className="rows-head"
-                style={{ gridTemplateColumns: "minmax(0,1.5fr) 8rem 7rem 7rem 7rem" }}
+                className="rows-head r-runs"
               >
                 <span>Task</span>
                 <span>Outcome</span>
@@ -281,8 +280,7 @@ export default async function ComparePage() {
                 return (
                   <div
                     key={`${r.tokenId}-${r.evidenceRef}`}
-                    className="row"
-                    style={{ gridTemplateColumns: "minmax(0,1.5fr) 8rem 7rem 7rem 7rem" }}
+                    className="row r-runs"
                   >
                     <div>
                       <h3>{r.task}</h3>
@@ -306,14 +304,14 @@ export default async function ComparePage() {
                       <span className="pulse-dot" data-status={tone} /> {r.outcome}
                     </div>
 
-                    <div className="num xs t-3" style={{ textAlign: "right" }}>
+                    <div className="num xs t-3" data-m="With agent" style={{ textAlign: "right" }}>
                       {humanMs(r.agentMs)}
                       {r.agentCost != null && (
                         <div className="t-4">{toTokens(r.agentCost)?.toFixed(4)} tok</div>
                       )}
                     </div>
 
-                    <div className="num xs t-3" style={{ textAlign: "right" }}>
+                    <div className="num xs t-3" data-m="By hand" style={{ textAlign: "right" }}>
                       {humanMs(r.manualMs)}
                       {r.manualCost != null && (
                         <div className="t-4">{toTokens(r.manualCost)?.toFixed(4)} tok</div>
@@ -322,6 +320,7 @@ export default async function ComparePage() {
 
                     <div
                       className="num xs"
+                      data-m="Saved"
                       style={{
                         textAlign: "right",
                         color:

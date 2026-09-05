@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 type Agent = {
   token_id: string;
@@ -85,6 +85,9 @@ export default function CategoryTabs({
               background: "var(--ink-850)",
               borderRadius: 10,
               width: "fit-content",
+              // Wrap on phones rather than overflow: three labelled pills do
+              // not fit 390px in one row.
+              flexWrap: "wrap",
             }}
           >
             {TABS.map((t) => (
@@ -231,7 +234,10 @@ export default function CategoryTabs({
             ) : (
               <div className="data-table-frame mt-m">
                 <div className="rows">
-                  <div className="rows-head" style={{ gridTemplateColumns: oppGrid }}>
+                  <div
+                    className="rows-head r-opps"
+                    style={{ "--opp-grid": oppGrid } as CSSProperties}
+                  >
                     <span>Market</span>
                     {cols.map((c) => (
                       <span
@@ -246,8 +252,8 @@ export default function CategoryTabs({
                     <a
                       key={o.id}
                       href={`/o/${o.id}`}
-                      className="row row-hover"
-                      style={{ gridTemplateColumns: oppGrid }}
+                      className="row row-hover r-opps"
+                      style={{ "--opp-grid": oppGrid } as CSSProperties}
                     >
                       <div>
                         <h3>{o.label}</h3>
@@ -259,6 +265,7 @@ export default function CategoryTabs({
                         <div
                           key={c.key}
                           className="num sm"
+                          data-m={c.label}
                           style={{ textAlign: c.align === "right" ? "right" : "left" }}
                         >
                           {o.cells[i]}
@@ -284,8 +291,8 @@ export default function CategoryTabs({
                       <a
                         key={o.id}
                         href={`/o/${o.id}`}
-                        className="row row-hover"
-                        style={{ gridTemplateColumns: oppGrid }}
+                        className="row row-hover r-opps"
+                        style={{ "--opp-grid": oppGrid } as CSSProperties}
                       >
                         <div>
                           <h3>{o.label}</h3>
@@ -298,6 +305,7 @@ export default function CategoryTabs({
                           <div
                             key={c.key}
                             className="num sm"
+                            data-m={c.label}
                             style={{
                               textAlign: c.align === "right" ? "right" : "left",
                             }}
@@ -326,10 +334,7 @@ export default function CategoryTabs({
                       <a
                         key={o.id}
                         href={`/o/${o.id}`}
-                        className="row row-hover"
-                        style={{
-                          gridTemplateColumns: "minmax(0,1fr) minmax(0,1.4fr)",
-                        }}
+                        className="row row-hover r-excluded"
                       >
                         <div className="sm t-3">{o.label}</div>
                         <div className="xs t-4">{o.ineligibleReason}</div>
