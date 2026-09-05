@@ -151,6 +151,30 @@ const MEASURE = `(() => {
       visible: !!mobileNav && mobileNav.getBoundingClientRect().width > 0,
       expectedVisible: vw <= 860,
     },
+    // The open panel sits inside .masthead, which the offender scan skips;
+    // measure it separately when present.
+    panel: (() => {
+      const p = document.querySelector(".mobile-nav-panel");
+      if (!p) return null;
+      const pr = p.getBoundingClientRect();
+      const bad = [];
+      for (const el of p.querySelectorAll("*")) {
+        const r = el.getBoundingClientRect();
+        if (r.width && (r.right > vw + 1 || r.left < -1)) {
+          // Single quotes only: this code is text inside an outer template
+          // literal, which would unescape any \" into a bare " and break
+          // the evaluated script's own string syntax.
+          bad.push("<" + el.tagName.toLowerCase() + ' class="' + (el.className || "").toString().slice(0, 50) + '">');
+          if (bad.length >= 5) break;
+        }
+      }
+      return {
+        left: Math.round(pr.left),
+        right: Math.round(pr.right),
+        width: Math.round(pr.width),
+        offenders: bad,
+      };
+    })(),
     offenders: [],
     scrollContainers: [],
   };
@@ -248,8 +272,9 @@ async function auditRoute(url, route, opts = {}) {
       const clicked = await evalJs(
         conn,
         `(() => {
+          const t = ${JSON.stringify(opts.clickText)};
           const btn = Array.from(document.querySelectorAll('button'))
-            .find((b) => b.textContent.trim().startsWith(${JSON.stringify(opts.clickText)}));
+            .find((b) => b.textContent.trim().startsWith(t) || (b.getAttribute('aria-label') || '').startsWith(t));
           if (!btn) return "NOT FOUND";
           btn.click();
           return "ok";
@@ -392,6 +417,9 @@ async function main() {
     } else {
       log("! no agent card link harvested; skipping agent-card tabs");
     }
+    // The menu panel itself: the trigger's visibility is asserted on every
+    // route, but the OPEN state is where the layout can still break.
+    tabTargets.push({ route: "/", clickText: "Open menu", tag: "menu-open" });
 
     for (const t of tabTargets) {
       log(`- ${t.route} [click: ${t.clickText}]`);
@@ -444,6 +472,12 @@ async function main() {
       if (navBad) {
         log(
           `           mobile nav visible=${nav.visible}, expected=${nav.expectedVisible} at vw=${r.viewport}`
+        );
+      }
+      if (r.panel) {
+        log(
+          `           menu panel open: L${r.panel.left} R${r.panel.right} W${r.panel.width}` +
+          (r.panel.offenders.length ? ` offenders: ${r.panel.offenders.join(" | ")}` : "")
         );
       }
       if (r.masthead?.scrolls) {

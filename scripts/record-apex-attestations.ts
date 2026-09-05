@@ -73,10 +73,13 @@ for (const { net, jobId, createTx } of JOBS) {
 
     const evidenceRef = `apex-${jobId}-${cfg.chainId}`;
 
-    // Check if already recorded
+    // Check if already recorded. The kind MUST match what this script
+    // inserts below ('erc8183_job') - an earlier version checked
+    // 'apex_hire', a kind nothing ever inserts, so the check always missed
+    // and only the unique constraint on conflict prevented duplicates.
     const existing = await sql<{ id: number }[]>`
       select id from attestations
-      where chain_id = ${cfg.chainId} and evidence_kind = 'apex_hire' and evidence_ref = ${evidenceRef}`;
+      where chain_id = ${cfg.chainId} and evidence_kind = 'erc8183_job' and evidence_ref = ${evidenceRef}`;
 
     if (existing[0]) {
       console.log(`  ${net} job ${jobId}: already recorded as attestation #${existing[0].id}, skipping`);
