@@ -132,6 +132,7 @@ const MEASURE = `(() => {
   const de = document.documentElement;
   const vw = de.clientWidth;
   const mast = document.querySelector(".masthead .shell");
+  const mobileNav = document.querySelector(".mobile-nav");
   const out = {
     path: location.pathname + location.search,
     viewport: vw,
@@ -142,6 +143,14 @@ const MEASURE = `(() => {
       scrollWidth: mast.scrollWidth,
       clientWidth: mast.clientWidth,
     } : null,
+    // A rule-ordering bug once left the menu button display:none on phones
+    // while every geometry check passed - an empty bar does not overflow.
+    // Visibility is now measured explicitly, per breakpoint expectation.
+    mobileNav: {
+      present: !!mobileNav,
+      visible: !!mobileNav && mobileNav.getBoundingClientRect().width > 0,
+      expectedVisible: vw <= 860,
+    },
     offenders: [],
     scrollContainers: [],
   };
@@ -423,12 +432,20 @@ async function main() {
     }
 
     log("\n================ AUDIT RESULT ================");
+    let failures = 0;
     for (const r of results) {
       const flag = r.pageOverflow ? "OVERFLOW" : "ok      ";
-      const mast = r.masthead?.scrolls ? " masthead-scrolls" : "";
+      const nav = r.mobileNav;
+      const navBad = nav && nav.visible !== nav.expectedVisible;
+      if (navBad) failures++;
       log(
-        `[${flag}]${mast} ${r.path}  pageW=${r.pageScrollWidth} vw=${r.viewport}`
+        `[${flag}]${navBad ? " NAV-BUG " : " "}${r.path}  pageW=${r.pageScrollWidth} vw=${r.viewport} navVisible=${nav ? nav.visible : "n/a"}`
       );
+      if (navBad) {
+        log(
+          `           mobile nav visible=${nav.visible}, expected=${nav.expectedVisible} at vw=${r.viewport}`
+        );
+      }
       if (r.masthead?.scrolls) {
         log(`           masthead internal: ${r.masthead.scrollWidth} > ${r.masthead.clientWidth}`);
       }

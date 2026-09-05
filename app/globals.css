@@ -1295,11 +1295,13 @@ a.row-hover:focus-visible { outline-offset: -2px; }
 /* Below 860px the bar carries wordmark + theme toggle + menu; search and
    the nav move into the mobile panel (see the mobile-nav section below).
    This replaced display:none on search alone, which left a 551px nav row
-   scrolling sideways inside a 390px header. */
+   scrolling sideways inside a 390px header. The .mobile-nav display rule
+   lives in that section, AFTER its base rule - a media query adds no
+   specificity, so a later base rule would silently beat an earlier
+   override and the menu button would never appear. */
 @media (max-width: 860px) {
   .masthead-search { display: none; }
   .masthead nav { display: none; }
-  .mobile-nav { display: inline-flex; }
 }
 
 /* ── theme toggle ───────────────────────────────────────────────────── */
@@ -1496,6 +1498,13 @@ a.row-hover:focus-visible { outline-offset: -2px; }
    menu; the desktop nav and the header search move into the panel. The
    panel is a child of the masthead, fixed under its 60px sticky bar. */
 .mobile-nav { display: none; position: relative; margin-left: auto; }
+/* This override MUST sit after the base rule above: equal specificity means
+   the later declaration wins, and a media query earns no extra weight. An
+   earlier placement let the base display:none beat it - the hamburger
+   button then never appeared on any phone. */
+@media (max-width: 860px) {
+  .mobile-nav { display: inline-flex; }
+}
 .mobile-nav-trigger {
   display: inline-flex; align-items: center; justify-content: center;
   width: 42px; height: 38px;
