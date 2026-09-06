@@ -31,9 +31,9 @@ if (existsSync(".env")) {
   const hits: string[] = [];
   for (const line of lines) {
     const m = line.match(/^([A-Z0-9_]+)\s*=\s*(.+)$/);
-    if (!m) continue;
-    const [, name, raw] = m;
-    let value = raw.trim();
+    if (!m || m.length < 3) continue;
+    const name = m[1]!;
+    let value = m[2]!.trim();
     if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
     // strip trailing inline comments used in .env.example-style files
     value = value.split(/\s+#/)[0]!.trim();

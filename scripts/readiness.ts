@@ -44,6 +44,17 @@ async function count(table: string, where?: string): Promise<number | null> {
   }
 }
 
+/** A single numeric scalar, null on failure — never a misleading zero. */
+async function scalar(q: string): Promise<number | null> {
+  try {
+    const rows = (await sql.unsafe(q)) as unknown as { n: string | number | null }[];
+    const v = rows[0]?.n;
+    return v == null ? null : Number(v);
+  } catch {
+    return null;
+  }
+}
+
 async function tableExists(table: string): Promise<boolean> {
   const rows = await sql<{ ok: boolean }[]>`
     select exists (
@@ -86,6 +97,30 @@ async function main() {
     item: "Registry census + resolve + probe pipeline",
     state: tokens && tokens > 100_000 ? "DONE" : tokens ? "PARTIAL" : "UNKNOWN",
     evidence: `registry_tokens=${fmt(tokens)}, probes_raw=${fmt(probes)}, VERIFIED=${fmt(verified)}`,
+  });
+
+  /**
+   * Does the product layer keep up with the census layer?
+   *
+   * Search, categories, cards and the prober read `agents`/`agent_endpoints`,
+   * never `registry_tokens`. Until 2026-09-06 those tables were populated only
+   * by hand-run loaders: they froze at token #269686 while the census ran on to
+   * #336715, and a freshly launched agent was censused yet invisible. The lag
+   * between the two high-water marks is this failure, measured — a lag that
+   * grows for days means the materialize cron has stopped again.
+   */
+  const regMax = await scalar("select max(token_id)::bigint as n from registry_tokens");
+  const agentsMax = await scalar("select max(token_id)::bigint as n from agents where chain_id = 56");
+  const matLag = regMax != null && agentsMax != null ? regMax - agentsMax : null;
+  const matCron = await scheduled("gebo-materialize");
+  gates.push({
+    id: "materialize",
+    item: "Census → agents materialization (surfaces read agents, not the census)",
+    state: matCron && matLag != null && matLag <= 2000 ? "DONE" : matCron || matLag != null ? "PARTIAL" : "UNKNOWN",
+    evidence:
+      `census max #${fmt(regMax)}, agents max #${fmt(agentsMax)}, ` +
+      `lag=${matLag == null ? "unmeasured" : `${fmt(matLag)} tokens`}, ` +
+      `cron=${matCron ? "active" : "missing"}`,
   });
 
   /**
