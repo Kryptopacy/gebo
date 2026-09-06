@@ -192,7 +192,9 @@ export function loadClassification(): Promise<Panel<Classification>> {
       applied: applied?.n ?? 0,
       queued: queued?.n ?? 0,
       judged: judged?.n ?? 0,
-      trustStates: states,
+      // SQL rows carry the column name (trust_state); the public type
+      // declares state - mapped at the boundary so the contract holds.
+      trustStates: states.map((r) => ({ state: r.trust_state, n: r.n })),
     };
   });
 }

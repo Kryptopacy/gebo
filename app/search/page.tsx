@@ -41,18 +41,16 @@ export default async function SearchPage({
         <div className="shell">
           <p className="crumb"><a href="/">GEBO</a> <span className="t-4">/</span> Search</p>
 
+          {/* No toolname here on purpose: the masthead form on this same page
+              already exposes open_search_results, the imperative search_agents
+              returns the data, and a second declarative form would collide
+              with the masthead's name (Chrome rejects duplicate tool names). */}
           <form
             method="get"
             action="/search"
             className="lookup"
             role="search"
-              {...({
-                toolname: "search_agents",
-                tooldescription:
-                  "Search GEBO's registry of BNB Smart Chain agents by capability. Results state why each agent matched and are ordered by trust state, then relevance - never popularity. Each result shows the agent's name, trust state, why it matched, and links to its card and hire flow.",
-                toolautosubmit: "true",
-              } as Record<string, string>)}
-            >
+          >
               <input
                 type="search"
                 name="q"

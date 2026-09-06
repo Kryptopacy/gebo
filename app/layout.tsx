@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
 import { loadCensus, loadAggregates, JUDGED_CATEGORIES, OTHER_CATEGORIES } from "@/lib/data";
+import { webmcpBootstrapScript } from "@/lib/webmcp-bootstrap";
 import { ThemeToggle } from "./theme-toggle";
 import { CategoriesDropdown } from "./categories-dropdown";
 import { MobileNav } from "./mobile-nav";
 import AssistantWidget from "./assistant/AssistantWidget";
 import { OverflowGuard } from "./overflow-guard";
-import WebMcpTools from "./WebMcpTools";
 import "./globals.css";
 
 const sans = Geist({
@@ -112,6 +112,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* WebMCP imperative tools register at PARSE TIME, before hydration:
+            the scanner (and any snapshotting agent) captures the surface
+            before React runs - three webmcp.com scans scored only the
+            declarative forms because the useEffect registrar fired seconds
+            later. One spec source: src/lib/webmcp.ts via webmcp-bootstrap. */}
+        <script dangerouslySetInnerHTML={{ __html: webmcpBootstrapScript() }} />
       </head>
       <body>
         <header className="masthead">
@@ -133,9 +139,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               className="masthead-search"
               role="search"
               {...({
-                toolname: "search_agents",
+                // open_* because this form NAVIGATES (act semantics); the
+                // data-returning search_agents is the imperative tool. Same
+                // name for both threw InvalidStateError: Duplicate tool name
+                // on every load, leaving the thin declarative schema as the
+                // only survivor - caught live via the registerTool warning.
+                toolname: "open_search_results",
                 tooldescription:
-                  "Search GEBO's registry of BNB Smart Chain agents by capability. Navigates to results ordered by trust state, then relevance - never popularity. The result page lists each matching agent's name, trust state, why it matched, and links to its card and hire flow.",
+                  "Navigate this page to GEBO's search results for a capability query, ordered by trust state, then relevance - never popularity. Use search_agents instead when the caller wants the data without moving the page.",
                 toolautosubmit: "true",
               } as Record<string, string>)}
             >
@@ -173,7 +184,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         <OverflowGuard />
         <AssistantWidget />
-        <WebMcpTools />
 
         <footer className="colophon">
           <div className="shell">

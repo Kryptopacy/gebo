@@ -33,7 +33,7 @@
 
 import {
   MCP_TOOLS, SEARCH_CATEGORIES, OPPORTUNITY_CATEGORIES,
-  type McpToolDef,
+  type McpToolDef, type McpOutputSchema,
 } from "./mcp";
 
 // Re-exported so tests and llms.txt generators can treat this module as the
@@ -70,6 +70,25 @@ export type WebMcpNavigationTool = {
 };
 
 /**
+ * The "Returns:" line every data-tool description carries. Chrome's
+ * registerTool accepts an outputSchema member but silently DROPS it
+ * (probed 2026-09-06: getTools() returns only name/description/
+ * inputSchema/annotations), so the description is the one channel the
+ * output contract can travel in - and the webmcp.com scanner docks
+ * "no output schema" for its absence. outputSchema.required is a
+ * non-empty tuple by type, so the key list is never empty.
+ */
+function returnsLine(desc: string, outputSchema: McpOutputSchema): string {
+  const keys = Object.keys(outputSchema.properties);
+  return (
+    desc +
+    " Returns a JSON object with keys: " +
+    keys.join(", ") +
+    " - caveats included, a bare number is never a measurement."
+  );
+}
+
+/**
  * Data tools: one per MCP read tool, schema-identical. The four criticism
  * findings from the webmcp.com scan each map to a rule here: coverage (this
  * list is the full MCP read set), schemas (inherited, with constraints),
@@ -79,6 +98,7 @@ const DATA_TOOLS: WebMcpDataTool[] = MCP_TOOLS.map((t) => ({
   ...t,
   kind: "answer" as const,
   mcpTool: t.name,
+  description: returnsLine(t.description, t.outputSchema),
   annotations: { readOnlyHint: true },
 }));
 
