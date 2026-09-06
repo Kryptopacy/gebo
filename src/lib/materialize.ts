@@ -260,6 +260,20 @@ export async function materializeSlice(
     built.push(buildAgentFromRegistration(c, res.file, uri));
   }
 
+  // Operators must be upserted BEFORE the agents that reference them:
+  // agents.operator_key has a foreign key to operators.key, and a new
+  // operator's first agent otherwise aborts the whole agents insert.
+  const opRows = [...new Map(built.map((b) => b.operator).filter(Boolean).map((o) => [o!.key, o!])).values()];
+  if (opRows.length) {
+    await sql`
+      insert into operators ${sql(opRows)}
+      on conflict (key) do update set
+        kind = excluded.kind,
+        registrable_domain = excluded.registrable_domain,
+        label = excluded.label,
+        updated_at = now()`;
+  }
+
   if (built.length) {
     for (let i = 0; i < built.length; i += 200) {
       // `as any`: RegistrationFile carries unknown[] fields (skills, domains)
@@ -308,17 +322,8 @@ export async function materializeSlice(
     }
   }
 
-  // Operators: upsert the ones this batch introduced, then recount their
-  // agent/validated/fatal counters from the agents table (loader parity).
-  const opRows = [...new Map(built.map((b) => b.operator).filter(Boolean).map((o) => [o!.key, o!])).values()];
+  // Operator counters are recounted after the agents exist (loader parity).
   if (opRows.length) {
-    await sql`
-      insert into operators ${sql(opRows)}
-      on conflict (key) do update set
-        kind = excluded.kind,
-        registrable_domain = excluded.registrable_domain,
-        label = excluded.label,
-        updated_at = now()`;
     const keys = opRows.map((o) => o.key);
     await sql`
       update operators o set
