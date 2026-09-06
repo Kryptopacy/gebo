@@ -32,7 +32,11 @@ export async function GET(request: Request) {
 
   try {
     const out = await materializeSlice(sql, {
-      slice: Number(process.env.CRON_MATERIALIZE_SLICE ?? 80),
+      // Slice above the old 80: the route is the primary materializer now
+      // (migration 0020), and the 45s budget — not the slice — is the real
+      // bound; a bigger slice just lets fast batches (data: URIs) do more.
+      slice: Number(process.env.CRON_MATERIALIZE_SLICE ?? 200),
+      concurrency: 10,
       timeBudgetMs: 45_000,
     });
     return NextResponse.json({ ok: true, ...out });
