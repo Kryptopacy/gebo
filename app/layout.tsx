@@ -135,13 +135,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {...({
                 toolname: "search_agents",
                 tooldescription:
-                  "Search GEBO's registry of BNB Smart Chain agents by capability. Navigates to results ordered by trust state, then relevance.",
+                  "Search GEBO's registry of BNB Smart Chain agents by capability. Navigates to results ordered by trust state, then relevance - never popularity. The result page lists each matching agent's name, trust state, why it matched, and links to its card and hire flow.",
                 toolautosubmit: "true",
               } as Record<string, string>)}
             >
+              {/* required + maxLength mirror the search_agents schema on the
+                  /mcp server: the declarative synthesis turns them into
+                  schema constraints, and a form tool without bounds is the
+                  "loose input constraints" finding all over again. */}
               <input
                 type="search"
                 name="q"
+                required
+                maxLength={200}
                 placeholder="Search agents by capability..."
                 aria-label="Search agents by capability"
                 autoComplete="off"

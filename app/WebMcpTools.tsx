@@ -25,8 +25,9 @@
  *  - every tool description ends with a "Returns:" line because the
  *    imperative API has no outputSchema member (spec issue #9) - the
  *    output contract travels in the description;
- *  - registration is awaited, not fire-and-forget, so a scanner
- *    snapshotting tools right after load sees the complete set;
+ *  - all registrations fire in parallel and failures are logged, so the
+ *    complete set reaches the browser registry as early as possible and
+ *    a failing registration is diagnosable instead of silently missing;
  *  - the wallet steps stay human: nothing that signs, funds or approves
  *    is a tool, and the hire navigation tool says so.
  *
@@ -98,26 +99,34 @@ export default function WebMcpTools() {
     if (!mc?.registerTool) return; // not a WebMCP browser: stay inert
 
     const register = (tool: ModelContextTool) =>
-      mc.registerTool!(tool).catch(() => {
+      mc.registerTool!(tool).catch((err: unknown) => {
         /* NotAllowedError when the tools permission is disabled: the right
-           response is silence, not a broken page. */
+           response is silence, not a broken page. Any other failure is
+           logged, because a registration the scanner silently misses is
+           exactly how this surface once shrank to one visible tool. */
+        console.warn(`[webmcp] registerTool(${tool.name}) failed:`, err);
       });
 
+    // All registrations start immediately and run in parallel, so the full
+    // set is in the browser's registry as early as possible - a scanner (or
+    // a real agent) that snapshots getTools() right after load sees all of
+    // them, not the subset a sequential loop had finished by then.
     const registerAll = async () => {
-      for (const tool of WEBMCP_TOOLS) {
-        if (tool.kind === "answer") {
-          const outProps = Object.keys(
-            (tool.outputSchema.properties ?? {}) as Record<string, unknown>,
-          );
-          await register({
-            name: tool.name,
-            description: returnsLine(tool.description, outProps),
-            inputSchema: tool.inputSchema,
-            annotations: tool.annotations,
-            execute: (args) => callMcpTool(tool.mcpTool, args),
-          });
-        } else {
-          await register({
+      await Promise.all(
+        WEBMCP_TOOLS.map((tool) => {
+          if (tool.kind === "answer") {
+            const outProps = Object.keys(
+              (tool.outputSchema.properties ?? {}) as Record<string, unknown>,
+            );
+            return register({
+              name: tool.name,
+              description: returnsLine(tool.description, outProps),
+              inputSchema: tool.inputSchema,
+              annotations: tool.annotations,
+              execute: (args) => callMcpTool(tool.mcpTool, args),
+            });
+          }
+          return register({
             name: tool.name,
             description: tool.description,
             inputSchema: tool.inputSchema,
@@ -131,8 +140,8 @@ export default function WebMcpTools() {
               );
             },
           });
-        }
-      }
+        }),
+      );
     };
 
     void registerAll();

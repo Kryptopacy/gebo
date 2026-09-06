@@ -169,3 +169,33 @@ describe("declarative form tools stay snake_case", () => {
     expect(authority).toContain('toolname: "check_wallet_authority"');
   });
 });
+
+describe("declarative form inputs carry constraints", () => {
+  // The rescan finding "wallet lacks regex/required constraints" maps here:
+  // the declarative synthesis turns HTML required/pattern/maxLength into
+  // schema constraints, so the attributes ARE the schema.
+  it("the authority wallet input is required with an address pattern", async () => {
+    const authority = readFileSync(resolve(__dirname, "../app/authority/page.tsx"), "utf8");
+    const walletInput = authority.match(/<input[^]*?name="wallet"[^]*?\/>/)?.[0] ?? "";
+    expect(walletInput).toContain("required");
+    expect(walletInput).toContain('pattern="0x[0-9a-fA-F]{40}"');
+  });
+
+  it("the search inputs are required with a maxLength matching the MCP schema", async () => {
+    const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
+    for (const src of [read("../app/layout.tsx"), read("../app/search/page.tsx")]) {
+      const qInput = src.match(/<input[^]*?name="q"[^]*?\/>/)?.[0] ?? "";
+      expect(qInput).toContain("required");
+      expect(qInput).toContain("maxLength={200}");
+    }
+  });
+
+  it("declarative descriptions document what the tool returns", async () => {
+    const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
+    // The declarative API has no output schema (open spec question), so the
+    // output contract travels in tooldescription - same law as the
+    // imperative "Returns:" lines.
+    expect(read("../app/authority/page.tsx")).toContain("The result lists each session key");
+    expect(read("../app/layout.tsx")).toContain("The result page lists each matching agent");
+  });
+});

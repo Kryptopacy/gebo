@@ -46,27 +46,29 @@ export default async function SearchPage({
             action="/search"
             className="lookup"
             role="search"
-            {...({
-              toolname: "search_agents",
-              tooldescription:
-                "Search GEBO's registry of BNB Smart Chain agents by capability. Results state why each agent matched and are ordered by trust state, then relevance - never popularity.",
-              toolautosubmit: "true",
-            } as Record<string, string>)}
-          >
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="What should the agent do? e.g. rebalance liquidity, watch my loan"
-              aria-label="Search agents by capability"
-              autoComplete="off"
-              spellCheck={false}
-              className="lookup-input"
               {...({
-                toolparamdescription:
-                  "What the agent should do, e.g. 'rebalance liquidity', 'watch my loan', 'x402 payments'",
+                toolname: "search_agents",
+                tooldescription:
+                  "Search GEBO's registry of BNB Smart Chain agents by capability. Results state why each agent matched and are ordered by trust state, then relevance - never popularity. Each result shows the agent's name, trust state, why it matched, and links to its card and hire flow.",
+                toolautosubmit: "true",
               } as Record<string, string>)}
-            />
+            >
+              <input
+                type="search"
+                name="q"
+                required
+                maxLength={200}
+                defaultValue={q}
+                placeholder="What should the agent do? e.g. rebalance liquidity, watch my loan"
+                aria-label="Search agents by capability"
+                autoComplete="off"
+                spellCheck={false}
+                className="lookup-input"
+                {...({
+                  toolparamdescription:
+                    "What the agent should do, e.g. 'rebalance liquidity', 'watch my loan', 'x402 payments'",
+                } as Record<string, string>)}
+              />
             <button type="submit" className="cta">Search</button>
           </form>
 

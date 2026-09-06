@@ -144,13 +144,21 @@ export default async function AuthorityPage({
             {...({
               toolname: "check_wallet_authority",
               tooldescription:
-                "Read which scoped session keys a BNB Chain wallet has registered in the Altana Keystore, what each permits (target contracts, spend caps, expiry), and whether it is still valid. The same query runs from anywhere; it covers keystore sessions only and the page states what it cannot see.",
+                "Read which scoped session keys a BNB Chain wallet has registered in the Altana Keystore, what each permits (target contracts, spend caps, expiry), and whether it is still valid. The same query runs from anywhere; it covers keystore sessions only and the page states what it cannot see. The result lists each session key with its targets, spend caps, expiry and validity, plus an explicit 'what this check does not cover' section.",
               toolautosubmit: "true",
             } as Record<string, string>)}
           >
+            {/* required + pattern feed the declarative schema synthesis: an
+                unconstrained wallet param was the scorecard's "no regex or
+                required constraints" finding. The server still re-validates
+                with isAddress - the HTML pattern is for agents and humans,
+                not a security boundary. */}
             <input
               type="text"
               name="wallet"
+              required
+              pattern="0x[0-9a-fA-F]{40}"
+              title="A 0x-prefixed, 42-character EVM address"
               inputMode="text"
               spellCheck={false}
               autoComplete="off"
