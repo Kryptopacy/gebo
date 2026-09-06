@@ -382,7 +382,12 @@ const AGENT_SELECT = `
       select e.host from agent_endpoints e
       where e.chain_id = a.chain_id and e.token_id = a.token_id
       order by e.id limit 1
-    )                                            as op_host
+    )                                            as op_host,
+    -- capability_doc is projected so search can rank with ts_rank OUTSIDE this
+    -- select: the old query appended ts_rank as a FROM-position function scan,
+    -- which ordered correctly but never projected the value, and cannot carry
+    -- a window count. mapAgentRow ignores the extra column.
+    a.capability_doc
   from agents a
   left join operators o on o.key = a.operator_key
 `;
@@ -730,36 +735,110 @@ export type SearchHit = {
  * results instead of an error.
  */
 export async function searchAgents(query: string, limit = 40): Promise<SearchHit[]> {
+  const paged = await searchAgentsPaged(query, { limit });
+  return paged.hits;
+}
+
+export type SearchSort = "trusted" | "newest";
+
+export type PagedSearch = {
+  hits: SearchHit[];
+  /** Total rows the match predicate returns, BEFORE limit/offset. */
+  total: number;
+  /** Trust-state breakdown of the UNFILTERED match set - facets must not
+   *  change when a facet is applied, or the filter chips lie. */
+  byState: Record<string, number>;
+};
+
+const TRUST_STATES = ["VERIFIED", "LISTED", "DORMANT", "SHADOWED"] as const;
+export type TrustStateFilter = (typeof TRUST_STATES)[number];
+export const SEARCH_TRUST_STATES: readonly TrustStateFilter[] = TRUST_STATES;
+
+/** The match predicate shared by the paged query and its state breakdown. */
+const MATCH_PREDICATE = `
+  a.capability_doc @@ websearch_to_tsquery('english', $1)
+  or a.name ilike '%' || $1 || '%'
+  or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
+  or exists (
+    select 1 from unnest(coalesce(a.skills,'{}')) s
+    where replace(s, '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'
+  )`;
+
+/**
+ * Paged search with truthful totals.
+ *
+ * The page previously printed hits.length as the match count, so a 600-match
+ * query said "60 agents match" - the exact quiet-fabrication this product
+ * exists to prevent. count(*) over () returns the full total in the same
+ * round trip (windows compute before LIMIT), and a separate cheap GROUP BY
+ * carries the trust-state breakdown of the unfiltered set so the filter
+ * chips stay stable while filtering.
+ */
+export async function searchAgentsPaged(
+  query: string,
+  opts: { limit?: number; offset?: number; state?: TrustStateFilter | null; sort?: SearchSort } = {},
+): Promise<PagedSearch> {
   const q = query.trim();
-  if (!q) return [];
+  if (!q) return { hits: [], total: 0, byState: {} };
 
   const sql = db();
-  if (!sql) return [];
+  if (!sql) return { hits: [], total: 0, byState: {} };
+
+  const limit = Math.max(1, Math.min(120, opts.limit ?? 40));
+  const offset = Math.max(0, Math.min(100_000, opts.offset ?? 0));
+  const state = opts.state && (TRUST_STATES as readonly string[]).includes(opts.state) ? opts.state : null;
+  const sort: SearchSort = opts.sort === "newest" ? "newest" : "trusted";
 
   // websearch_to_tsquery tolerates human input: quotes, OR, and minus signs.
+  //
+  // AGENT_SELECT carries its own FROM/JOINs and ends where the WHERE starts.
+  // The old query appended ts_rank() as a FROM-position function scan - it
+  // ordered correctly but never projected the value, and a window count cannot
+  // live in the FROM list. So the match runs in a subquery (with capability_doc
+  // projected), and the outer select adds count(*) over () - the FULL match
+  // total, computed before LIMIT - plus the ordering on real column names.
+  // token_id is ::text in the projection (the "9999 sorts above 336715" trap),
+  // so recency ordering casts back to bigint.
   try {
     const rows = (await sql.unsafe(
-      `${AGENT_SELECT}
-       , ts_rank(a.capability_doc, websearch_to_tsquery('english', $1)) as rank
-       where a.chain_id = 56
-         and (
-           a.capability_doc @@ websearch_to_tsquery('english', $1)
-           or a.name ilike '%' || $1 || '%'
-           or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
-           or exists (
-             select 1 from unnest(coalesce(a.skills,'{}')) s
-             where replace(s, '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'
-           )
-         )
+      `select y.*, count(*) over () as full_total,
+              ts_rank(y.capability_doc, websearch_to_tsquery('english', $1)) as rank
+       from (
+         ${AGENT_SELECT}
+         where a.chain_id = 56
+           and (${MATCH_PREDICATE})
+           ${state ? "and a.trust_state = $4" : ""}
+       ) y
        order by
-         case a.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
-         rank desc nulls last,
-         a.token_id desc
-       limit $2`,
-      [q, limit],
+         ${
+           sort === "newest"
+             ? "y.token_id::bigint desc"
+             : `case y.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
+                ts_rank(y.capability_doc, websearch_to_tsquery('english', $1)) desc nulls last,
+                y.token_id::bigint desc`
+         }
+       limit $2 offset $3`,
+      state ? [q, limit, offset, state] : [q, limit, offset],
     )) as unknown as any[];
 
-    return rows.map((r) => {
+    // Sequential (not Promise.all): the search page renders from a single
+    // pooled connection - two concurrent connections through the Supabase
+    // pooler stall from the deploy region (the /search lesson).
+    const breakdown: Record<string, number> = {};
+    try {
+      const byState = (await sql.unsafe(
+        `select a.trust_state as state, count(*)::int as n
+         from agents a
+         where a.chain_id = 56 and (${MATCH_PREDICATE})
+         group by a.trust_state`,
+        [q],
+      )) as unknown as any[];
+      for (const r of byState) breakdown[r.state] = Number(r.n);
+    } catch {
+      /* breakdown is a facet, not a figure: absent rather than zero-filled */
+    }
+
+    const hits = rows.map((r) => {
       const agent = mapAgentRow(r);
       const needle = q.toLowerCase();
       const flat = needle.replace(/-/g, " ");
@@ -776,9 +855,15 @@ export async function searchAgents(query: string, limit = 40): Promise<SearchHit
             : "capability text match";
       return { agent, rank: Number(r.rank ?? 0), why };
     });
+
+    return {
+      hits,
+      total: rows.length ? Number(rows[0]!.full_total ?? rows.length) : (state ? (breakdown[state] ?? 0) : 0),
+      byState: breakdown,
+    };
   } catch (err) {
     console.warn(`[data] search failed: ${String(err).slice(0, 140)}`);
-    return [];
+    return { hits: [], total: 0, byState: {} };
   }
 }
 

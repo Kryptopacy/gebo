@@ -16,7 +16,7 @@ import {
   handleMcpPost, MCP_PROTOCOL_VERSION, type McpToolImpl, type McpToolResult,
 } from "@/lib/mcp";
 import {
-  searchAgents, findAgent, trustState, classify, CATEGORIES, CATEGORY_LIST,
+  searchAgentsPaged, findAgent, trustState, classify, CATEGORIES, CATEGORY_LIST,
   loadOpportunities, loadCensus, agentsByCategory, loadAgents,
   type CategorySlug,
 } from "@/lib/data";
@@ -95,14 +95,21 @@ function toolsFor(request: Request): Record<string, McpToolImpl> {
       const query = String(args.query ?? "").trim();
       if (!query) return text({ error: "query is required" }, true);
       const limit = clamp(args.limit, 10, 40);
+      const offset = Math.max(0, Math.min(10_000, Number(args.offset) || 0));
       const category = typeof args.category === "string" && args.category in CATEGORIES
         ? (args.category as CategorySlug)
         : null;
-      let hits = await searchAgents(query, limit);
-      if (category) hits = hits.filter((h) => classify(h.agent).category === category);
+      // Category filters in SQL, not after the page slice: a post-filter would
+      // return short pages while claiming the full limit, and paging past the
+      // cut would silently miss matching agents.
+      const paged = await searchAgentsPaged(query, { limit, offset, sort: "trusted" });
+      const hits = category
+        ? paged.hits.filter((h) => classify(h.agent).category === category)
+        : paged.hits;
       return text({
         query,
         result_count: hits.length,
+        total_matches: paged.total,
         ordering: "trust state first (VERIFIED, LISTED, DORMANT, SHADOWED), then relevance; never popularity",
         results: hits.map((h) => ({
           token_id: h.agent.token_id,

@@ -138,6 +138,15 @@ export const MCP_TOOLS: McpToolDef[] = [
           maximum: 40,
           default: 10,
         },
+        offset: {
+          type: "number",
+          description:
+            "Skip this many results to page through a larger match set " +
+            "(total_matches tells you how many exist; capped at 10000)",
+          minimum: 0,
+          maximum: 10000,
+          default: 0,
+        },
       },
       required: ["query"],
       additionalProperties: false,
@@ -147,6 +156,10 @@ export const MCP_TOOLS: McpToolDef[] = [
       properties: {
         query: { type: "string" },
         result_count: { type: "number" },
+        total_matches: {
+          type: "number",
+          description: "Size of the full match set - result_count is only the page returned",
+        },
         ordering: { type: "string" },
         results: {
           type: "array",
@@ -164,7 +177,7 @@ export const MCP_TOOLS: McpToolDef[] = [
           },
         },
       },
-      required: ["query", "result_count", "ordering", "results"],
+      required: ["query", "result_count", "total_matches", "ordering", "results"],
     },
   },
   {

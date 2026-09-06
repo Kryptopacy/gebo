@@ -1,4 +1,5 @@
-import { searchAgents, searchFacets, trustState, CATEGORIES, type CategorySlug } from "@/lib/data";
+import { searchAgentsPaged, searchFacets, trustState, CATEGORIES, type CategorySlug, SEARCH_TRUST_STATES } from "@/lib/data";
+import { parseSearchParams, totalPages, clampPage, offsetFor, hiddenByCap, pageHref, stateHref, sortHref, PAGE_SIZE } from "@/lib/search-page";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -8,8 +9,8 @@ export const metadata = { title: "Search agents — GEBO" };
  * Search.
  *
  * "Find an agent" is a judged criterion, and until this existed the only way in
- * was category browsing - a user who already knew what they wanted had nowhere
- * to type it.
+ * was category browsing - a user who already knew what they wanted had nowhere to
+ * type it.
  *
  * Results are ordered by trust state first and relevance second, never by
  * popularity. A highly relevant agent that fails a protocol handshake is worse
@@ -17,23 +18,42 @@ export const metadata = { title: "Search agents — GEBO" };
  * self-reinforcing: in the largest comparable marketplace, rating count
  * correlated 0.33-0.71 with its own usage while rating value correlated ~0 with
  * anything. Every hit states why it matched.
+ *
+ * The match count is the count of the FULL match set, not the page: this page
+ * once printed hits.length (capped at 60) as "N agents match", which made a
+ * 600-match query claim 60 - the exact quiet fabrication this product exists
+ * to prevent. Totals come from count(*) over() in the same query.
  */
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; state?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
-  const q = (sp.q ?? "").trim();
+  const raw = parseSearchParams(sp);
+  const { q, state, sort } = raw;
 
   // Sequential, not Promise.all: two concurrent queries means two pool
   // connections on a cold instance, and concurrent connection establishment
   // through the Supabase pooler stalls hard enough from the deploy region to
   // hang the page. One connection, two round trips, renders in ~2s.
-  const hits = q ? await searchAgents(q, 60) : [];
+  //
+  // Page 1 is fetched first to learn the total (needed to clamp the page and
+  // to render truthful counts); a valid page > 1 is then fetched with its
+  // offset. Two sequential round trips only for deep pages.
+  const empty = { hits: [], total: 0, byState: {} as Record<string, number> };
+  const first = q ? await searchAgentsPaged(q, { limit: PAGE_SIZE, state, sort }) : empty;
+  const page = clampPage(raw.page, first.total);
+  const paged = q && page > 1
+    ? await searchAgentsPaged(q, { limit: PAGE_SIZE, offset: offsetFor(page), state, sort })
+    : first;
+  const hits = paged.hits;
   const facets = q ? await searchFacets(q) : [];
 
-  const byState = (s: string) => hits.filter((h) => trustState(h.agent).state === s).length;
+  const pages = totalPages(first.total);
+  const hidden = hiddenByCap(first.total);
+  const cur = { q, page, state, sort };
+  const byState = (s: string) => first.byState[s] ?? 0;
 
   return (
     <>
@@ -98,13 +118,48 @@ export default async function SearchPage({
           </div>
 
           {q && (
-            <p className="sm t-3 mt-m" style={{ marginBottom: 0 }}>
-              {hits.length === 0
-                ? `Nothing matches "${q}".`
-                : `${hits.length} agent${hits.length === 1 ? "" : "s"} match "${q}" ` +
-                  `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
-                  `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
-            </p>
+            <div className="mt-m">
+              <p className="sm t-3" style={{ marginBottom: 10 }}>
+                {first.total === 0
+                  ? state
+                    ? `Nothing in state ${state} matches "${q}".`
+                    : `Nothing matches "${q}".`
+                  : `${first.total.toLocaleString()} agent${first.total === 1 ? "" : "s"} match "${q}" ` +
+                    `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
+                    `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
+              </p>
+              {first.total > 0 && (
+                <div className="inline-list" style={{ gap: 8 }}>
+                  <span className="xs t-4">State:</span>
+                  <a href={stateHref(cur, null)} className="chip chip-flat" style={{ fontSize: 11, borderColor: !state ? "var(--accent)" : "var(--rule)", color: !state ? "var(--accent)" : "var(--fg-3)" }}>
+                    All · {first.total.toLocaleString()}
+                  </a>
+                  {SEARCH_TRUST_STATES.map((s) => {
+                    const n = byState(s);
+                    if (!n) return null;
+                    const active = state === s;
+                    return (
+                      <a key={s} href={stateHref(cur, s)} className="chip chip-flat" style={{ fontSize: 11, borderColor: active ? "var(--accent)" : "var(--rule)", color: active ? "var(--accent)" : "var(--fg-3)" }}>
+                        {s} · {n.toLocaleString()}
+                      </a>
+                    );
+                  })}
+                  <span className="xs t-4" style={{ marginLeft: 12 }}>Order:</span>
+                  <a href={sortHref(cur, "trusted")} className="chip chip-flat" style={{ fontSize: 11, borderColor: sort !== "newest" ? "var(--accent)" : "var(--rule)", color: sort !== "newest" ? "var(--accent)" : "var(--fg-3)" }}>
+                    answers first
+                  </a>
+                  <a href={sortHref(cur, "newest")} className="chip chip-flat" style={{ fontSize: 11, borderColor: sort === "newest" ? "var(--accent)" : "var(--rule)", color: sort === "newest" ? "var(--accent)" : "var(--fg-3)" }}>
+                    newest first
+                  </a>
+                </div>
+              )}
+              {hidden > 0 && (
+                <p className="xs t-4 mt-s" style={{ marginBottom: 0, maxWidth: "74ch" }}>
+                  Showing the first {(pages * PAGE_SIZE).toLocaleString()} matches. {hidden.toLocaleString()} more
+                  exist but are not paged through - refine the query to reach them.
+                </p>
+              )}
+            </div>
           )}
         </div>
       </section>
@@ -179,10 +234,43 @@ export default async function SearchPage({
             </div>
 
             <p className="xs t-4 mt-m" style={{ maxWidth: "74ch" }}>
-              Ordered by whether the agent answers, then by relevance. Never by popularity:
+              Ordered by {sort === "newest" ? "registration (token id, newest first)" : "whether the agent answers, then by relevance"}. Never by popularity:
               usage counts are self-reinforcing and, where it has been measured, rating value
               carried no information about whether an agent worked.
             </p>
+
+            {pages > 1 && (
+              <nav aria-label="Search result pages" className="inline-list mt-m" style={{ gap: 8 }}>
+                {page > 1 && (
+                  <a href={pageHref(cur, page - 1)} className="chip chip-flat" style={{ fontSize: 11 }}>← previous</a>
+                )}
+                {Array.from({ length: pages }, (_, i) => i + 1)
+                  .filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 2)
+                  .map((n, i, arr) => (
+                    <span key={n} className="inline-list" style={{ gap: 8 }}>
+                      {i > 0 && n - arr[i - 1]! > 1 && <span className="xs t-4">…</span>}
+                      <a
+                        href={pageHref(cur, n)}
+                        aria-current={n === page ? "page" : undefined}
+                        className="chip chip-flat"
+                        style={{
+                          fontSize: 11,
+                          borderColor: n === page ? "var(--accent)" : "var(--rule)",
+                          color: n === page ? "var(--accent)" : "var(--fg-3)",
+                        }}
+                      >
+                        {n}
+                      </a>
+                    </span>
+                  ))}
+                {page < pages && (
+                  <a href={pageHref(cur, page + 1)} className="chip chip-flat" style={{ fontSize: 11 }}>next →</a>
+                )}
+                <span className="xs t-4">
+                  page {page} of {pages}
+                </span>
+              </nav>
+            )}
           </div>
         </section>
       )}
