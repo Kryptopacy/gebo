@@ -22,7 +22,7 @@ function arg(name: string, dflt: number): number {
 }
 
 const SLICE = arg("slice", 250);
-const MAX_MINUTES = arg("minutes", 240);
+const MAX_MINUTES = arg("minutes", 720);
 const ASC = process.argv.includes("--asc"); // chew the oldest backlog first instead
 
 const url = process.env.DATABASE_URL;
@@ -44,6 +44,7 @@ try {
     const out = await materializeSlice(sql, {
       slice: SLICE,
       timeBudgetMs: 100_000,
+      concurrency: 12,
       order: ASC ? "asc" : "desc",
     });
     batches++;
