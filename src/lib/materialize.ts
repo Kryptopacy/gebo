@@ -30,7 +30,6 @@ import type postgres from "postgres";
 export const CHAIN_ID = 56;
 const HOST_GAP_MS = 220;
 const MAX_LINT_DEFECTS = 20;
-const MAX_TOKEN_URI = 8000;
 
 type Sql = ReturnType<typeof postgres>;
 
@@ -61,7 +60,6 @@ export type BuiltAgent = {
     trust_reason: string;
     lint_usable: boolean;
     lint_defects: Defect[] | null;
-    registration_json: RegistrationFile;
   };
   endpoints: { chain_id: number; token_id: string; kind: string; url: string; version: string | null; host: string | null }[];
   operator: { key: string; kind: string; registrable_domain: string | null; label: string } | null;
@@ -86,7 +84,7 @@ function clean(v: unknown, max = 300): string | null {
  * immediately because no client can ever call them, matching the loader this
  * replaces. Trust is demoted, never fabricated (PRODUCT_SPEC §2).
  */
-export function buildAgentFromRegistration(c: Candidate, file: RegistrationFile, tokenUri: string | null): BuiltAgent {
+export function buildAgentFromRegistration(c: Candidate, file: RegistrationFile): BuiltAgent {
   const endpoints = endpointsFromRegistration(file).map((e) => {
     let host: string | null = null;
     try { host = new URL(e.url).hostname; } catch { /* unparseable URL, lint flags it */ }
@@ -141,7 +139,13 @@ export function buildAgentFromRegistration(c: Candidate, file: RegistrationFile,
       registry: REGISTRY,
       agent_id: `${CHAIN_ID}:${REGISTRY}:${c.token_id}`,
       owner: clean(c.owner, 42),
-      token_uri: clean(tokenUri ?? c.token_uri, MAX_TOKEN_URI),
+  // token_uri and registration_json are deliberately NOT stored: the census
+  // (registry_tokens) is the authoritative URI store after healing, agent
+  // rows are the product index, and the 500 MB free tier cannot hold 255k
+  // agents at ~1 KB of duplicated JSON each (measured 2026-09-06: 442 MB
+  // and climbing before the slim-down; nothing downstream reads either
+  // field from agents).
+      token_uri: null,
       uri_scheme: clean(c.uri_scheme, 12),
       registration_resolved: true,
       name: clean(file.name, 200),
@@ -154,7 +158,6 @@ export function buildAgentFromRegistration(c: Candidate, file: RegistrationFile,
       trust_reason: trustReason,
       lint_usable: callable,
       lint_defects: lintDefects.length ? lintDefects : null,
-      registration_json: file,
     },
     endpoints,
     operator,
@@ -288,9 +291,9 @@ export async function materializeSlice(
         }
       }
 
-      const res = await resolveRegistration(uri, 8000);
-      if (!res.ok) { skipped++; continue; }
-      built.push(buildAgentFromRegistration(c, res.file, uri));
+    const res = await resolveRegistration(uri, 8000);
+    if (!res.ok) { skipped++; continue; }
+    built.push(buildAgentFromRegistration(c, res.file));
     }
   }
 
@@ -312,11 +315,9 @@ export async function materializeSlice(
 
   if (built.length) {
     for (let i = 0; i < built.length; i += 200) {
-      // `as any`: RegistrationFile carries unknown[] fields (skills, domains)
-      // that postgres.js's JSONValue type cannot express, but they serialize.
+      // `as any` is gone: nothing json-shaped is stored per row any more.
       const chunk = built.slice(i, i + 200).map((b) => ({
         ...b.agent,
-        registration_json: sql.json(b.agent.registration_json as any),
         lint_defects: sql.json(b.agent.lint_defects ?? []),
       }));
       await sql`

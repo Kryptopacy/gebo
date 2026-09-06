@@ -1,4 +1,4 @@
-/**
+﻿/**
  * buildAgentFromRegistration is the pure mapping the materialize pipeline
  * runs for every new census row. Pinned here because it decides what a
  * freshly registered agent looks like on every surface: its name, its
@@ -23,7 +23,7 @@ describe("buildAgentFromRegistration", () => {
       active: true,
       supportedTrust: ["evidence-backed"],
       services: [{ name: "a2a", endpoint: "https://agent.example.org/a2a", version: "0.2" }],
-    }, CAND.token_uri);
+    });
 
     expect(b.agent.name).toBe("HealthGuard");
     expect(b.agent.description).toBe("watches loan positions");
@@ -45,7 +45,7 @@ describe("buildAgentFromRegistration", () => {
         { name: "web", endpoint: "https://termix.live/ui" },
         { name: "ignored-name", endpoint: "https://termix.live/other" },
       ],
-    }, CAND.token_uri);
+    });
 
     expect(b.endpoints.map((e) => e.kind)).toEqual(["a2a", "mcp", "web"]);
     expect(b.endpoints[0]).toMatchObject({ host: "a2a.termix.live", version: "0.3" });
@@ -58,7 +58,7 @@ describe("buildAgentFromRegistration", () => {
     const b = buildAgentFromRegistration(CAND, {
       name: "Broken",
       services: [{ name: "a2a", endpoint: "https://good.example.org/agents/{agentId}/card" }],
-    }, CAND.token_uri);
+    });
 
     expect(b.agent.trust_state).toBe("SHADOWED");
     expect(b.agent.trust_reason).toContain("unsubstituted template variable");
@@ -73,7 +73,7 @@ describe("buildAgentFromRegistration", () => {
         { name: "a2a", endpoint: "https://good.example.org/a2a" },
         { name: "web", endpoint: "https://bad.example.org/ui/{userId}" },
       ],
-    }, CAND.token_uri);
+    });
 
     // the a2a endpoint is clean, so the agent is callable and starts DORMANT
     expect(b.agent.trust_state).toBe("DORMANT");
@@ -81,7 +81,7 @@ describe("buildAgentFromRegistration", () => {
   });
 
   it("states the empty case legibly rather than as a bare failure", () => {
-    const b = buildAgentFromRegistration(CAND, { name: "NoServices" }, CAND.token_uri);
+    const b = buildAgentFromRegistration(CAND, { name: "NoServices" });
     expect(b.endpoints).toEqual([]);
     expect(b.agent.trust_state).toBe("DORMANT");
     expect(b.agent.trust_reason).toBe("declares no endpoint in its registration");
@@ -90,7 +90,7 @@ describe("buildAgentFromRegistration", () => {
   });
 
   it("never carries a null name through (candidates are pre-filtered, defence in depth)", () => {
-    const b = buildAgentFromRegistration(CAND, { name: "   " }, CAND.token_uri);
+    const b = buildAgentFromRegistration(CAND, { name: "   " });
     expect(b.agent.name).toBeNull();
   });
 });
