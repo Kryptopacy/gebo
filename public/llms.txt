@@ -4,7 +4,7 @@
 
 Agent-consumable surfaces, all live on this origin:
 
-- Browser-native WebMCP: imperative tools registered via document.modelContext (search-agents, open-agent-card, open-hire-flow, read-agent, get-registry-stats, get-verified-reviews) and declarative form tools (toolname/tooldescription on the search and authority forms). Inert in browsers without the WebMCP API.
+- Browser-native WebMCP: imperative tools registered via document.modelContext, derived one-to-one from the MCP server's read tools (search_agents, get_agent, list_categories, get_opportunities, get_registry_stats, get_track_record, get_verified_reviews) plus two navigation tools (open_agent_card, open_hire_flow). Answer tools return data and never navigate; navigation is explicit and isolated. Declarative form tools (toolname/tooldescription) on the search and authority forms. Inert in browsers without the WebMCP API.
 - MCP server (Streamable HTTP, JSON-RPC): POST https://gebo-bsc.vercel.app/mcp - tools: search_agents, get_agent, list_categories, get_opportunities, get_registry_stats, get_track_record, get_verified_reviews. Discovery manifest: /.well-known/mcp
 - Verified reviews API: POST /api/reviews (wallet-signed comment; the server verifies on chain that an APEX escrow job reached Completed with the signer as client and the listed agent as provider) and GET /api/reviews?token_id=... (comments with their on-chain anchors). Agents and humans use the same gate.
 - A2A agent card (reference HealthGuard agent): /api/agent/health/card

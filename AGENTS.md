@@ -249,11 +249,20 @@ pinned in one place:
   over the same data layer, plus product knowledge in its system prompt. It
   must never quote registry numbers from memory; a stale number spoken
   confidently is worse than no assistant. Read-only by the same law as MCP.
-- **Browser WebMCP** (`app/WebMcpTools.tsx`) — a navigation-and-read subset
-  registered on `document.modelContext` (search-agents, open-agent-card,
-  open-hire-flow, read-agent, get-registry-stats, get-verified-reviews),
-  proxying reads to this origin's own /mcp so the two surfaces cannot
-  disagree. Inert without the WebMCP API. Never signs.
+- **Browser WebMCP** (`app/WebMcpTools.tsx` + `src/lib/webmcp.ts`) — the full
+  MCP read set (all seven tools, names and schemas derived from `MCP_TOOLS`,
+  so this surface cannot drift from the server surface) plus two explicit
+  navigation tools (`open_agent_card`, `open_hire_flow`), registered on
+  `document.modelContext`. Answer tools return data and **never navigate**;
+  only the `open_*` tools touch `window.location`, and their descriptions say
+  so. Data tools execute by POSTing to this origin's own `/mcp`, so the two
+  surfaces are literally the same reads. Declarative form tools
+  (`toolname`/`tooldescription`) use snake_case names. Inert without the
+  WebMCP API. Never signs. `tests/webmcp.test.ts` pins the tool list, the
+  constraints, the URLs and the single `window.location` assignment. The
+  webmcp.com scorecard (graded B on 2026-09-02, one tool visible, navigating
+  mid-execute) is the failure that produced these rules — do not reintroduce
+  a navigating answer tool to "improve UX"; add an `open_*` tool instead.
 - **Write surfaces for agents** (the only ones): `POST /api/reviews`
   (wallet-signed, completed-escrow-gated — same gate as humans) and the x402
   paid read at `/api/agent/health/paid`. Everything that moves money or

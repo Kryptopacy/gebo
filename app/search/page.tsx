@@ -47,7 +47,7 @@ export default async function SearchPage({
             className="lookup"
             role="search"
             {...({
-              toolname: "search-agents",
+              toolname: "search_agents",
               tooldescription:
                 "Search GEBO's registry of BNB Smart Chain agents by capability. Results state why each agent matched and are ordered by trust state, then relevance - never popularity.",
               toolautosubmit: "true",

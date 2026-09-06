@@ -94,7 +94,11 @@ function toolsFor(request: Request): Record<string, McpToolImpl> {
       const query = String(args.query ?? "").trim();
       if (!query) return text({ error: "query is required" }, true);
       const limit = clamp(args.limit, 10, 40);
-      const hits = await searchAgents(query, limit);
+      const category = typeof args.category === "string" && args.category in CATEGORIES
+        ? (args.category as CategorySlug)
+        : null;
+      let hits = await searchAgents(query, limit);
+      if (category) hits = hits.filter((h) => classify(h.agent).category === category);
       return text({
         query,
         result_count: hits.length,

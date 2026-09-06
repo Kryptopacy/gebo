@@ -133,7 +133,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               className="masthead-search"
               role="search"
               {...({
-                toolname: "search-agents",
+                toolname: "search_agents",
                 tooldescription:
                   "Search GEBO's registry of BNB Smart Chain agents by capability. Navigates to results ordered by trust state, then relevance.",
                 toolautosubmit: "true",

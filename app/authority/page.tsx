@@ -142,7 +142,7 @@ export default async function AuthorityPage({
             action="/authority"
             className="lookup mt-l"
             {...({
-              toolname: "check-wallet-authority",
+              toolname: "check_wallet_authority",
               tooldescription:
                 "Read which scoped session keys a BNB Chain wallet has registered in the Altana Keystore, what each permits (target contracts, spend caps, expiry), and whether it is still valid. The same query runs from anywhere; it covers keystore sessions only and the page states what it cannot see.",
               toolautosubmit: "true",

@@ -91,6 +91,20 @@ export type McpToolResult = {
 
 export type McpToolImpl = (args: Record<string, unknown>) => Promise<McpToolResult>;
 
+/**
+ * Category slugs the search tool accepts. Duplicated from the keys of
+ * CATEGORIES in src/lib/data.ts rather than imported, so this module stays
+ * free of the data layer (its whole point); tests/webmcp.test.ts pins the
+ * two lists together so drift fails CI instead of shipping.
+ */
+export const SEARCH_CATEGORIES: string[] = [
+  "rebalancing", "grid", "yield", "health",
+  "trading", "research", "payments", "social", "infra",
+];
+
+/** Opportunities are indexed for the four judged categories only. */
+export const OPPORTUNITY_CATEGORIES: string[] = ["rebalancing", "grid", "yield", "health"];
+
 /** Tool metadata. Implementations are injected by the route. */
 export const MCP_TOOLS: McpToolDef[] = [
   {
@@ -102,8 +116,26 @@ export const MCP_TOOLS: McpToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Free-text capability query" },
-        limit: { type: "number", description: "Max hits (default 10, capped at 40)" },
+        query: {
+          type: "string",
+          description: "Free-text capability query",
+          minLength: 1,
+          maxLength: 200,
+        },
+        category: {
+          type: "string",
+          description:
+            "Optional category filter. Judged: rebalancing, grid, yield, health. " +
+            "Adjacent: trading, research, payments, social, infra. Omit for all.",
+          enum: [...SEARCH_CATEGORIES],
+        },
+        limit: {
+          type: "number",
+          description: "Max hits (default 10, capped at 40)",
+          minimum: 1,
+          maximum: 40,
+          default: 10,
+        },
       },
       required: ["query"],
     },
@@ -141,7 +173,11 @@ export const MCP_TOOLS: McpToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        token_id: { type: "number", description: "ERC-8004 token id" },
+        token_id: {
+          type: "string",
+          description: "ERC-8004 token id, digits only, e.g. 259573",
+          pattern: "^[0-9]{1,18}$",
+        },
       },
       required: ["token_id"],
     },
@@ -208,8 +244,15 @@ export const MCP_TOOLS: McpToolDef[] = [
         category: {
           type: "string",
           description: "One of: rebalancing, grid, yield, health. Omit for all.",
+          enum: [...OPPORTUNITY_CATEGORIES],
         },
-        limit: { type: "number", description: "Max rows (default 15, capped at 50)" },
+        limit: {
+          type: "number",
+          description: "Max rows (default 15, capped at 50)",
+          minimum: 1,
+          maximum: 50,
+          default: 15,
+        },
       },
     },
     outputSchema: {
@@ -277,7 +320,11 @@ export const MCP_TOOLS: McpToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        token_id: { type: "number", description: "ERC-8004 token id" },
+        token_id: {
+          type: "string",
+          description: "ERC-8004 token id, digits only, e.g. 259573",
+          pattern: "^[0-9]{1,18}$",
+        },
       },
       required: ["token_id"],
     },
@@ -311,7 +358,11 @@ export const MCP_TOOLS: McpToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        token_id: { type: "number", description: "ERC-8004 token id" },
+        token_id: {
+          type: "string",
+          description: "ERC-8004 token id, digits only, e.g. 259573",
+          pattern: "^[0-9]{1,18}$",
+        },
       },
       required: ["token_id"],
     },
