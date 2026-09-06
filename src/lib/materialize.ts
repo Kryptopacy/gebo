@@ -238,6 +238,9 @@ export async function materializeSlice(
   // Heal token_uri in the census itself: the pre-cron sync script resolved
   // 188k registrations without storing the URI, and a census that cannot say
   // where an agent's registration lives forces every consumer back to chain.
+  // Only NULL uris are healed — rows that already carry a (possibly
+  // truncated) URI are owned by the sync cron, and touching them here only
+  // adds lock contention on the pooler.
   if (chainRows?.length) {
     const withUri = chainRows.filter((r) => r.tokenURI);
     if (withUri.length) {
@@ -248,7 +251,7 @@ export async function materializeSlice(
           token_uri = v.uri,
           checked_at = now()
         from unnest(${sql.array(ids)}::bigint[], ${sql.array(uris)}::text[]) as v(token_id, uri)
-        where r.token_id = v.token_id and r.token_uri is distinct from v.uri`;
+        where r.token_id = v.token_id and r.token_uri is null and v.uri is not null`;
     }
   }
 

@@ -41,12 +41,31 @@ try {
       break;
     }
 
-    const out = await materializeSlice(sql, {
-      slice: SLICE,
-      timeBudgetMs: 100_000,
-      concurrency: 12,
-      order: ASC ? "asc" : "desc",
-    });
+    // One batch failing must not end the run: against the shared Supabase
+    // pooler, statements occasionally cancel ("statement timeout") under
+    // concurrent cron load. A failed batch writes nothing (statement-level
+    // abort) and the next re-selects the same rows, so retrying is correct.
+    let out: Awaited<ReturnType<typeof materializeSlice>> | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 3 && !out; attempt++) {
+      try {
+        out = await materializeSlice(sql, {
+          slice: SLICE,
+          timeBudgetMs: 100_000,
+          concurrency: 12,
+          order: ASC ? "asc" : "desc",
+        });
+      } catch (e) {
+        lastErr = e;
+        console.log(`batch failed (attempt ${attempt}): ${String((e as any)?.message ?? e).slice(0, 140)}`);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 20_000));
+      }
+    }
+    if (!out) {
+      console.error(`\nthree consecutive batch failures, giving up: ${String((lastErr as any)?.message ?? lastErr)}`);
+      process.exitCode = 1;
+      break;
+    }
     batches++;
     materialized += out.materialized;
     skipped += out.skippedUnresolvable;
