@@ -44,6 +44,32 @@ vanity prefixes found nothing; `0x8004b169…` has no code. Both addresses came 
 the curated list at `github.com/erc-8004/erc-8004-contracts` and were then verified
 on chain. Do not guess an `0x8004…` address.
 
+### The frozen product layer (found 2026-09-06)
+
+Search, categories, cards, the prober and every agent-consumable surface read
+`agents`/`agent_endpoints` — never `registry_tokens`. Until 2026-09-06 those
+tables were only populated by hand-run loaders (load-db.ts, load-census.ts)
+and had frozen at token #269686 while the census ran on to #336,715: every
+agent registered after that — an entire Binance Agent OS mint wave — was
+censused, resolved, and invisible. An agent launched through Binance Agent OS
+did not appear in search; that report is how the gap was found.
+
+Fixed by `/api/cron/materialize` (`gebo-materialize`, every 2 min, migration
+0019) plus `scripts/backfill-agents.ts`, both over `src/lib/materialize.ts`:
+newest-first, tokenURI re-read from chain (sync truncates the stored copy at
+500 chars, and the pre-cron `sync-registry.ts` resolved 188k registrations
+without storing any URI at all — the chain read heals both), DORMANT start
+with SHADOWED only when every protocol endpoint is fatally linted, operators
+upserted BEFORE agents (foreign key). `npm run readiness` gates the
+census-vs-agents high-water lag so this failure is measured, not remembered.
+
+**Deploys are manual.** Pushing to master does NOT deploy: the materialize
+route 404'd for an hour after its push while every other cron kept working
+(verify via pg_net response codes — a cron job "succeeded" only means pg_net
+*queued* the request, a 404 hides in `net._http_response`). DB-side changes
+(migrations, backfills) land immediately; route code does not. Deploy through
+the project's own flow before expecting the live site to change.
+
 ### The Altana session shape
 
 This cost the most time in the whole project. `NoSpendPermissions` was thrown
