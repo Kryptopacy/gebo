@@ -44,6 +44,19 @@ vanity prefixes found nothing; `0x8004b169…` has no code. Both addresses came 
 the curated list at `github.com/erc-8004/erc-8004-contracts` and were then verified
 on chain. Do not guess an `0x8004…` address.
 
+**The transaction pooler silently drops VACUUM.** `VACUUM FULL` through the
+Supavisor transaction pooler (port 6543) reports success and does nothing —
+`last_vacuum` stays "never" and no space is reclaimed. Same failure shape as
+pg_net's "succeeded means queued". Reclaim must run through the session
+pooler (port 5432, `DATABASE_URL` with the port swapped) — a one-off script
+is exactly what that connection is for. Found 2026-09-06 when the database
+hit 442 MB of the 500 MB free tier: `probes_raw` had 18 days of rows because
+its designed 48h rotation never existed in code (now `gebo-probes-rotate`,
+migration 0021), and materialize stored ~1 KB of `registration_json` +
+`token_uri` per agent that nothing reads (slimmed; `registry_tokens` is the
+authoritative URI store). After surgery: 201 MB. Free-tier sizing is now a
+live constraint — check `pg_database_size` before any per-row payload.
+
 ### The frozen product layer (found 2026-09-06)
 
 Search, categories, cards, the prober and every agent-consumable surface read
