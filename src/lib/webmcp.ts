@@ -63,6 +63,7 @@ export type WebMcpNavigationTool = {
     type: "object";
     properties: Record<string, unknown>;
     required?: string[];
+    additionalProperties?: false;
   };
   annotations: WebMcpAnnotation;
   /** Absolute path this tool navigates to. */
@@ -124,6 +125,7 @@ export const WEBMCP_NAV_TOOLS: WebMcpNavigationTool[] = [
         },
       },
       required: ["token_id"],
+      additionalProperties: false,
     },
     annotations: { readOnlyHint: false, consequentialHint: false },
     url: (args) => `/a/${String(args.token_id ?? "").replace(/[^0-9]/g, "x") || "0"}`,
@@ -146,6 +148,7 @@ export const WEBMCP_NAV_TOOLS: WebMcpNavigationTool[] = [
         },
       },
       required: ["token_id"],
+      additionalProperties: false,
     },
     annotations: { readOnlyHint: false, consequentialHint: false },
     url: (args) => `/a/${String(args.token_id ?? "").replace(/[^0-9]/g, "x") || "0"}/hire`,

@@ -137,22 +137,17 @@ export default async function AuthorityPage({
             </p>
           </div>
 
+          {/* No toolname here, deliberately: the imperative check_wallet_authority
+              tool (registered by the parse-time bootstrap on every page) carries
+              the full input schema - wallet pattern, chain enum - which Chrome's
+              declarative synthesis cannot (it drops pattern attributes). A
+              declarative twin would also collide on the tool name. The form
+              itself stays for humans, with native validation. */}
           <form
             method="get"
             action="/authority"
             className="lookup mt-l"
-            {...({
-              toolname: "check_wallet_authority",
-              tooldescription:
-                "Read which scoped session keys a BNB Chain wallet has registered in the Altana Keystore, what each permits (target contracts, spend caps, expiry), and whether it is still valid. The same query runs from anywhere; it covers keystore sessions only and the page states what it cannot see. The result lists each session key with its targets, spend caps, expiry and validity, plus an explicit 'what this check does not cover' section.",
-              toolautosubmit: "true",
-            } as Record<string, string>)}
           >
-            {/* required + pattern feed the declarative schema synthesis: an
-                unconstrained wallet param was the scorecard's "no regex or
-                required constraints" finding. The server still re-validates
-                with isAddress - the HTML pattern is for agents and humans,
-                not a security boundary. */}
             <input
               type="text"
               name="wallet"
@@ -166,18 +161,12 @@ export default async function AuthorityPage({
               defaultValue={raw}
               aria-label="Wallet address"
               className="lookup-input num"
-              {...({
-                toolparamdescription: "The BNB Chain address to check, e.g. 0x688Fe953e20225e0542ED11a11C708437e71d40e",
-              } as Record<string, string>)}
             />
             <select
               name="chain"
               defaultValue={String(chainId)}
               aria-label="Network"
               className="lookup-select"
-              {...({
-                toolparamdescription: "Which keystore to read: 56 for BNB Smart Chain, 97 for BNB Testnet",
-              } as Record<string, string>)}
             >
               <option value="56">BNB Smart Chain</option>
               <option value="97">BNB Testnet</option>

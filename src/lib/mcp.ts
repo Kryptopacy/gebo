@@ -13,10 +13,10 @@
  *   1. this server, at https://gebo-bsc.vercel.app/mcp, usable by any MCP
  *      client (Claude, Cursor, VS Code) right now;
  *   2. discovery via /.well-known/mcp(.json) and /llms.txt;
- *   3. tool definitions that map one-to-one onto Chrome's WebMCP declarative
- *      forms when that API ships stable - the browser-native part is still
- *      behind a flag/origin trial, so building against it now would be
- *      building against a moving target.
+ *   3. tool definitions that serialize one-to-one into the browser WebMCP
+ *      bootstrap (src/lib/webmcp-bootstrap.ts) - the /mcp server and the
+ *      in-page imperative surface are literally the same reads, derived
+ *      from this list, so they cannot drift.
  *
  * Design law L2 follows the tools out the door: every response carries its
  * window and caveats, because a bare number from an MCP tool is the same
@@ -77,6 +77,8 @@ export type McpToolDef = {
     type: "object";
     properties: Record<string, unknown>;
     required?: string[];
+    /** Kit convention and agent-safety: no undeclared inputs. */
+    additionalProperties?: false;
   };
   /** Declared for every tool: structured results are part of the contract. */
   outputSchema: McpOutputSchema;
@@ -138,6 +140,7 @@ export const MCP_TOOLS: McpToolDef[] = [
         },
       },
       required: ["query"],
+      additionalProperties: false,
     },
     outputSchema: {
       type: "object",
@@ -180,6 +183,7 @@ export const MCP_TOOLS: McpToolDef[] = [
         },
       },
       required: ["token_id"],
+      additionalProperties: false,
     },
     outputSchema: {
       type: "object",
@@ -208,7 +212,7 @@ export const MCP_TOOLS: McpToolDef[] = [
     description:
       "The job categories GEBO audits agents into: four judged categories (fixed by the BNB rubric) " +
       "and the adjacent categories detected from verified capability text.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
     outputSchema: {
       type: "object",
       properties: {
@@ -254,6 +258,7 @@ export const MCP_TOOLS: McpToolDef[] = [
           default: 15,
         },
       },
+      additionalProperties: false,
     },
     outputSchema: {
       type: "object",
@@ -288,7 +293,7 @@ export const MCP_TOOLS: McpToolDef[] = [
       "Registry census: agents indexed, distinct owners, endpoint operators, share held by the top " +
       "operators, and how many agents answer a live protocol handshake. Carries read-window qualifiers " +
       "and the single-region probing caveat.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
     outputSchema: {
       type: "object",
       properties: {
@@ -327,6 +332,7 @@ export const MCP_TOOLS: McpToolDef[] = [
         },
       },
       required: ["token_id"],
+      additionalProperties: false,
     },
     outputSchema: {
       type: "object",
@@ -365,6 +371,7 @@ export const MCP_TOOLS: McpToolDef[] = [
         },
       },
       required: ["token_id"],
+      additionalProperties: false,
     },
     outputSchema: {
       type: "object",
@@ -389,6 +396,61 @@ export const MCP_TOOLS: McpToolDef[] = [
         url: { type: "string" },
       },
       required: ["token_id", "note"],
+    },
+  },
+  {
+    name: "check_wallet_authority",
+    description:
+      "Read which scoped session keys a BNB Chain wallet has registered in the Altana Keystore, and " +
+      "whether each key is still valid on chain (revocation drops keys from the registry immediately, " +
+      "expiry does not - so each key is checked individually). Use when the user asks what an agent " +
+      "may do to a wallet, what sessions exist, or as authority context before a hire. This reads one " +
+      "authority system: keystore-registered sessions only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        wallet: {
+          type: "string",
+          description: "The BNB Chain address to check, e.g. 0x688Fe953e20225e0542ED11a11C708437e71d40e",
+          pattern: "^0x[0-9a-fA-F]{40}$",
+        },
+        chain: {
+          type: "number",
+          description: "56 for BNB Smart Chain (default), 97 for BNB Testnet",
+          enum: [56, 97],
+          default: 56,
+        },
+      },
+      required: ["wallet"],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        wallet: { type: "string" },
+        chain: { type: "number" },
+        /** Explicit when the keystore could not be read: never render as zero. */
+        unavailable: { type: "string" },
+        keys_registered_ever: { type: "number" },
+        active_keys: { type: "number" },
+        session_keys: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              key_id: { type: "string" },
+              valid: { type: "boolean", description: "live on-chain validity; false = expired or revoked" },
+              key_id_matches_public_key: { type: "boolean" },
+            },
+            required: ["key_id", "valid", "key_id_matches_public_key"],
+          },
+        },
+        block_number: { type: "string" },
+        read_at: { type: "string" },
+        /** Invariant 3 travels with the data: what this check cannot see. */
+        not_covered: { type: "array", items: { type: "string" } },
+      },
+      required: ["wallet", "chain", "not_covered"],
     },
   },
 ];

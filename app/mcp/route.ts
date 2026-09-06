@@ -22,6 +22,7 @@ import {
 } from "@/lib/data";
 import { attestationSummary } from "@/lib/attestations";
 import { reviewsFor } from "@/lib/reviews";
+import { readAuthority, isAddress, type WalletAuthority } from "@/lib/keystore";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -254,6 +255,59 @@ function toolsFor(request: Request): Record<string, McpToolImpl> {
           created_at: r.createdAt,
         })),
         url: `${base}/a/${id}`,
+      });
+    },
+
+    "check_wallet_authority": async (args) => {
+      const wallet = String(args.wallet ?? "").trim();
+      if (!isAddress(wallet)) return text({ error: "wallet must be a 0x-prefixed 42-character address" }, true);
+      const chain = args.chain === 97 ? 97 : 56;
+      // The caveat list is part of the payload, not an afterthought: this
+      // reads ONE authority system, and invariant 3 says the scope travels
+      // with the claim wherever it is consumed.
+      const notCovered = [
+        "sessions registered outside the Altana Keystore (unregistered keys, Binance Agentic Wallet)",
+        "plain ERC-20 approvals and permit signatures",
+        "the permission set itself - the keystore exposes no getter for metadata, validator or expiry, so third-party allowlists and spend caps are not readable from the registry",
+      ];
+      let a: WalletAuthority;
+      try {
+        // isAddress validated it above; the cast only satisfies the Address type.
+        a = await readAuthority(wallet as Parameters<typeof readAuthority>[0], chain);
+      } catch (e) {
+        return text({
+          wallet,
+          chain,
+          unavailable: `Keystore could not be read (${String((e as Error)?.message ?? e)}). Unmeasured, not zero.`,
+          not_covered: notCovered,
+        });
+      }
+      if (a.error) {
+        return text({
+          wallet,
+          chain,
+          unavailable: `Keystore could not be read (${a.error}). Unmeasured, not zero.`,
+          not_covered: notCovered,
+        });
+      }
+      return text({
+        wallet,
+        chain,
+        keys_registered_ever: a.keys.length,
+        active_keys: a.activeKeys,
+        session_keys: a.keys.map((k) => ({
+          key_id: k.keyId,
+          valid: k.valid,
+          key_id_matches_public_key: k.keyIdMatchesPublicKey,
+        })),
+        block_number: a.blockNumber,
+        read_at: a.readAt,
+        not_covered: a.keys.length === 0
+          ? [
+              "no session key has ever been registered in the Altana Keystore for this wallet - this says nothing about authority held through any other route",
+              ...notCovered.slice(1),
+            ]
+          : notCovered,
       });
     },
   };

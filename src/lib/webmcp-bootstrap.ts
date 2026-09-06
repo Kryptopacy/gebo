@@ -51,9 +51,12 @@ export function webmcpBootstrapScript(): string {
       : { mcpTool: t.mcpTool }),
   }));
 
-  return `(function(){
+  return `(async function(){
   if (typeof document.modelContext === "undefined" || !document.modelContext.registerTool) return;
   var TOOLS = ${JSON.stringify(tools)};
+  function warn(name, e) {
+    console.warn("[webmcp-bootstrap] registerTool(" + name + ") failed:", e);
+  }
   function mcpCall(name, args) {
     return fetch("/mcp", {
       method: "POST",
@@ -67,11 +70,8 @@ export function webmcpBootstrapScript(): string {
       return "MCP call failed - the data layer could not be reached. Unmeasured, not zero.";
     });
   }
-  var route = {
-    answer: function (t) {
-      return function (args) { return mcpCall(t.mcpTool, args || {}); };
-    },
-    act: function (t) {
+  function execute(t) {
+    if (t.kind === "act") {
       return function (args) {
         var id = String((args || {}).token_id || "").replace(/[^0-9]/g, "");
         if (!id) return "token_id must be digits, e.g. 259573";
@@ -79,23 +79,33 @@ export function webmcpBootstrapScript(): string {
         window.location.href = url;
         return "Navigating this page to " + url + ". The user now sees what you see. Nothing was signed, funded or approved - the wallet steps stay human.";
       };
-    },
-  };
+    }
+    return function (args) { return mcpCall(t.mcpTool, args || {}); };
+  }
+  // SEQUENTIAL AND AWAITED, never a fire-and-forget burst. The first
+  // registerTool can trigger the tools permission check in some Chrome
+  // configurations, and calls fired while that check is pending are
+  // rejected - a burst-fire loop registered exactly ONE tool (the first)
+  // in the webmcp.com scanner's browser, across four scans, while working
+  // fine in a testing-flag Chrome where permission is pre-granted. Each
+  // registration is also raced against a timeout so a hung call cannot
+  // block the rest of the surface.
   for (var i = 0; i < TOOLS.length; i++) {
     var t = TOOLS[i];
+    var name = t.name;
     try {
-      document.modelContext.registerTool({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-        annotations: t.annotations,
-        execute: route[t.kind](t),
-      }).catch(function (e) {
-        console.warn("[webmcp-bootstrap] registerTool failed:", e);
-      });
+      await Promise.race([
+        document.modelContext.registerTool({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+          annotations: t.annotations,
+          execute: execute(t),
+        }).catch(function (e) { warn(name, e); }),
+        new Promise(function (r) { setTimeout(r, 4000); }),
+      ]);
     } catch (e) {
-      console.warn("[webmcp-bootstrap] registerTool threw:", e);
-      return;
+      warn(name, e);
     }
   }
 })();`;

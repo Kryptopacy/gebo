@@ -41,10 +41,11 @@ export default async function SearchPage({
         <div className="shell">
           <p className="crumb"><a href="/">GEBO</a> <span className="t-4">/</span> Search</p>
 
-          {/* No toolname here on purpose: the masthead form on this same page
-              already exposes open_search_results, the imperative search_agents
-              returns the data, and a second declarative form would collide
-              with the masthead's name (Chrome rejects duplicate tool names). */}
+          {/* No declarative tool attributes anywhere on this site: the
+              imperative surface (parse-time bootstrap) carries the full
+              constrained schemas, and a declarative twin would collide on
+              the name or read as overlapping intent. The form stays for
+              humans. */}
           <form
             method="get"
             action="/search"
@@ -62,10 +63,6 @@ export default async function SearchPage({
                 autoComplete="off"
                 spellCheck={false}
                 className="lookup-input"
-                {...({
-                  toolparamdescription:
-                    "What the agent should do, e.g. 'rebalance liquidity', 'watch my loan', 'x402 payments'",
-                } as Record<string, string>)}
               />
             <button type="submit" className="cta">Search</button>
           </form>

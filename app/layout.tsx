@@ -133,27 +133,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
               <span className="wordmark-text">GEBO</span>
             </a>
+            {/* No toolname here, deliberately. The imperative surface
+                (parse-time bootstrap in <head>) registers search_agents -
+                a declarative twin would either collide on the name
+                (Chrome: InvalidStateError, duplicate tool name) or read as
+                overlapping intent to tool reviewers, and Chrome's
+                declarative synthesis drops pattern/maxLength constraints
+                anyway. The form itself stays for humans. */}
             <form
               method="get"
               action="/search"
               className="masthead-search"
               role="search"
-              {...({
-                // open_* because this form NAVIGATES (act semantics); the
-                // data-returning search_agents is the imperative tool. Same
-                // name for both threw InvalidStateError: Duplicate tool name
-                // on every load, leaving the thin declarative schema as the
-                // only survivor - caught live via the registerTool warning.
-                toolname: "open_search_results",
-                tooldescription:
-                  "Navigate this page to GEBO's search results for a capability query, ordered by trust state, then relevance - never popularity. Use search_agents instead when the caller wants the data without moving the page.",
-                toolautosubmit: "true",
-              } as Record<string, string>)}
             >
-              {/* required + maxLength mirror the search_agents schema on the
-                  /mcp server: the declarative synthesis turns them into
-                  schema constraints, and a form tool without bounds is the
-                  "loose input constraints" finding all over again. */}
               <input
                 type="search"
                 name="q"
@@ -163,10 +155,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 aria-label="Search agents by capability"
                 autoComplete="off"
                 spellCheck={false}
-                {...({
-                  toolparamdescription:
-                    "What the agent should do, e.g. 'rebalance liquidity', 'watch my loan', 'x402 payments'",
-                } as Record<string, string>)}
               />
             </form>
             <nav aria-label="Primary Navigation">

@@ -50,6 +50,7 @@ describe("coverage: the browser surface mirrors the MCP server", () => {
       "open_agent_card",
       "open_hire_flow",
     ]);
+    expect(WEBMCP_TOOL_NAMES).toContain("check_wallet_authority");
   });
 
   it("derives each data tool from the MCP tool of the same name", () => {
@@ -108,6 +109,27 @@ describe("input constraints", () => {
     }
   });
 
+  it("check_wallet_authority carries the 0x wallet regex and chain enum", () => {
+    const t = WEBMCP_TOOLS.find((m) => m.name === "check_wallet_authority");
+    expect(t).toBeDefined();
+    const p = t!.inputSchema.properties as Record<string, any>;
+    expect(p.wallet.pattern).toBe("^0x[0-9a-fA-F]{40}$");
+    expect(p.chain.enum).toEqual([56, 97]);
+    expect(p.chain.default).toBe(56);
+    expect(t!.inputSchema.required).toEqual(["wallet"]);
+  });
+
+  it("every tool inputSchema forbids undeclared properties", () => {
+    // Kit convention (webmcp-kit): additionalProperties: false on every
+    // input schema. Loose schemas were the "weak input constraints" finding.
+    for (const t of WEBMCP_TOOLS) {
+      expect(t.inputSchema.additionalProperties).toBe(false);
+    }
+    for (const t of MCP_TOOLS) {
+      expect(t.inputSchema.additionalProperties).toBe(false);
+    }
+  });
+
   it("get_opportunities has a category enum and limit bounds", () => {
     const t = MCP_TOOLS.find((m) => m.name === "get_opportunities")!;
     const p = t.inputSchema.properties as Record<string, any>;
@@ -150,7 +172,7 @@ describe("parse-time bootstrap", () => {
   // scans scored only the declarative forms because the useEffect registrar
   // fired seconds later. The bootstrap must serialize every tool, guard on
   // modelContext presence, and log (not swallow) registration failures.
-  it("serializes all nine tools with descriptions carrying Returns: lines", () => {
+  it("serializes every tool with descriptions carrying Returns: lines", () => {
     const src = webmcpBootstrapScript();
     expect(src).toContain("var TOOLS = ");
     for (const t of WEBMCP_TOOLS) {
@@ -162,12 +184,27 @@ describe("parse-time bootstrap", () => {
 
   it("registers immediately, feature-detects, and warns on failure", () => {
     const src = webmcpBootstrapScript();
-    // Runs at parse time: an IIFE, not a deferred event handler.
-    expect(src.trim().startsWith("(function(){")).toBe(true);
+    // Runs at parse time: an async IIFE, not a deferred event handler.
+    expect(src.trim().startsWith("(async function(){")).toBe(true);
     // Feature-detect before touching modelContext.
     expect(src).toContain('typeof document.modelContext === "undefined"');
     // Failures are logged, never swallowed silently.
     expect(src).toContain("[webmcp-bootstrap]");
+  });
+
+  it("registers sequentially and awaited, never as a fire-and-forget burst", () => {
+    // The permission-race lesson from four webmcp.com scans: a burst of
+    // registerTool calls registers exactly ONE tool (the first) in any
+    // Chrome where the first call triggers the tools permission check,
+    // because the rest fire while that check is pending. Sequential +
+    // awaited + a per-call timeout is the only pattern that survives every
+    // Chrome configuration.
+    const src = webmcpBootstrapScript();
+    expect(src).toContain("await Promise.race");
+    expect(src).toContain("setTimeout(r, 4000)");
+    // The loop must await each registration before starting the next.
+    const loop = src.match(/for \(var i[\s\S]{0,2000}?TOOLS\.length; i\+\+\) \{[\s\S]*?\n  \}/);
+    expect(loop?.[0]).toContain("await");
   });
 
   it("data tools execute by POSTing to this origin's own /mcp and nowhere else", () => {
@@ -181,63 +218,33 @@ describe("parse-time bootstrap", () => {
   });
 });
 
-describe("declarative form tools stay snake_case", () => {
-  it("layout, search and authority forms use snake_case toolnames", async () => {
-    const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
-    const layout = read("../app/layout.tsx");
-    const search = read("../app/search/page.tsx");
-    const authority = read("../app/authority/page.tsx");
-    for (const src of [layout, search, authority]) {
-      const names = [...src.matchAll(/toolname: "([^"]+)"/g)].map((m) => m[1]);
-      for (const n of names) expect(n).toMatch(SNAKE);
-    }
-    expect(layout).toContain('toolname: "open_search_results"');
-    // The /search form deliberately carries no toolname: the masthead on the
-    // same page already registers open_search_results and Chrome rejects
-    // duplicate names with InvalidStateError.
-    expect(search).not.toContain("toolname:");
-    expect(authority).toContain('toolname: "check_wallet_authority"');
-  });
-});
-
-describe("declarative names never collide with imperative tool names", () => {
-  // Chrome rejects registerTool for a name a declarative form already took
-  // ("InvalidStateError: Duplicate tool name"), silently downgrading the
-  // surface to the thin declarative schema. Found live in a flagged Chrome
-  // on 2026-09-06 - the log line "[webmcp] registerTool(search_agents)
-  // failed" was the tell.
-  it("no toolname on any page equals a WEBMCP tool name", async () => {
-    const pages = [
-      "../app/layout.tsx", "../app/search/page.tsx", "../app/authority/page.tsx",
-    ];
+describe("the surface is all-imperative (no declarative form tools)", () => {
+  // Chrome's declarative synthesis drops pattern/maxLength from the schema
+  // it reports (the "wallet lacks 0x regex" finding persisted with the
+  // pattern attribute present in the HTML), and a declarative twin of an
+  // imperative tool either collides on the name (InvalidStateError) or
+  // reads as overlapping intent to tool reviewers. Decision: zero
+  // declarative tool attributes anywhere; forms stay human-only.
+  it("no toolname/tooldescription/toolautosubmit/toolparamdescription in any app file", async () => {
     const pagesDir = resolve(__dirname, "../app");
-    let allFormSources = pages.map((p) => readFileSync(resolve(__dirname, p), "utf8"));
-    // Sweep every app page for toolname attributes, not just the known three.
-    const sweep = (dir: string) => {
+    const sweep = (dir: string): string[] => {
+      const found: string[] = [];
       for (const e of readdirSync(dir, { withFileTypes: true })) {
-        if (e.isDirectory()) sweep(join(dir, e.name));
+        if (e.isDirectory()) found.push(...sweep(join(dir, e.name)));
         else if (/\.(tsx|ts)$/.test(e.name)) {
           const src = readFileSync(join(dir, e.name), "utf8");
-          if (/toolname:\s*"/.test(src)) allFormSources.push(src);
+          if (/tool(name|description|autosubmit|paramdescription)\s*:/.test(src)) {
+            found.push(e.name);
+          }
         }
       }
+      return found;
     };
-    sweep(pagesDir);
-    const formNames = allFormSources.flatMap(
-      (src) => [...src.matchAll(/toolname: "([^"]+)"/g)].map((m) => m[1] as string),
-    );
-    expect(formNames.length).toBeGreaterThan(0);
-    const imperative = new Set(WEBMCP_TOOL_NAMES);
-    for (const n of formNames) {
-      expect(imperative.has(n), `declarative form tool "${n}" collides with an imperative tool`).toBe(false);
-    }
+    expect(sweep(pagesDir)).toEqual([]);
   });
 });
 
-describe("declarative form inputs carry constraints", () => {
-  // The rescan finding "wallet lacks regex/required constraints" maps here:
-  // the declarative synthesis turns HTML required/pattern/maxLength into
-  // schema constraints, so the attributes ARE the schema.
+describe("forms keep native validation for humans", () => {
   it("the authority wallet input is required with an address pattern", async () => {
     const authority = readFileSync(resolve(__dirname, "../app/authority/page.tsx"), "utf8");
     const walletInput = authority.match(/<input[^]*?name="wallet"[^]*?\/>/)?.[0] ?? "";
@@ -252,15 +259,5 @@ describe("declarative form inputs carry constraints", () => {
       expect(qInput).toContain("required");
       expect(qInput).toContain("maxLength={200}");
     }
-  });
-
-  it("declarative descriptions document what the tool returns", async () => {
-    const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
-    // The declarative API has no output schema (open spec question), so the
-    // output contract travels in tooldescription - same law as the
-    // imperative "Returns:" lines. The authority form documents its result;
-    // the masthead navigation form points data-seekers at search_agents.
-    expect(read("../app/authority/page.tsx")).toContain("The result lists each session key");
-    expect(read("../app/layout.tsx")).toContain("Use search_agents instead when the caller wants the data");
   });
 });

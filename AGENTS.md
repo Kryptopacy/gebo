@@ -273,35 +273,50 @@ verified:
 Canonical list, because three surfaces serve agents and they drift if not
 pinned in one place:
 
-- **MCP server**, `POST /mcp` — **seven read-only tools** (defs in
+- **MCP server**, `POST /mcp` — **eight read-only tools** (defs in
   `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, list pinned by
   `tests/mcp-server.test.ts`): `search_agents`, `get_agent`,
   `list_categories`, `get_opportunities`, `get_registry_stats`,
-  `get_track_record`, `get_verified_reviews`. Every response carries its
+  `get_track_record`, `get_verified_reviews`, `check_wallet_authority`
+  (Altana Keystore session keys for a wallet; the not-covered list travels
+  with the data). Every response carries its
   caveats (L2 applies to tool output too). Every tool declares an input AND
   an output schema — `outputSchema.required` is a non-empty tuple by type,
   because a schema that validates anything is documentation pretending to be
-  a contract — and non-error results carry `structuredContent` alongside the
+  a contract — `inputSchema` sets `additionalProperties: false` on every
+  tool, and non-error results carry `structuredContent` alongside the
   text, generated from one payload so the two representations cannot drift.
 - **Product assistant** (`app/api/assistant/route.ts` +
   `src/lib/assistant-tools.ts`) — the same read set through its own executors
   over the same data layer, plus product knowledge in its system prompt. It
   must never quote registry numbers from memory; a stale number spoken
   confidently is worse than no assistant. Read-only by the same law as MCP.
-- **Browser WebMCP** (`app/WebMcpTools.tsx` + `src/lib/webmcp.ts`) — the full
-  MCP read set (all seven tools, names and schemas derived from `MCP_TOOLS`,
+- **Browser WebMCP** (`src/lib/webmcp-bootstrap.ts` + `src/lib/webmcp.ts`,
+  serialized into an inline `<head>` script from `layout.tsx`) — the full
+  MCP read set (all eight tools, names and schemas derived from `MCP_TOOLS`,
   so this surface cannot drift from the server surface) plus two explicit
-  navigation tools (`open_agent_card`, `open_hire_flow`), registered on
-  `document.modelContext`. Answer tools return data and **never navigate**;
-  only the `open_*` tools touch `window.location`, and their descriptions say
-  so. Data tools execute by POSTing to this origin's own `/mcp`, so the two
-  surfaces are literally the same reads. Declarative form tools
-  (`toolname`/`tooldescription`) use snake_case names. Inert without the
-  WebMCP API. Never signs. `tests/webmcp.test.ts` pins the tool list, the
-  constraints, the URLs and the single `window.location` assignment. The
-  webmcp.com scorecard (graded B on 2026-09-02, one tool visible, navigating
-  mid-execute) is the failure that produced these rules — do not reintroduce
-  a navigating answer tool to "improve UX"; add an `open_*` tool instead.
+  navigation tools (`open_agent_card`, `open_hire_flow`). Answer tools
+  return data and **never navigate**; only the `open_*` tools touch
+  `window.location`, and their descriptions say so. Data tools execute by
+  POSTing to this origin's own `/mcp`, so the two surfaces are literally the
+  same reads. Registration happens at HTML **parse time** (scanners snapshot
+  before React hydration) and is **sequential and awaited with a per-call
+  timeout** — a fire-and-forget burst registers exactly one tool in any
+  Chrome where the first call triggers the tools permission check, which is
+  how four webmcp.com scans saw one imperative tool where nine shipped.
+  Chrome strips `outputSchema` from `getTools()` (verified by probe), so the
+  output contract travels as a "Returns:" line in each description; Chrome's
+  declarative synthesis drops `pattern`/`maxLength` from reported schemas,
+  which is why there are **zero declarative form tools** — a declarative
+  twin of an imperative tool also collides on the name
+  (`InvalidStateError: Duplicate tool name`). Inert without the WebMCP API.
+  Never signs. `tests/webmcp.test.ts` pins the tool list, the constraints,
+  the sequential-await shape, the zero-declarative sweep and the single
+  `window.location` assignment; `scripts/webmcp-verify.mjs` is the runtime
+  check in a flagged Chrome. The webmcp.com scorecard (graded B on
+  2026-09-02, one tool visible, navigating mid-execute) is the failure that
+  produced these rules — do not reintroduce a navigating answer tool to
+  "improve UX"; add an `open_*` tool instead.
 - **Write surfaces for agents** (the only ones): `POST /api/reviews`
   (wallet-signed, completed-escrow-gated — same gate as humans) and the x402
   paid read at `/api/agent/health/paid`. Everything that moves money or

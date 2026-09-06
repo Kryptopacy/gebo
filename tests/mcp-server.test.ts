@@ -71,11 +71,13 @@ describe("tools", () => {
     expect(MCP_TOOLS.map((t) => t.name)).toEqual([
       "search_agents", "get_agent", "list_categories",
       "get_opportunities", "get_registry_stats", "get_track_record",
-      "get_verified_reviews",
+      "get_verified_reviews", "check_wallet_authority",
     ]);
     for (const t of MCP_TOOLS) {
       expect(t.inputSchema.type).toBe("object");
       expect(t.description.length).toBeGreaterThan(20);
+      // Kit convention: no undeclared inputs, on every tool.
+      expect(t.inputSchema.additionalProperties).toBe(false);
     }
   });
 
