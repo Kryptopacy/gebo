@@ -98,7 +98,9 @@ begin
           from registry_tokens
           where operator_domain is not null
           group by operator_domain
-          order by eps desc limit 12) j)
+          order by eps desc limit 12) j),
+      now(),
+      now()
       on conflict (id) do update
       set tokens_minted = excluded.tokens_minted,
           censused = excluded.censused,
