@@ -41,7 +41,7 @@ export default async function SearchPage({
   // Page 1 is fetched first to learn the total (needed to clamp the page and
   // to render truthful counts); a valid page > 1 is then fetched with its
   // offset. Two sequential round trips only for deep pages.
-  const empty = { hits: [], total: 0, byState: {} as Record<string, number> };
+  const empty = { hits: [], total: 0, cappedTotal: false, byState: {} as Record<string, number> };
   const first = q ? await searchAgentsPaged(q, { limit: PAGE_SIZE, state, sort }) : empty;
   const page = clampPage(raw.page, first.total);
   const paged = q && page > 1
@@ -124,41 +124,53 @@ export default async function SearchPage({
                   ? state
                     ? `Nothing in state ${state} matches "${q}".`
                     : `Nothing matches "${q}".`
-                  : `${first.total.toLocaleString()} agent${first.total === 1 ? "" : "s"} match "${q}" ` +
-                    `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
-                    `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
+                  : first.cappedTotal
+                    ? `${first.total.toLocaleString()}+ agents match "${q}" — too many to count precisely or rank by relevance.`
+                    : `${first.total.toLocaleString()} agent${first.total === 1 ? "" : "s"} match "${q}" ` +
+                      `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
+                      `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
               </p>
               {first.total > 0 && (
                 <div className="inline-list" style={{ gap: 8 }}>
                   <span className="xs t-4">State:</span>
                   <a href={stateHref(cur, null)} className="chip chip-flat" style={{ fontSize: 11, borderColor: !state ? "var(--accent)" : "var(--rule)", color: !state ? "var(--accent)" : "var(--fg-3)" }}>
-                    All · {first.total.toLocaleString()}
+                    All{first.cappedTotal ? " · 1,200+" : ` · ${first.total.toLocaleString()}`}
                   </a>
                   {SEARCH_TRUST_STATES.map((s) => {
                     const n = byState(s);
-                    if (!n) return null;
+                    if (!n && !first.cappedTotal) return null;
                     const active = state === s;
                     return (
                       <a key={s} href={stateHref(cur, s)} className="chip chip-flat" style={{ fontSize: 11, borderColor: active ? "var(--accent)" : "var(--rule)", color: active ? "var(--accent)" : "var(--fg-3)" }}>
-                        {s} · {n.toLocaleString()}
+                        {n ? `${s} · ${n.toLocaleString()}` : s}
                       </a>
                     );
                   })}
-                  <span className="xs t-4" style={{ marginLeft: 12 }}>Order:</span>
-                  <a href={sortHref(cur, "trusted")} className="chip chip-flat" style={{ fontSize: 11, borderColor: sort !== "newest" ? "var(--accent)" : "var(--rule)", color: sort !== "newest" ? "var(--accent)" : "var(--fg-3)" }}>
-                    answers first
-                  </a>
-                  <a href={sortHref(cur, "newest")} className="chip chip-flat" style={{ fontSize: 11, borderColor: sort === "newest" ? "var(--accent)" : "var(--rule)", color: sort === "newest" ? "var(--accent)" : "var(--fg-3)" }}>
-                    newest first
-                  </a>
+                  {!first.cappedTotal && (
+                    <>
+                      <span className="xs t-4" style={{ marginLeft: 12 }}>Order:</span>
+                      <a href={sortHref(cur, "trusted")} className="chip chip-flat" style={{ fontSize: 11, borderColor: sort !== "newest" ? "var(--accent)" : "var(--rule)", color: sort !== "newest" ? "var(--accent)" : "var(--fg-3)" }}>
+                        answers first
+                      </a>
+                      <a href={sortHref(cur, "newest")} className="chip chip-flat" style={{ fontSize: 11, borderColor: sort === "newest" ? "var(--accent)" : "var(--rule)", color: sort === "newest" ? "var(--accent)" : "var(--fg-3)" }}>
+                        newest first
+                      </a>
+                    </>
+                  )}
                 </div>
               )}
-              {hidden > 0 && (
+              {first.cappedTotal ? (
+                <p className="xs t-4 mt-s" style={{ marginBottom: 0, maxWidth: "74ch" }}>
+                  The match set is very large, so results are ordered by trust state and recency rather than
+                  relevance, and only the first {(pages * PAGE_SIZE).toLocaleString()} are paged — refine the
+                  query to make it rankable and countable.
+                </p>
+              ) : hidden > 0 ? (
                 <p className="xs t-4 mt-s" style={{ marginBottom: 0, maxWidth: "74ch" }}>
                   Showing the first {(pages * PAGE_SIZE).toLocaleString()} matches. {hidden.toLocaleString()} more
                   exist but are not paged through - refine the query to reach them.
                 </p>
-              )}
+              ) : null}
             </div>
           )}
         </div>

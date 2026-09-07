@@ -745,10 +745,18 @@ export type PagedSearch = {
   hits: SearchHit[];
   /** Total rows the match predicate returns, BEFORE limit/offset. */
   total: number;
+  /** True when total is a floor, not the exact count: the match set exceeded
+   *  CAP_THRESHOLD and counting stopped there (ts_rank-ordering 100k+ docs
+   *  took 20s+; a floor is honest, a slow page is not). */
+  cappedTotal: boolean;
   /** Trust-state breakdown of the UNFILTERED match set - facets must not
-   *  change when a facet is applied, or the filter chips lie. */
+   *  change when a facet is applied, or the filter chips lie. Empty when
+   *  capped: a 100k+ set cannot be broken down without another full scan. */
   byState: Record<string, number>;
 };
+
+/** Beyond this, the count stops and the display says "N+". 20 pages x 60. */
+const CAP_THRESHOLD = 20 * 60;
 
 const TRUST_STATES = ["VERIFIED", "LISTED", "DORMANT", "SHADOWED"] as const;
 export type TrustStateFilter = (typeof TRUST_STATES)[number];
@@ -765,8 +773,8 @@ export const SEARCH_TRUST_STATES: readonly TrustStateFilter[] = TRUST_STATES;
 const MATCH_PREDICATE = `
   a.capability_doc @@ websearch_to_tsquery('english', $1)
   or a.name ilike '%' || $1 || '%'
-  or array_to_string(a.skills, ' ') ilike '%' || $1 || '%'
-  or replace(array_to_string(a.skills, ' '), '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'`;
+  or public.skills_text(a.skills) ilike '%' || $1 || '%'
+  or replace(public.skills_text(a.skills), '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'`;
 
 /**
  * Paged search with truthful totals.
@@ -783,10 +791,10 @@ export async function searchAgentsPaged(
   opts: { limit?: number; offset?: number; state?: TrustStateFilter | null; sort?: SearchSort } = {},
 ): Promise<PagedSearch> {
   const q = query.trim();
-  if (!q) return { hits: [], total: 0, byState: {} };
+  if (!q) return { hits: [], total: 0, cappedTotal: false, byState: {} };
 
   const sql = db();
-  if (!sql) return { hits: [], total: 0, byState: {} };
+  if (!sql) return { hits: [], total: 0, cappedTotal: false, byState: {} };
 
   const limit = Math.max(1, Math.min(120, opts.limit ?? 40));
   const offset = Math.max(0, Math.min(100_000, opts.offset ?? 0));
@@ -795,27 +803,45 @@ export async function searchAgentsPaged(
 
   // websearch_to_tsquery tolerates human input: quotes, OR, and minus signs.
   //
-  // AGENT_SELECT carries its own FROM/JOINs and ends where the WHERE starts.
-  // Two-phase, deliberately:
+  // Three phases, deliberately:
+  //
+  // Phase 0 is an index-bounded count that STOPS at CAP_THRESHOLD+1. Degenerate
+  // queries ("trading" matches 128k of 200k+ agents) cannot be ts_rank-ordered
+  // in sane time - ranking parses the tsvector of every match - so when the
+  // count hits the cap, phase 1 orders by trust state and recency instead of
+  // relevance and the page says "N+ matches, refine" rather than pretending
+  // to have ranked them. A floor is honest; a 25-second page is not.
   //
   // Phase 1 walks ONLY (token_id, trust_state, capability_doc) of the match
-  // set - no endpoints/probe subqueries - to order it and take the page
-  // slice, with count(*) over () as the honest total. Phase 2 hydrates JUST
-  // those ids through AGENT_SELECT. A single-phase version evaluated the
-  // per-row probes_raw lookups for every one of 41k+ matching rows before
-  // LIMIT could cut to 60, which ran minutes on the free tier and timed the
-  // search page out (found 2026-09-07).
+  // set - no endpoints/probe subqueries - with count(*) over () as the exact
+  // total (skipped when capped). Phase 2 hydrates JUST those ids through
+  // AGENT_SELECT. A single-phase version evaluated the per-row probes_raw
+  // lookups for every one of 41k+ matching rows before LIMIT could cut to 60,
+  // which ran minutes on the free tier and timed the search page out.
   //
   // token_id is ::text in the projection (the "9999 sorts above 336715"
   // trap), so recency ordering casts back to bigint.
   try {
+    const [cnt] = (await sql.unsafe(
+      `select count(*)::int as n from (
+         select 1 from agents a
+         where a.chain_id = 56
+           and (${MATCH_PREDICATE})
+           ${state ? "and a.trust_state = $2" : ""}
+         limit ${CAP_THRESHOLD + 1}
+       ) t`,
+      state ? [q, state] : [q],
+    )) as unknown as any[];
+    const capped = Number(cnt?.n ?? 0) > CAP_THRESHOLD;
+    const preTotal = capped ? CAP_THRESHOLD : Number(cnt?.n ?? 0);
+
     const page = (await sql.unsafe(
       `select token_id::text as token_id, trust_state, full_total
        from (
          select a.token_id::bigint as token_id,
                 a.trust_state,
                 a.capability_doc,
-                count(*) over () as full_total
+                ${capped ? String(preTotal) : "count(*) over ()"} as full_total
          from agents a
          where a.chain_id = 56
            and (${MATCH_PREDICATE})
@@ -823,8 +849,9 @@ export async function searchAgentsPaged(
        ) x
        order by
          ${
-           sort === "newest"
-             ? "x.token_id desc"
+           capped || sort === "newest"
+             ? `case x.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
+                x.token_id desc`
              : `case x.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
                 ts_rank(x.capability_doc, websearch_to_tsquery('english', $1)) desc nulls last,
                 x.token_id desc`
@@ -852,18 +879,24 @@ export async function searchAgentsPaged(
     // Sequential (not Promise.all): the search page renders from a single
     // pooled connection - two concurrent connections through the Supabase
     // pooler stall from the deploy region (the /search lesson).
+    //
+    // The breakdown is skipped entirely when capped: per-state counts of a
+    // 100k+ set cost another full scan for numbers the page shows as "N+"
+    // anyway.
     const breakdown: Record<string, number> = {};
-    try {
-      const byState = (await sql.unsafe(
-        `select a.trust_state as state, count(*)::int as n
-         from agents a
-         where a.chain_id = 56 and (${MATCH_PREDICATE})
-         group by a.trust_state`,
-        [q],
-      )) as unknown as any[];
-      for (const r of byState) breakdown[r.state] = Number(r.n);
-    } catch {
-      /* breakdown is a facet, not a figure: absent rather than zero-filled */
+    if (!capped) {
+      try {
+        const byState = (await sql.unsafe(
+          `select a.trust_state as state, count(*)::int as n
+           from agents a
+           where a.chain_id = 56 and (${MATCH_PREDICATE})
+           group by a.trust_state`,
+          [q],
+        )) as unknown as any[];
+        for (const r of byState) breakdown[r.state] = Number(r.n);
+      } catch {
+        /* breakdown is a facet, not a figure: absent rather than zero-filled */
+      }
     }
 
     const hits = rows.map((r) => {
@@ -886,12 +919,13 @@ export async function searchAgentsPaged(
 
     return {
       hits,
-      total: fullTotal || (state ? (breakdown[state] ?? 0) : 0),
+      total: capped ? preTotal : (fullTotal || (state ? (breakdown[state] ?? 0) : 0)),
+      cappedTotal: capped,
       byState: breakdown,
     };
   } catch (err) {
     console.warn(`[data] search failed: ${String(err).slice(0, 140)}`);
-    return { hits: [], total: 0, byState: {} };
+    return { hits: [], total: 0, cappedTotal: false, byState: {} };
   }
 }
 
