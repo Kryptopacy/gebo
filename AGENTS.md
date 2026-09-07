@@ -57,6 +57,29 @@ migration 0021), and materialize stored ~1 KB of `registration_json` +
 authoritative URI store). After surgery: 201 MB. Free-tier sizing is now a
 live constraint — check `pg_database_size` before any per-row payload.
 
+**Second surgery, 2026-09-07 evening (503 → 345 MB).** One day later the
+quota was breached again. Attribution, measured: the backfill's ~69k new
+`agents` rows (stored `capability_doc` tsvector alone is 36.7 MB across the
+table), the `registry_tokens.token_uri` cache (67.3 MB — of which 67 MB sat
+on rows already materialized into `agents`, where no code reads it:
+materialize excludes them, resolve only touches unresolved rows, and the
+chain re-read is authoritative anyway), 34 MB of never-scanned indexes
+(`agents_agent_id_idx` — agent_id is derived from the pkey; uri_scheme;
+the GIN-on-array `skills_idx` superseded by trgm), and `cron.job_run_details`
+(pg_cron keeps history forever). Fixes in migration 0031 + the batched
+one-off in `scripts/tmp-space-surgery.ts` (VACUUM FULL through the session
+pooler, port 5432 — the transaction pooler swallows it, see above), plus
+the hourly `gebo-maint` job that nulls materialized token_uris in 5k
+batches and keeps 7-day cron history. The NEXT lever if the tier bites
+again: swap the stored `capability_doc` generated column for an expression
+index on `to_tsvector('english', name || ' ' || description)` — 37 MB and
+~150 bytes/row of growth — but it needs a coordinated deploy (drop column
+only after the expression-query code is live), so it was deliberately not
+rushed. Steady-state growth after the surgery is ~3-4 MB/day at the current
+mint rate: ~155 MB of headroom buys about a month, and the honest long-term
+answers are the Pro tier or a slimmer per-row payload, not another round of
+midnight surgery.
+
 ### The frozen product layer (found 2026-09-06)
 
 Search, categories, cards, the prober and every agent-consumable surface read
