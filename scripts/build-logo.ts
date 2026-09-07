@@ -122,19 +122,49 @@ await emit(path.join("public", "gebo-mark.png"), 256, 0.02);
 await emit(path.join("app", "icon.png"), 256, 0.06);
 await emit(path.join("app", "apple-icon.png"), 180, 0.10);
 
-// Open Graph: mark centred on the product's own background, not transparent —
-// social clients composite over white and would wash out a gold-on-clear mark.
+// Open Graph: a branded card, not a bare mark. The previous version was the
+// mark centred on near-black — technically the logo, but in dark-mode share
+// previews it read as an empty rectangle, which is how "the site has no OG
+// image" got reported despite the tag being correct. Wordmark + tagline make
+// the card legible in any embed. SVG text renders through sharp's bundled
+// libvips; this script runs on the asset-building machine, not in CI, so the
+// local font stack (Segoe UI/Arial) is available.
 const ogMark = await sharp(square)
-  .resize(300, 300, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: "lanczos3" })
+  .resize(230, 230, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: "lanczos3" })
   .png()
   .toBuffer();
 
+const OG_W = 1200, OG_H = 630, MARK = 230, MARK_TOP = 195;
+const ogSvg = Buffer.from(`
+<svg width="${OG_W}" height="${OG_H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${OG_W}" height="${OG_H}" fill="#0a0c0f"/>
+  <rect x="10" y="10" width="${OG_W - 20}" height="${OG_H - 20}" fill="none" stroke="#f0b90b" stroke-opacity="0.3" stroke-width="2" rx="18"/>
+  <text x="${OG_W / 2}" y="105" text-anchor="middle"
+        font-family="Segoe UI, Arial, sans-serif" font-size="72" font-weight="700"
+        fill="#f0b90b" letter-spacing="14">GEBO</text>
+  <text x="${OG_W / 2}" y="152" text-anchor="middle"
+        font-family="Segoe UI, Arial, sans-serif" font-size="22"
+        fill="#9aa3b2" letter-spacing="3">VERIFICATION-FIRST AGENT REGISTRY · BNB SMART CHAIN</text>
+  <text x="${OG_W / 2}" y="508" text-anchor="middle"
+        font-family="Segoe UI, Arial, sans-serif" font-size="27"
+        fill="#e7e3d8">is this agent alive · what can it do to my wallet</text>
+  <text x="${OG_W / 2}" y="552" text-anchor="middle"
+        font-family="Segoe UI, Arial, sans-serif" font-size="27"
+        fill="#e7e3d8">did hiring it beat doing the job myself</text>
+  <text x="${OG_W / 2}" y="596" text-anchor="middle"
+        font-family="Segoe UI, Arial, sans-serif" font-size="18"
+        fill="#6b7280">gebo-bsc.vercel.app</text>
+</svg>`);
+
 await sharp({
-  create: { width: 1200, height: 630, channels: 4, background: { ...INK, alpha: 1 } },
+  create: { width: OG_W, height: OG_H, channels: 4, background: { r: 10, g: 12, b: 15, alpha: 1 } },
 })
-  .composite([{ input: ogMark, gravity: "centre" }])
+  .composite([
+    { input: ogSvg, top: 0, left: 0 },
+    { input: ogMark, top: MARK_TOP, left: Math.round((OG_W - MARK) / 2) },
+  ])
   .png({ compressionLevel: 9 })
   .toFile(path.join("app", "opengraph-image.png"));
-console.log(`  wrote         app/opengraph-image.png      1200x630  (on #08090b)`);
+console.log(`  wrote         app/opengraph-image.png      ${OG_W}x${OG_H}  (branded card)`);
 
 console.log("");

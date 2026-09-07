@@ -754,15 +754,19 @@ const TRUST_STATES = ["VERIFIED", "LISTED", "DORMANT", "SHADOWED"] as const;
 export type TrustStateFilter = (typeof TRUST_STATES)[number];
 export const SEARCH_TRUST_STATES: readonly TrustStateFilter[] = TRUST_STATES;
 
-/** The match predicate shared by the paged query and its state breakdown. */
+/**
+ * The match predicate shared by the paged query, its state breakdown and the
+ * category facets. Every arm must be indexable - the planner BitmapOrs them
+ * (FTS GIN, name trigram, skills-expression trigram). A single
+ * non-indexable arm forces a full seq scan of all agents, which is why
+ * search once took 21s for a 74-match query (found 2026-09-07). The skills
+ * arms use the same expressions as the 0026 indexes.
+ */
 const MATCH_PREDICATE = `
   a.capability_doc @@ websearch_to_tsquery('english', $1)
   or a.name ilike '%' || $1 || '%'
-  or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
-  or exists (
-    select 1 from unnest(coalesce(a.skills,'{}')) s
-    where replace(s, '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'
-  )`;
+  or array_to_string(a.skills, ' ') ilike '%' || $1 || '%'
+  or replace(array_to_string(a.skills, ' '), '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'`;
 
 /**
  * Paged search with truthful totals.
@@ -792,34 +796,58 @@ export async function searchAgentsPaged(
   // websearch_to_tsquery tolerates human input: quotes, OR, and minus signs.
   //
   // AGENT_SELECT carries its own FROM/JOINs and ends where the WHERE starts.
-  // The old query appended ts_rank() as a FROM-position function scan - it
-  // ordered correctly but never projected the value, and a window count cannot
-  // live in the FROM list. So the match runs in a subquery (with capability_doc
-  // projected), and the outer select adds count(*) over () - the FULL match
-  // total, computed before LIMIT - plus the ordering on real column names.
-  // token_id is ::text in the projection (the "9999 sorts above 336715" trap),
-  // so recency ordering casts back to bigint.
+  // Two-phase, deliberately:
+  //
+  // Phase 1 walks ONLY (token_id, trust_state, capability_doc) of the match
+  // set - no endpoints/probe subqueries - to order it and take the page
+  // slice, with count(*) over () as the honest total. Phase 2 hydrates JUST
+  // those ids through AGENT_SELECT. A single-phase version evaluated the
+  // per-row probes_raw lookups for every one of 41k+ matching rows before
+  // LIMIT could cut to 60, which ran minutes on the free tier and timed the
+  // search page out (found 2026-09-07).
+  //
+  // token_id is ::text in the projection (the "9999 sorts above 336715"
+  // trap), so recency ordering casts back to bigint.
   try {
-    const rows = (await sql.unsafe(
-      `select y.*, count(*) over () as full_total,
-              ts_rank(y.capability_doc, websearch_to_tsquery('english', $1)) as rank
+    const page = (await sql.unsafe(
+      `select token_id::text as token_id, trust_state, full_total
        from (
-         ${AGENT_SELECT}
+         select a.token_id::bigint as token_id,
+                a.trust_state,
+                a.capability_doc,
+                count(*) over () as full_total
+         from agents a
          where a.chain_id = 56
            and (${MATCH_PREDICATE})
            ${state ? "and a.trust_state = $4" : ""}
-       ) y
+       ) x
        order by
          ${
            sort === "newest"
-             ? "y.token_id::bigint desc"
-             : `case y.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
-                ts_rank(y.capability_doc, websearch_to_tsquery('english', $1)) desc nulls last,
-                y.token_id::bigint desc`
+             ? "x.token_id desc"
+             : `case x.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
+                ts_rank(x.capability_doc, websearch_to_tsquery('english', $1)) desc nulls last,
+                x.token_id desc`
          }
        limit $2 offset $3`,
       state ? [q, limit, offset, state] : [q, limit, offset],
     )) as unknown as any[];
+
+    const ids = page.map((r) => String(r.token_id));
+    let rows: any[] = [];
+    if (ids.length) {
+      rows = (await sql.unsafe(
+        `${AGENT_SELECT}
+         where a.chain_id = 56 and a.token_id::bigint = any($1::bigint[])
+         order by array_position($1::bigint[], a.token_id::bigint)`,
+        [ids.map(Number)],
+      )) as unknown as any[];
+      const byId = new Map(rows.map((r) => [String(r.token_id), r]));
+      rows = ids.map((id) => byId.get(id)).filter(Boolean);
+    }
+    const fullTotal = page.length ? Number(page[0]!.full_total ?? page.length) : 0;
+    // carry the total on each hydrated row for the return below
+    for (const r of rows) (r as any).full_total = fullTotal;
 
     // Sequential (not Promise.all): the search page renders from a single
     // pooled connection - two concurrent connections through the Supabase
@@ -858,7 +886,7 @@ export async function searchAgentsPaged(
 
     return {
       hits,
-      total: rows.length ? Number(rows[0]!.full_total ?? rows.length) : (state ? (breakdown[state] ?? 0) : 0),
+      total: fullTotal || (state ? (breakdown[state] ?? 0) : 0),
       byState: breakdown,
     };
   } catch (err) {
@@ -867,7 +895,9 @@ export async function searchAgentsPaged(
   }
 }
 
-/** Category counts for a query, so the result page can offer a narrowing. */
+/** Category counts for a query, so the result page can offer a narrowing.
+ *  Same predicate as search (MATCH_PREDICATE) so facets and results can
+ *  never disagree about what matches. */
 export async function searchFacets(query: string): Promise<{ category: string; n: number }[]> {
   const q = query.trim();
   if (!q) return [];
@@ -878,11 +908,7 @@ export async function searchFacets(query: string): Promise<{ category: string; n
       `select a.category, count(*)::int as n
        from agents a
        where a.chain_id = 56 and a.category is not null
-         and (
-           a.capability_doc @@ websearch_to_tsquery('english', $1)
-           or a.name ilike '%' || $1 || '%'
-           or exists (select 1 from unnest(coalesce(a.skills,'{}')) s where s ilike '%' || $1 || '%')
-         )
+         and (${MATCH_PREDICATE})
        group by a.category order by n desc`,
       [q],
     )) as unknown as any[];
