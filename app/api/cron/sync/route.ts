@@ -17,6 +17,7 @@ import {
 } from "@/lib/registry";
 import { lintUrl } from "@/lib/lint";
 import { registrableDomain } from "@/lib/operator";
+import { refreshCensusStatsIfDue } from "@/lib/census-refresh";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -53,10 +54,11 @@ export async function GET(request: Request) {
     const onChainMax = await findMaxTokenId(client, from > 1n ? from : 260_000n);
 
     if (onChainMax < from) {
-      await sql`select public.refresh_census_stats()`;
+      const refresh = await refreshCensusStatsIfDue(sql, { changed: false });
       return NextResponse.json({
         ok: true, added: 0, storedMax: (from - 1n).toString(),
         onChainMax: onChainMax.toString(), note: "no new identities",
+        statsRefresh: refresh,
       });
     }
 
@@ -128,7 +130,7 @@ export async function GET(request: Request) {
       }
     }
 
-    await sql`select public.refresh_census_stats()`;
+    const refresh = await refreshCensusStatsIfDue(sql, { changed: added > 0 });
 
     return NextResponse.json({
       ok: true, added,

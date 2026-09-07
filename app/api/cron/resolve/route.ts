@@ -17,6 +17,7 @@ import { authorizeCron } from "@/lib/cron-auth";
 import { resolveRegistration, endpointsFromRegistration } from "@/lib/registry";
 import { lintUrl } from "@/lib/lint";
 import { registrableDomain } from "@/lib/operator";
+import { refreshCensusStatsIfDue } from "@/lib/census-refresh";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -131,7 +132,10 @@ export async function GET(request: Request) {
     }
 
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-    await sql`select public.refresh_census_stats()`;
+    // changed=false when nothing resolved: a no-op pass must not pay for a
+    // full-table stats aggregation (see census-refresh.ts).
+    const resolvedAny = pending.length > 0;
+    const refresh = await refreshCensusStatsIfDue(sql, { changed: resolvedAny });
 
     const remaining = await sql<{ n: number }[]>`
       select count(*)::int as n from registry_tokens
