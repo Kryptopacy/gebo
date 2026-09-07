@@ -246,14 +246,16 @@ async function main() {
   const writes = (await tableExists("reputation_writes")) ? await count("reputation_writes") : null;
   const writerLib = route("src/lib/reputation.ts");
   const writerScript = route("scripts/write-reputation.ts");
+  const repCron = await scheduled("gebo-reputation");
   gates.push({
     id: "erc8004",
     item: "ERC-8004 Reputation Registry write-back",
-    state: writes && writes > 0 ? "DONE" : writerLib ? "PARTIAL" : "MISSING",
+    state: writes && writes > 0 && repCron ? "DONE" : writerLib ? "PARTIAL" : "MISSING",
     evidence: [
       `lib=${writerLib ? "yes" : "no"}`,
       `writer script=${writerScript ? "yes" : "no"}`,
       `reputation_writes=${writes === null ? "no table" : fmt(writes)}`,
+      `cron=${repCron ? "active" : "missing (0030)"}`,
     ].join(", "),
   });
 
@@ -341,6 +343,33 @@ async function main() {
     item: "metric_values (design law L2: no bare numbers)",
     state: metrics && metrics > 0 ? "DONE" : metrics === 0 ? "PARTIAL" : "MISSING",
     evidence: metrics === null ? "no metric_values table" : `metric_values=${fmt(metrics)}`,
+  });
+
+  /**
+   * Landing aggregates are served from registry_counts (one row, primary
+   * key) since 2026-09-07, because the direct aggregate measured 9.8s cold
+   * against the 9s render timeout and first-time visitors got the
+   * invariant-9 banner as the default state of the headline numbers. The
+   * table refreshes by DIRECT pg_cron SQL (gebo-counts, every 5 min) - no
+   * HTTP hop, so a succeeded run really ran, unlike the pg_net routes
+   * where queueing is not execution (the 0024 failure mode).
+   */
+  const countsAgeMin = await scalar(
+    "select floor(extract(epoch from (now() - computed_at)) / 60)::int as n from registry_counts where id = 'bsc'",
+  );
+  const countsCron = await scheduled("gebo-counts");
+  gates.push({
+    id: "counts-table",
+    item: "Landing aggregates served from registry_counts (cold-start safe)",
+    state:
+      countsAgeMin != null && countsAgeMin <= 15 && countsCron
+        ? "DONE"
+        : countsCron || countsAgeMin != null
+          ? "PARTIAL"
+          : "MISSING",
+    evidence:
+      `row age=${countsAgeMin == null ? "no row (direct query in use)" : `${countsAgeMin} min`}, ` +
+      `gebo-counts cron=${countsCron ? "active" : "missing"}`,
   });
 
   /**

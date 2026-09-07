@@ -482,17 +482,46 @@ export type Aggregates = {
    * "cannot measure", never as a value.
    */
   live: boolean;
+  /**
+   * When the figures were computed. Set when served from registry_counts
+   * (migration 0029) so a surface can disclose the age rather than implying
+   * the numbers were measured in this request. Null on the direct path means
+   * computed now; null with live=false means unmeasured.
+   */
+  computedAt: string | null;
 };
 
-let aggCache: Aggregates | null = null;
+let aggCache: { value: Aggregates; at: number } | null = null;
+
+/**
+ * How long a successful aggregate read may serve. registry_counts refreshes
+ * every 5 minutes by direct pg_cron SQL; a process living longer than this
+ * re-reads rather than serving figures the cron has since moved past. The
+ * no-database file fallback is exempt - nothing downstream of it changes.
+ */
+const AGG_TTL_MS = 60_000;
+
+/**
+ * A registry_counts row is authoritative only while fresh. The table
+ * refreshes every 5 minutes; 30 minutes of age means six missed runs, and
+ * the honest move is the direct query (or the banner) - never a quietly
+ * aging number presented as current.
+ */
+export const COUNTS_STALE_MS = 30 * 60 * 1000;
+
+export function countsRowFresh(computedAt: string | Date, nowMs: number = Date.now()): boolean {
+  const t = computedAt instanceof Date ? computedAt.getTime() : Date.parse(computedAt);
+  return Number.isFinite(t) && nowMs - t < COUNTS_STALE_MS;
+}
 
 export async function loadAggregates(): Promise<Aggregates> {
-  if (aggCache) return aggCache;
+  if (aggCache && Date.now() - aggCache.at < AGG_TTL_MS) return aggCache.value;
   const empty: Aggregates = {
     agents: 0,
     states: { VERIFIED: 0, LISTED: 0, DORMANT: 0, SHADOWED: 0 },
     categories: {}, operators: 0, topOperators: [], topOperatorShare: 0,
     live: false,
+    computedAt: null,
   };
 
   const sql = db();
@@ -500,7 +529,7 @@ export async function loadAggregates(): Promise<Aggregates> {
     // File fallback: derive from whatever rows we have.
     const rows = await loadAgents();
     const f = funnel(rows);
-    aggCache = {
+    const value: Aggregates = {
       agents: rows.length,
       states: {
         VERIFIED: f.validated, LISTED: f.responded,
@@ -510,8 +539,66 @@ export async function loadAggregates(): Promise<Aggregates> {
       topOperators: f.topOperators.map((o) => ({ ...o, broken: 0 })),
       topOperatorShare: f.topOperatorShare,
       live: false,
+      computedAt: null,
     };
-    return aggCache;
+    aggCache = { value, at: Number.MAX_SAFE_INTEGER };
+    return value;
+  }
+
+  /**
+   * PRIMARY READ: the one-row registry_counts table (migration 0029).
+   *
+   * The direct aggregate measured 9.8s COLD against the 9s timeout -
+   * every first-time visitor paid it and got the honest banner as the
+   * default state of the headline numbers. This read is a primary-key
+   * lookup: sub-10ms cold or warm. Served only while fresh
+   * (countsRowFresh); a stale, missing or unreadable row falls through
+   * to the direct query below, which still has the honest failure mode.
+   */
+  try {
+    const rows = (await withTimeout(sql<{
+      agents: number;
+      states: unknown;
+      categories: unknown;
+      operators: number;
+      top: unknown;
+      computed_at: Date | string;
+    }[]>`
+      select agents, states, categories, operators, top_operators as top, computed_at
+      from registry_counts where id = 'bsc'
+    `, 3000, null as any)) ?? [];
+    const r = rows[0];
+    if (r && countsRowFresh(r.computed_at)) {
+      const st = { ...empty.states };
+      for (const [k, v] of Object.entries(asObject(r.states) ?? {})) {
+        if (k in st) st[k as TrustState] = Number(v);
+      }
+      const top = asArray<{
+        key: string; label: string; agent_count: number;
+        validated_count: number; fatal_defect_count: number;
+      }>(r.top);
+      const value: Aggregates = {
+        agents: r.agents,
+        states: st,
+        categories: Object.fromEntries(
+          Object.entries(asObject(r.categories) ?? {}).map(([k, v]) => [k, Number(v)]),
+        ),
+        operators: r.operators,
+        topOperators: top.map((o) => ({
+          key: o.key, label: o.label, count: o.agent_count,
+          validated: o.validated_count, broken: o.fatal_defect_count,
+        })),
+        topOperatorShare: r.agents && top[0] ? (top[0].agent_count / r.agents) * 100 : 0,
+        live: true,
+        computedAt: (r.computed_at instanceof Date ? r.computed_at : new Date(r.computed_at)).toISOString(),
+      };
+      aggCache = { value, at: Date.now() };
+      return value;
+    }
+  } catch (err) {
+    // Missing table (migration not applied locally), read error, or timeout:
+    // the direct query below is the designed fallback, not a degradation.
+    console.warn(`[data] registry_counts read failed, trying direct: ${String(err).slice(0, 120)}`);
   }
 
   try {
@@ -553,11 +640,11 @@ export async function loadAggregates(): Promise<Aggregates> {
     /**
      * A failed read is never cached.
      *
-     * aggCache has no TTL, so assigning the all-zero value here froze zeros for
-     * the lifetime of the server process: one transient DNS blip against the
-     * pooler - a documented flake on this project - and the landing page served
-     * "0 agents" until the next deploy. Returning without caching means the next
-     * request retries.
+     * The original bug: a successful read was cached with no TTL, so one
+     * transient DNS blip against the pooler - a documented flake on this
+     * project - and the landing page served "0 agents" until the next
+     * deploy. Success now caches for AGG_TTL_MS only; returning without
+     * caching means the next request retries.
      */
     const r = rows[0];
     if (!r) return empty;
@@ -566,7 +653,7 @@ export async function loadAggregates(): Promise<Aggregates> {
       if (s.state in st) st[s.state as TrustState] = s.n;
     }
 
-    aggCache = {
+    const value: Aggregates = {
       agents: r.agents,
       states: st,
       categories: Object.fromEntries((r.cats ?? []).map((c: { category: string; n: number }) => [c.category, c.n])),
@@ -577,8 +664,10 @@ export async function loadAggregates(): Promise<Aggregates> {
       })),
       topOperatorShare: r.agents && r.top?.[0] ? (r.top[0].agent_count / r.agents) * 100 : 0,
       live: true,
+      computedAt: new Date().toISOString(),
     };
-    return aggCache;
+    aggCache = { value, at: Date.now() };
+    return value;
   } catch (err) {
     console.warn(`[data] aggregate read failed: ${String(err).slice(0, 140)}`);
     return empty;
