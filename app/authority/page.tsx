@@ -1,5 +1,6 @@
 import { readAuthority, isAddress, revokeCall, KEYSTORE, type ChainId } from "@/lib/keystore";
 import { RevokeAction } from "./RevokeAction";
+import { RevokeAllAction } from "./RevokeAllAction";
 import { getClient } from "@/db";
 import { CONTRACTS } from "@/lib/session-scope";
 
@@ -309,7 +310,28 @@ export default async function AuthorityPage({
                   </div>
                 </div>
               ) : (
-                <div className="data-table-frame mt-m">
+                <>
+                  {/* The global kill switch (spec: authority console). One
+                      action revokes every ACTIVE key; the registry contract
+                      has no batch function, so the component fans the click
+                      out into sequential revokeKey transactions with visible
+                      progress. Rendered when more than one key is active -
+                      a single key has its own inline control below. */}
+                  {authority.keys.filter((k) => k.valid).length > 1 && (
+                    <div className="surface-card mt-m" style={{ padding: "14px 18px", borderColor: "var(--fail)" }}>
+                      <p className="section-label" style={{ color: "var(--fail)" }}>
+                        Global kill switch
+                      </p>
+                      <div className="mt-s">
+                        <RevokeAllAction
+                          wallet={authority.wallet}
+                          keyIds={authority.keys.filter((k) => k.valid).map((k) => k.keyId)}
+                          chainId={authority.chainId}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="data-table-frame mt-m">
                   <div className="rows">
                     <div className="rows-head r-keys">
                       <span>Key</span><span>State</span><span>Key id check</span><span>Revoke</span>
@@ -356,14 +378,15 @@ export default async function AuthorityPage({
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-                </div>
+                     })}
+                   </div>
+                 </div>
+                </>
               )}
-            </div>
-          </section>
-        </>
-      )}
+             </div>
+           </section>
+         </>
+       )}
 
       {!authority && (
         <section className="band">
