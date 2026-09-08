@@ -19,6 +19,78 @@ type DemoGrant = {
   caps: { humanAmount?: string; symbol?: string; period?: string }[];
 };
 
+type ObservedSession = {
+  sessionPublicKey: string;
+  state: string;
+  firstSeenBlock: string | null;
+  lastCheckedAt: Date | null;
+};
+
+/**
+ * Third-party sessions for the looked-up wallet, from the on-chain Keystore
+ * index (gebo-sessions cron + backfill). These are sessions registered by
+ * ANYONE through the Altana Keystore - not grants this project made - which
+ * is the whole point: until the index existed, this page could only see
+ * sessions GEBO itself had granted.
+ *
+ * Invariant 3 discipline: the section renders only with the index's own
+ * scoping. A wallet absent from the index is NOT "no sessions" - the index
+ * starts at a disclosed block and only covers Keystore-registered sessions,
+ * so the empty state says unindexed, not safe.
+ */
+async function observedSessions(
+  wallet: string,
+  chainId: number,
+): Promise<{ sessions: ObservedSession[]; error: string | null }> {
+  try {
+    const sql = getClient();
+    const rows = await sql<{
+      session_public_key: string;
+      state: string;
+      first_seen_block: string | null;
+      last_checked_at: Date | null;
+    }[]>`
+      select session_public_key, state, first_seen_block::text, last_checked_at
+      from sessions
+      where chain_id = ${chainId}
+        and source = 'chain-index'
+        and lower(wallet_address) = ${wallet.toLowerCase()}
+      order by first_seen_block desc nulls last`;
+    return {
+      sessions: rows.map((r) => ({
+        sessionPublicKey: r.session_public_key,
+        state: r.state,
+        firstSeenBlock: r.first_seen_block,
+        lastCheckedAt: r.last_checked_at ? new Date(r.last_checked_at) : null,
+      })),
+      error: null,
+    };
+  } catch (e) {
+    return { sessions: [], error: String((e as Error).message ?? e).slice(0, 140) };
+  }
+}
+
+/** Population of the on-chain session index, scoped to when it began. */
+async function sessionIndexStat(): Promise<{
+  active: number | null;
+  total: number | null;
+  since: Date | null;
+}> {
+  try {
+    const sql = getClient();
+    // observed_at of the earliest chain-index row is when indexing began -
+    // the honest bound, stated wherever the figure is used (invariant 3).
+    const [row] = await sql<{ active: number; total: number; since: Date | null }[]>`
+      select count(*) filter (where state = 'active')::int as active,
+             count(*)::int as total,
+             min(observed_at) as since
+      from sessions where source = 'chain-index'`;
+    return { active: row?.active ?? null, total: row?.total ?? null, since: row?.since ? new Date(row.since) : null };
+  } catch {
+    return { active: null, total: null, since: null };
+  }
+}
+
 /**
  * Live demo grants, straight from public.sessions.
  *
@@ -64,6 +136,7 @@ async function demoGrants(): Promise<{ grants: DemoGrant[]; error: string | null
              call_allowlist, spend_caps
       from sessions
       where state = 'active' and expiry > now()
+        and source = 'gebo-grant'
       order by chain_id desc, expiry`;
     return {
       grants: rows.map((r) => ({
@@ -121,6 +194,12 @@ export default async function AuthorityPage({
   const valid = raw ? isAddress(raw) : false;
   const authority = valid ? await readAuthority(raw as `0x${string}`, chainId) : null;
   const demo = await demoGrants();
+  // The on-chain index only covers mainnet Keystore sessions tonight;
+  // say so rather than rendering an empty third-party section for testnet.
+  const observed = valid && chainId === 56
+    ? await observedSessions(raw, chainId)
+    : { sessions: [], error: null as string | null };
+  const indexStat = await sessionIndexStat();
 
   return (
     <>
@@ -378,10 +457,56 @@ export default async function AuthorityPage({
                           </div>
                         </div>
                       );
-                     })}
+                      })}
                    </div>
                  </div>
                 </>
+              )}
+
+              {/**
+                * Third-party sessions from the on-chain index: sessions anyone
+                * registered through the Keystore, discovered from logs and
+                * re-verified through the same live reads above. Rendered for
+                * the looked-up wallet only, with the index's scoping stated -
+                * absent from the index is not "no sessions", it is "not
+                * indexed" (invariant 3).
+                */}
+              {chainId === 56 && (observed.sessions.length > 0 || observed.error) && (
+                <div className="data-table-frame mt-l">
+                  <div className="rows-head r-keys">
+                    <span>Session key (on-chain index)</span><span>State</span><span>First seen</span><span>Last checked</span>
+                  </div>
+                  {observed.error ? (
+                    <div className="row r-keys">
+                      <div className="xs t-3">
+                        The on-chain session index could not be read ({observed.error}). Unmeasured, not empty.
+                      </div>
+                    </div>
+                  ) : (
+                    observed.sessions.map((s) => (
+                      <div key={s.sessionPublicKey} className="row r-keys">
+                        <div className="num xs" style={{ wordBreak: "break-all" }}>
+                          {s.sessionPublicKey.slice(0, 34)}...{s.sessionPublicKey.slice(-8)}
+                        </div>
+                        <div>
+                          <span className="chip" data-state={s.state === "active" ? "VERIFIED" : "DORMANT"}>
+                            {s.state === "active" ? "ACTIVE" : "INACTIVE"}
+                          </span>
+                        </div>
+                        <div className="xs t-3 num">
+                          {s.firstSeenBlock ? `block ${Number(s.firstSeenBlock).toLocaleString()}` : "-"}
+                        </div>
+                        <div className="xs t-4 num">
+                          {s.lastCheckedAt ? s.lastCheckedAt.toISOString().slice(0, 16).replace("T", " ") + " UTC" : "-"}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <p className="xs t-4 mt-s" style={{ margin: 0 }}>
+                    Discovered from Altana Keystore events and re-verified on chain; scope is not
+                    readable from the registry, so these rows carry validity and provenance only.
+                  </p>
+                </div>
               )}
              </div>
            </section>
@@ -398,6 +523,26 @@ export default async function AuthorityPage({
                 authority the user could not see or could not retract. A control discovered after
                 something has gone wrong is not a control, so this page is reachable before any
                 authority is granted and works on wallets that have none.
+              </p>
+              <p className="prose sm">
+                This project also indexes the Keystore itself: every session anyone registers
+                on BNB Smart Chain is harvested from on-chain events and re-verified against
+                the registry, so the reverse question - which wallets carry agent sessions -
+                has an answer that does not depend on asking each wallet.
+                {indexStat.total != null && indexStat.total > 0 ? (
+                  <>
+                    {" "}
+                    <strong>
+                      {indexStat.active ?? 0} active of {indexStat.total} observed
+                    </strong>{" "}
+                    {indexStat.since
+                      ? `(indexing since ${indexStat.since.toISOString().slice(0, 10)})`
+                      : ""}
+                    .
+                  </>
+                ) : (
+                  " The index begins with this deployment; the figure appears once sessions have been observed."
+                )}
               </p>
               <p className="prose sm" style={{ margin: 0 }}>
                 Because Keystore state is public and on chain rather than held in a vendor
