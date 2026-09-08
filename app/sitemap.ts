@@ -39,12 +39,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (url) {
     const sql = postgres(url, { prepare: false, max: 1, connect_timeout: 10, onnotice: () => {} });
     try {
-      const rows = await sql<{ token_id: string; updated: string }[]>`
-        select token_id::text as token_id, updated_at::text as updated
-        from agents
-        where chain_id = 56 and trust_state in ('VERIFIED', 'LISTED')
-        order by updated_at desc
-        limit ${MAX_AGENT_URLS}`;
+      /**
+       * The query is raced against a short clock: this function runs at
+       * BUILD time (ISR prerender), and an unbounded DB read there fails the
+       * whole deploy - found 2026-09-08 when the throttled free tier held
+       * the sitemap query past Vercel's 60s page-data deadline ("Failed to
+       * build /sitemap.xml: attempt 1 of 3"), which would have blocked every
+       * auto-deploy until the DB recovered. Builds must never depend on
+       * database latency; the runtime revalidation (hourly, on request)
+       * picks the verified set up again once the read succeeds.
+       */
+      const SITEMAP_QUERY_BUDGET_MS = 8_000;
+      const rows = await Promise.race([
+        sql<{ token_id: string; updated: string }[]>`
+          select token_id::text as token_id, updated_at::text as updated
+          from agents
+          where chain_id = 56 and trust_state in ('VERIFIED', 'LISTED')
+          order by updated_at desc
+          limit ${MAX_AGENT_URLS}`,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("sitemap query budget exceeded")), SITEMAP_QUERY_BUDGET_MS),
+        ),
+      ]);
       for (const r of rows) {
         entries.push({
           url: `${SITE}/a/${r.token_id}`,

@@ -838,6 +838,14 @@ export type PagedSearch = {
    *  change when a facet is applied, or the filter chips lie. Empty when
    *  capped: a 100k+ set cannot be broken down without another full scan. */
   byState: Record<string, number>;
+  /**
+   * False when the search could not be measured (DB read failed or timed
+   * out). The page must render "could not search" - never "0 matches",
+   * which presents a failed measurement as a finding (invariant 9; seen
+   * live 2026-09-08 when the throttled free tier timed the query out and
+   * the page said no agents match over 257,000 registered agents).
+   */
+  live: boolean;
 };
 
 /** Beyond this, the count stops and the display says "N+". 20 pages x 60. */
@@ -880,10 +888,10 @@ export async function searchAgentsPaged(
   opts: { limit?: number; offset?: number; state?: TrustStateFilter | null; sort?: SearchSort } = {},
 ): Promise<PagedSearch> {
   const q = query.trim();
-  if (!q) return { hits: [], total: 0, cappedTotal: false, byState: {} };
+  if (!q) return { hits: [], total: 0, cappedTotal: false, byState: {}, live: true };
 
   const sql = db();
-  if (!sql) return { hits: [], total: 0, cappedTotal: false, byState: {} };
+  if (!sql) return { hits: [], total: 0, cappedTotal: false, byState: {}, live: false };
 
   const limit = Math.max(1, Math.min(120, opts.limit ?? 40));
   const offset = Math.max(0, Math.min(100_000, opts.offset ?? 0));
@@ -1011,10 +1019,11 @@ export async function searchAgentsPaged(
       total: capped ? preTotal : (fullTotal || (state ? (breakdown[state] ?? 0) : 0)),
       cappedTotal: capped,
       byState: breakdown,
+      live: true,
     };
   } catch (err) {
     console.warn(`[data] search failed: ${String(err).slice(0, 140)}`);
-    return { hits: [], total: 0, cappedTotal: false, byState: {} };
+    return { hits: [], total: 0, cappedTotal: false, byState: {}, live: false };
   }
 }
 

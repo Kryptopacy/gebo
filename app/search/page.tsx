@@ -41,7 +41,7 @@ export default async function SearchPage({
   // Page 1 is fetched first to learn the total (needed to clamp the page and
   // to render truthful counts); a valid page > 1 is then fetched with its
   // offset. Two sequential round trips only for deep pages.
-  const empty = { hits: [], total: 0, cappedTotal: false, byState: {} as Record<string, number> };
+  const empty = { hits: [], total: 0, cappedTotal: false, byState: {} as Record<string, number>, live: true };
   const first = q ? await searchAgentsPaged(q, { limit: PAGE_SIZE, state, sort }) : empty;
   const page = clampPage(raw.page, first.total);
   const paged = q && page > 1
@@ -119,17 +119,26 @@ export default async function SearchPage({
 
           {q && (
             <div className="mt-m">
-              <p className="sm t-3" style={{ marginBottom: 10 }}>
-                {first.total === 0
-                  ? state
-                    ? `Nothing in state ${state} matches "${q}".`
-                    : `Nothing matches "${q}".`
-                  : first.cappedTotal
-                    ? `${first.total.toLocaleString()}+ agents match "${q}" — too many to count precisely or rank by relevance.`
-                    : `${first.total.toLocaleString()} agent${first.total === 1 ? "" : "s"} match "${q}" ` +
-                      `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
-                      `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
-              </p>
+              {first.live === false ? (
+                <div className="notice" data-tone="fail" style={{ marginBottom: 10 }}>
+                  <strong>The search could not be measured.</strong> A read against the registry
+                  database did not complete, so no results can honestly be shown for &quot;{q}&quot;.
+                  This notice exists because the alternative — printing &quot;0 matches&quot; — would
+                  present a failed measurement as a finding over 257,000 registered agents.
+                </div>
+              ) : (
+                <p className="sm t-3" style={{ marginBottom: 10 }}>
+                  {first.total === 0
+                    ? state
+                      ? `Nothing in state ${state} matches "${q}".`
+                      : `Nothing matches "${q}".`
+                    : first.cappedTotal
+                      ? `${first.total.toLocaleString()}+ agents match "${q}" — too many to count precisely or rank by relevance.`
+                      : `${first.total.toLocaleString()} agent${first.total === 1 ? "" : "s"} match "${q}" ` +
+                        `— ${byState("VERIFIED")} verified, ${byState("LISTED")} responding, ` +
+                        `${byState("DORMANT")} unreachable, ${byState("SHADOWED")} uncallable.`}
+                </p>
+              )}
               {first.total > 0 && (
                 <div className="inline-list" style={{ gap: 8 }}>
                   <span className="xs t-4">State:</span>
