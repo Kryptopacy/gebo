@@ -373,6 +373,40 @@ async function main() {
   });
 
   /**
+   * Keystore session index (migration 0034): third-party sessions from
+   * on-chain logs, verified per-wallet through the same reads the authority
+   * console uses. The cron is HTTP-routed, so a missing deploy shows up as
+   * failed runs rather than silence.
+   */
+  const sessionCron = await scheduled("gebo-sessions");
+  const sessionRowsAll = await sql<{ n: number }[]>`
+    select count(*)::int as n from sessions where source = 'chain-index'`.catch(() => [{ n: 0 }] as { n: number }[]);
+  const sessionRows = sessionRowsAll?.[0]?.n ?? 0;
+  gates.push({
+    id: "session-index",
+    item: "Keystore session index (third-party sessions, mainnet)",
+    state: sessionCron && sessionRows > 0 ? "DONE" : sessionCron ? "PARTIAL" : "MISSING",
+    evidence:
+      `gebo-sessions cron=${sessionCron ? "active" : "missing"}, chain-index rows=${sessionRows}` +
+      (sessionCron && sessionRows === 0 ? " (index live; no third-party Keystore activity observed yet - the mainnet Keystore is quiet, and public RPC depth bounds history to the free window)" : ""),
+  });
+
+  /**
+   * Paper mode (migration 0036): the reference agent's zero-spend decision
+   * loop, recorded and scored publicly at /paper.
+   */
+  const paperCron = await scheduled("gebo-paper");
+  const paperRunsAll = await sql<{ n: number }[]>`
+    select count(*)::int as n from paper_runs`.catch(() => [{ n: 0 }] as { n: number }[]);
+  const paperRuns = paperRunsAll?.[0]?.n ?? 0;
+  gates.push({
+    id: "paper-mode",
+    item: "Paper mode (zero-spend decision loop, recorded and scored)",
+    state: paperCron && paperRuns > 0 ? "DONE" : paperCron ? "PARTIAL" : "MISSING",
+    evidence: `gebo-paper cron=${paperCron ? "active" : "missing"}, runs=${paperRuns}`,
+  });
+
+  /**
    * Live Altana sessions, granted rather than described - measured ONCHAIN.
    *
    * The Altana bounty disqualifies submissions that cannot show live onchain

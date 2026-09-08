@@ -16,7 +16,7 @@ Do this before planning anything. It takes under a minute and replaces guessing.
 
 ```
 npm run readiness        # production gates, measured from the DB, not a checklist
-npm run cron:status      # are the five scheduled jobs alive, and did they succeed
+npm run cron:status      # are the scheduled jobs alive, and did they succeed
 npm run classify:drift   # is classification behind ingestion, or behind the rules
 npm run stats            # the funnel figures the landing page serves
 git log --oneline -12
@@ -79,6 +79,53 @@ rushed. Steady-state growth after the surgery is ~3-4 MB/day at the current
 mint rate: ~155 MB of headroom buys about a month, and the honest long-term
 answers are the Pro tier or a slimmer per-row payload, not another round of
 midnight surgery.
+
+### The four marketplace items (2026-09-07 night)
+
+The spec-vs-state gap analysis produced four engineering items; all four
+landed in one session. What they are and the facts they established:
+
+1. **`registry_counts` (0029)** - landing aggregates served from a one-row
+   table refreshed by DIRECT pg_cron SQL every 5 min, because the direct
+   aggregate measured 9.8s cold against the 9s render timeout. Served only
+   while fresh (30 min = six missed runs); a direct-pooler connection stall
+   still shows the honest banner, by design.
+2. **Keystore session index (0034)** - third-party sessions indexed WITHOUT
+   the Keystore's event ABI (the SDK ships none): logs are discovery only
+   (topic1-shaped wallets), the truth per wallet comes from `readAuthority`
+   itself. RPC facts, probed: **publicnode serves `eth_getLogs` only for the
+   last ~10k blocks** ("archive requests require a personal token" beyond),
+   and **the bnbchain dataseed free tier rejects `eth_getLogs` outright** at
+   any range. So the index's history is bounded by the free RPC window and
+   accumulates forward from the cron (10-min cadence, 5k-block windows);
+   `/authority` states the index start wherever its rows are used.
+   `source='chain-index'` rows carry NULL grant_tx_hash and expiry, which
+   keeps them out of the demo-grants list and the readiness Altana gate -
+   both mean GEBO's OWN grants.
+3. **Opportunity fields (0035)** - grid `ruinProbabilityEstimate` is a
+   disclosed log-normal model over OUR hourly tick snapshots
+   (`pool_tick_snapshots`); V3 `observe()` reaches only ~4h on BSC pools
+   (reverts OLD), so a one-shot vol read is dishonest precision. Publishes
+   at >=48 hourly deltas spanning >=72h; "accumulating" until then. Health
+   oracle fields: `oracleStalenessSec` and `protocolPaused` are PROBED
+   UNREADABLE through the Venus Comptroller (getTokenConfig returns no
+   usable feed set; getActionPaused/getMarketPauseFlags revert on the
+   Diamond) - they render as unmeasured with reasons, plus the measurable
+   proxy that IS readable: oracle-vs-pool divergence for BNB.
+4. **Paper mode (0036, `/paper`)** - the reference health agent's real
+   decision loop under a zero-spend read-only scope, recorded on measured
+   inputs, scored mechanically on the next run. The score is a fraction
+   with counts and its rule, never a rating (invariant 2 applies).
+5. **`capability_doc` swap (0032/0033)** - the stored generated tsvector
+   (36.7 MB) is replaced by a 13 MB expression index; the code now queries
+   the expression. **0033 (drop the column) applies ONLY after the
+   expression-code deploy is verified live on /search** - dropping early
+   breaks the deployed search, the materialize-route lesson.
+
+**The RPC depth limit is the reason the session index cannot backfill
+further**: without a paid archive endpoint, history starts where the cron
+started. If a BscScan API key or archive RPC is ever added, re-run
+`scripts/backfill-sessions.ts --apply --depth <blocks>`.
 
 ### The frozen product layer (found 2026-09-06)
 
