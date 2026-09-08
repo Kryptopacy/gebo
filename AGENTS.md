@@ -130,6 +130,41 @@ further**: without a paid archive endpoint, history starts where the cron
 started. If a BscScan API key or archive RPC is ever added, re-run
 `scripts/backfill-sessions.ts --apply --depth <blocks>`.
 
+### The sustainable free-tier fleet (2026-09-08, empirical)
+
+The full cron fleet does NOT fit the Supabase free tier at 257k+ agents.
+Measured twice in one day: restored at post-0037 cadences (census 30-min
+gate, counts every 15), the database throttled again within ~3 hours
+(select 1 at 6-8s, statement timeouts, cron responses mostly null). The
+morning incident drained in ~40 min on a full stand-down; the answer is
+not another cadence tune but a permanently thinner fleet:
+
+| Job | Full fleet | Sustainable fleet |
+| --- | --- | --- |
+| resolve | every 1 min | every 5 |
+| materialize | every 3 | every 5 |
+| sync | every 5 | every 15 |
+| probe | every 5 | every 10 |
+| counts | every 15 | every 30 |
+| classify, opportunities, sessions | 10 min each | OFF until Pro |
+
+`scripts/tmp-thin-fleet.ts` applies this; `tmp-stand-down.ts` +
+`tmp-restore-crons.ts` bracket an incident. Readiness on the thin fleet
+reads 28/31: the session-index MISS and the classify backlog (queued=43)
+are the disclosed cost, and every surface that renders their data states
+its updated_at. If the tier ever carries more, restore the full values
+from git history. The honest long-term answer remains Pro, which also
+removes the ~3-4 MB/day storage ceiling calculation entirely.
+
+**Deploys are automatic, and a green local verify proves nothing on a
+dirty tree** (found 2026-09-08): 60169f8 accidentally committed two
+half-alive tmp scripts (staged, then deleted from disk - deleting does
+not unstage), and every push after it failed the Vercel build while local
+verify stayed green, because tsc checked the working tree, not the repo.
+The live site silently kept an older build for hours. After any push,
+verify the DEPLOYED content (probe a fingerprint like llms.txt), not just
+the build log.
+
 ### The frozen product layer (found 2026-09-06)
 
 Search, categories, cards, the prober and every agent-consumable surface read
