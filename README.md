@@ -40,7 +40,7 @@ Every other directory repeats that claim; GEBO reports whether anything answers.
 A second finding corrected an early assumption. Ownership is *not* concentrated —
 the overwhelming majority of owner addresses hold exactly one identity, which is
 the signature of points farming rather than supply. **Concentration lives in
-infrastructure:** 107 operators run every endpoint on the chain, and the largest
+infrastructure:** 125 operators run every endpoint on the chain, and the largest
 accounts for the clear majority of them. Rank by owner address and you appear to
 have hundreds of thousands of independent suppliers. Rank by infrastructure and
 there are dozens.
@@ -59,12 +59,13 @@ if it ever goes stale.
 **Land → find an agent by category → understand what it does → activate it —
 without a dead end.**
 
-1. **Land** on the funnel itself: every step from "319k identities minted" to
-   "2,929 you could actually hire", measured, not asserted.
+1. **Land** on the funnel itself: every step from "341k identities minted" to
+   "3,252 you could actually hire" (as of 2026-09-08), measured, not
+   asserted.
 2. **Find by category.** Four first-class jobs — *Keep my LP position in range*
    (rebalancing), *Trade a range automatically* (grid), *Move my capital to
    better yield* (yield), *Stop my loan being liquidated* (health factor) —
-   plus five more categories the chain is actually full of. Every category page
+   plus more categories the chain is actually full of. Every category page
    carries a live opportunity surface indexed from PancakeSwap V3 and Venus, so
    the work is visible whether or not a competent agent exists yet. Capability
    search covers the rest.
@@ -79,6 +80,58 @@ without a dead end.**
    browser wallet, or through the **Altana SDK rail** (a passkey wallet and one
    atomic relay intent). Revocation is one transaction, shown before you ever
    grant, and wired as a button in the [authority console](https://gebo-bsc.vercel.app/authority).
+
+## The ten-minute walkthrough
+
+For a human reviewer, in the order that shows the most the fastest:
+
+1. [`/`](https://gebo-bsc.vercel.app/) — the funnel. Every number carries its
+   denominator, window and observation count; the funnel renders from live
+   census, never hardcoded figures.
+2. [`/search?q=grid`](https://gebo-bsc.vercel.app/search?q=grid) — capability
+   search over 257k materialized agents, ranked, with a truthful count and
+   state breakdown. If the read ever fails, the page says *could not be
+   measured* — it never says "0 matches".
+3. Any agent card — probe history with uptime over an observation count, a
+   real unedited sample response from the agent's own endpoint, and the
+   **explicit honest empty states**: "no verified reviews — reviews require a
+   completed hire".
+4. [`/authority`](https://gebo-bsc.vercel.app/authority) — the question no
+   other directory answers: **what can an agent do to this wallet?** Paste any
+   BSC address. Live Altana Keystore read, third-party sessions from the
+   on-chain event index, the global kill switch, and the standing "what this
+   check does not cover" disclosure — the caveat is on the page before you
+   search, not after.
+5. [`/c/health`](https://gebo-bsc.vercel.app/c/health) → any opportunity →
+   `/o/[id]` — the work itself: live Venus market state, the oracle's price
+   vs the market's (divergence as a stale-feed signal), pause flags *as
+   unmeasured with reasons* where the Comptroller exposes no getter, and the
+   grid ruin-probability model that says *accumulating* until it has 72 hours
+   of its own tick observations rather than inventing a number.
+6. [`/paper`](https://gebo-bsc.vercel.app/paper) — paper mode: the reference
+   health agent's real decision loop under a zero-spend scope, every decision
+   recorded on its measured inputs, scored mechanically on the next run. The
+   score is a fraction with counts and its rule — never a rating.
+7. [`/live`](https://gebo-bsc.vercel.app/live) and
+   [`/methodology`](https://gebo-bsc.vercel.app/methodology) — the prober's
+   limits published (one region, and it says so), what the site refuses to
+   display, and why.
+8. For an **agent** reviewer: `POST /mcp` with a JSON-RPC `tools/list` — eight
+   read-only tools, every response carrying its caveats; [`/llms.txt`](https://gebo-bsc.vercel.app/llms.txt)
+   at the root; the browser-native WebMCP surface for agent-mode browsers.
+
+### On-chain evidence
+
+Everything above that can be on chain, is:
+
+| What | Where |
+| --- | --- |
+| ERC-8004 census (341k identities) | IdentityRegistry `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`, read directly by multicall |
+| 11 reputation writes (mainnet, unattended every 6h) | ReputationRegistry `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` — e.g. [`0xe717c5…c8eda7`](https://bscscan.com/tx/0xe717c5ba0e5db799270b0e07334b9e75f4cc710a221f7d60d7af10b700c8eda7) |
+| Scoped session grants (testnet 97) | Altana Keystore `0x6b8361C29d05D498b1a12B54A37310f94171E94A` — e.g. [`0x8ea96b…4f37a3`](https://testnet.bscscan.org/tx/0x8ea96b5fcd2b5c771195eeea52bf728f31941ae57f5528b4ad4b6ac32b4f37a3) |
+| APEX (ERC-8183) hire, job 788 FUNDED (testnet) | AgenticCommerce `0xa206c0517B6371C6638CD9e4a42Cc9f02A33B0DE` — tx `0xd48339a1…` |
+| x402 settlement, session key pays (testnet) | tx `0xe110f574…` — the permit2-exact rail; eip3009 rejects session-key signatures |
+| Session-scope enforcement (6/6 assertions) | `npm run spike:altana` — reproducible on-chain verification |
 
 ## What makes it different
 
@@ -104,7 +157,24 @@ without a dead end.**
   Agent Advantage Report (hire vs do-it-yourself, both arms timed), a
   replay-measured grid trading record with every defect disclosed, and
   reputation write-back to the ERC-8004 Reputation Registry only after 24h of
-  consistent evidence.
+  consistent evidence — now a scheduled producer (every 6h, bounded, gated),
+  not a hand-run script.
+- **The authority question, answered for any wallet.** `/authority` reads the
+  Altana Keystore live (no permission, no vendor), indexes third-party
+  sessions from on-chain events without guessing event ABIs (logs discover
+  wallets; the chain verifies keys), and exposes a global kill switch that
+  revokes every active session in one action — with the standing disclosure
+  of what the check cannot see.
+- **Paper mode.** The Tier-3 on-ramp: an unproven agent's real decision loop
+  under a zero-spend, read-only scope, every decision recorded on its
+  measured inputs and scored mechanically on the next run. A fraction with
+  counts and a rule — never a rating.
+- **Honest unmeasured states, structurally.** Venus oracle staleness and
+  pause flags render as *unmeasured with reasons* where no getter exists,
+  alongside the measurable proxy that does (oracle-vs-market divergence).
+  The grid ruin-probability model publishes only from its own accumulated
+  72h of tick observations and says *accumulating* until then. A failed
+  search renders as *could not be measured*, never "0 matches".
 - **Reference agents, disclosed.** Four working reference agents
   (HealthGuard, RangeKeeper, GridRunner, YieldRouter) run on this deployment,
   probed and ranked like anyone else, and every card says so.
@@ -139,25 +209,31 @@ page.
 
 ```
                 ERC-8004 Identity Registry (BSC)
-                PancakeSwap V3 · Venus
+                PancakeSwap V3 · Venus · Altana Keystore
                           │  multicall reads
                           ▼
-  pg_cron ──► /api/cron/sync          new identities, data: URIs inline
-  (Supabase) ► /api/cron/resolve      remote registration backlog
-             ► /api/cron/probe        A2A/MCP handshakes, tiered cadence
-             ► /api/cron/classify     capability labels, rule-fingerprinted
-             ► /api/cron/opportunities pool ticks, lending rates
-             ► /api/cron/grid-record  replay-measured trading record
+   pg_cron ──► /api/cron/sync          new identities, data: URIs inline
+   (Supabase) ► /api/cron/resolve      remote registration backlog
+              ► /api/cron/probe        A2A/MCP handshakes, tiered cadence
+              ► /api/cron/classify     capability labels, rule-fingerprinted
+              ► /api/cron/opportunities pool ticks, lending rates, tick snapshots
+              ► /api/cron/sessions     Keystore events -> third-party session index
+              ► /api/cron/paper        zero-spend decision loop, recorded + scored
+              ► /api/cron/reputation   ERC-8004 write-back, gated, every 6h
+              ► /api/cron/grid-record  replay-measured trading record
+              ► gebo-counts            landing aggregates (direct SQL, 15 min)
+              ► gebo-maint             retention: token_uri cache, history, snapshots
                           │
                           ▼
-  registry_tokens · agents · agent_endpoints · probe_daily · probe_events
-  opportunities · operators · sessions · attestations · metric_values
-  census_stats · trading_records
+   registry_tokens · agents · agent_endpoints · probe_daily · probe_events
+   opportunities · operators · sessions · attestations · metric_values
+   census_stats · registry_counts · pool_tick_snapshots
+   paper_runs · paper_decisions · index_checkpoints
                           │  refresh_census_stats()
                           ▼
                 loadCensus() / loadAggregates()
                           ▼
-              Next.js (per-request rendering)
+               Next.js (per-request rendering)
 ```
 
 **Scheduling runs inside Postgres.** `pg_cron` calls the API routes through
@@ -190,7 +266,7 @@ The registry is itself an agent endpoint, not just a website for humans:
 
 | Surface | Path |
 | --- | --- |
-| MCP server (Streamable HTTP, JSON-RPC) | `POST /mcp` — tools: `search_agents`, `get_agent`, `list_categories`, `get_opportunities`, `get_registry_stats`, `get_track_record`, `get_verified_reviews`. Stateless, read-only, protocol `2025-06-18`; protocol layer in `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, pinned by `tests/mcp-server.test.ts`. |
+| MCP server (Streamable HTTP, JSON-RPC) | `POST /mcp` — tools: `search_agents`, `get_agent`, `list_categories`, `get_opportunities`, `get_registry_stats`, `get_track_record`, `get_verified_reviews`, `check_wallet_authority` (Altana Keystore session keys, with what the check cannot see). Stateless, read-only, protocol `2025-06-18`; protocol layer in `src/lib/mcp.ts`, DB wiring in `app/mcp/route.ts`, pinned by `tests/mcp-server.test.ts`. |
 | Verified reviews (write) | `POST /api/reviews` — wallet-signed comment; the server verifies on chain that an APEX escrow job reached Completed with the signer as client and the listed agent as provider. Agents POST the same shape with their own keys — the gate is the evidence, not the caller's nature. |
 | Verified reviews (read) | `GET /api/reviews?tokenId=...` — comments with their on-chain anchors; no scores, no aggregates, nothing that feeds ranking. |
 | WebMCP discovery manifest | `/.well-known/mcp` (and `/.well-known/mcp.json`) |
@@ -231,7 +307,7 @@ snapshot, so it is never hard-blocked on infrastructure.
 
 | Script | Purpose |
 | --- | --- |
-| `readiness` | **26-gate production audit measured from the DB.** The source of truth for what is done. |
+| `readiness` | **31-gate production audit measured from the DB.** The source of truth for what is done. |
 | `verify` | `tsc --noEmit && vitest run && next build` — run before claiming anything is done. |
 | `stats` | Print the figures the site is currently serving. |
 | `docs:measurements` | Regenerate the docs/MEASUREMENTS.md block. Automated daily by GitHub Action; gated by readiness. |

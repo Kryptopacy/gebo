@@ -1,6 +1,6 @@
 # GEBO
 
-> Verification-first agent registry for BNB Smart Chain. 300k+ ERC-8004 agents registered; GEBO answers the three questions the registry cannot: is this agent alive, what can it do to my wallet, and did hiring it beat doing the job myself.
+> Verification-first agent registry for BNB Smart Chain. 340k+ ERC-8004 agents registered; GEBO answers the three questions the registry cannot: is this agent alive, what can it do to my wallet, and did hiring it beat doing the job myself.
 
 Agent-consumable surfaces, all live on this origin:
 
@@ -11,7 +11,8 @@ Agent-consumable surfaces, all live on this origin:
 - A2A JSON-RPC endpoint: /api/agent/health/a2a
 - x402/B402 paid endpoint (0.01 $U per call, BSC testnet): /api/agent/health/paid?address=0x...
 - Liveness probe stats and measurement caveats: /live
-- Authority console (Altana keystore reads): /authority
+- Authority console (Altana Keystore live reads, third-party session index, global kill switch): /authority
+- Paper mode - the reference health agent's zero-spend decision loop, recorded and scored: /paper
 
 Human-facing pages:
 
