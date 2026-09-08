@@ -15,6 +15,7 @@ import postgres from "postgres";
 import { createPublicClient, http, fallback, parseAbi, type Address, type PublicClient } from "viem";
 import { bsc } from "viem/chains";
 import { authorizeCron } from "@/lib/cron-auth";
+import { estimateRuin, ruinQualifiers, SNAPSHOT_MIN_INTERVAL_MIN, type TickSample } from "@/lib/grid-risk";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -68,6 +69,10 @@ const comptrollerAbi = parseAbi([
   "function markets(address) view returns (bool,uint256,bool)",
   "function closeFactorMantissa() view returns (uint256)",
   "function liquidationIncentiveMantissa() view returns (uint256)",
+  "function oracle() view returns (address)",
+]);
+const oraclePriceAbi = parseAbi([
+  "function getUnderlyingPrice(address vToken) view returns (uint256)",
 ]);
 const vTokenAbi = parseAbi([
   "function symbol() view returns (string)",
@@ -148,6 +153,46 @@ export async function GET(request: Request) {
       return 0; // non-stable token1 without a known USD price: depth unpriceable
     };
 
+    // ── tick snapshots + ruin estimate (spec: grid.ruinProbabilityEstimate) ─
+    // V3 observe() reaches only ~4h on BSC pools (measured), so the model
+    // runs on OUR hourly snapshots. Snapshots are written at most hourly
+    // per pool; the estimate publishes only at >=48 hourly deltas spanning
+    // >=72h, and before that the payload carries the accumulating count.
+    const livePools = live.map((p) => p.pool!);
+    const [lastSnaps, series] = await Promise.all([
+      sql<{ pool: string; latest: Date | null }[]>`
+        select pool, max(at) as latest from pool_tick_snapshots
+        where pool = any(${livePools}) group by pool`.catch(() => [] as { pool: string; latest: Date | null }[]),
+      sql<{ pool: string; at: Date; tick: number }[]>`
+        select pool, at, tick from pool_tick_snapshots
+        where pool = any(${livePools}) and at > now() - interval '8 days'
+        order by pool, at`.catch(() => [] as { pool: string; at: Date; tick: number }[]),
+    ]);
+    const lastByPool = new Map(lastSnaps.map((r) => [r.pool, r.latest ? new Date(r.latest).getTime() : 0]));
+    const seriesByPool = new Map<string, TickSample[]>();
+    for (const r of series) {
+      const arr = seriesByPool.get(r.pool) ?? [];
+      arr.push({ at: new Date(r.at), tick: Number(r.tick) });
+      seriesByPool.set(r.pool, arr);
+    }
+    const newSnapshots: { pool: string; tick: number }[] = [];
+    const ruinByPool = new Map<string, ReturnType<typeof estimateRuin>>();
+    for (let i = 0; i < live.length; i++) {
+      const p = live[i]!;
+      const s = slots[i];
+      if (s?.status !== "success") continue;
+      const tick = (s.result as readonly [bigint, number, number, number, number, number, boolean])[1];
+      const last = lastByPool.get(p.pool!) ?? 0;
+      if (Date.now() - last > SNAPSHOT_MIN_INTERVAL_MIN * 60_000) {
+        newSnapshots.push({ pool: p.pool!, tick });
+      }
+      ruinByPool.set(p.pool!, estimateRuin(seriesByPool.get(p.pool!) ?? []));
+    }
+    if (newSnapshots.length) {
+      await sql`insert into pool_tick_snapshots ${sql(newSnapshots.map((s) => ({ pool: s.pool, tick: s.tick })))}`
+        .catch(() => {}); // snapshot loss is tolerable; the next run retries
+    }
+
     for (let i = 0; i < live.length; i++) {
       const p = live[i]!;
       if (slots[i]?.status !== "success") continue;
@@ -157,6 +202,18 @@ export async function GET(request: Request) {
       const label = `${p.a}/${p.b} ${(p.fee / 10_000).toFixed(2)}%`;
       const dUsd = depthUsd(liquidity, s[0], token1Usd(p));
       const stablePair = STABLES.has(p.a) && STABLES.has(p.b);
+      const ruin = ruinByPool.get(p.pool!);
+      const ruinFields = ruin && "probability" in ruin
+        ? {
+            ruinProbabilityEstimate: Number(ruin.probability.toFixed(4)),
+            ruinNote: ruinQualifiers(ruin),
+          }
+        : {
+            ruinProbabilityEstimate: null,
+            ruinNote: ruin
+              ? `accumulating: ${ruin.accumulating} hourly observations over ${Math.round(ruin.spanHours)}h; the estimate publishes at 48 observations spanning 72h`
+              : "no tick history yet for this pool; snapshotting begins with this run",
+          };
       const payload = {
         pool: p.pool, tokenA: p.a, tokenB: p.b,
         feeTier: p.fee, feePct: p.fee / 10_000, tickSpacing: TICK_SPACING[p.fee] ?? null,
@@ -167,6 +224,7 @@ export async function GET(request: Request) {
         unlocked: s[6], observationCardinality: s[3],
         masterChefV3: "0x556B9306565093C855AEA9AE92A594704c2Cd59e",
         readAtBlock: head.toString(),
+        ...ruinFields,
       };
       rows.push({
         id: `rebalancing:56:pancakeswap-v3:${p.pool}`, category: "rebalancing", chain_id: 56,
@@ -200,10 +258,28 @@ export async function GET(request: Request) {
       // "Diamond: Function does not exist". Coercing that to 0n made the
       // opportunity table print "-100.0%" for every market: a failed
       // measurement rendered as a number. Store null and say unmeasured.
-      const [closeFactor, liqIncentive] = await Promise.all([
+      const [closeFactor, liqIncentive, oracleAddr] = await Promise.all([
         client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "closeFactorMantissa" }).catch(() => null),
         client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "liquidationIncentiveMantissa" }).catch(() => null),
+        client.readContract({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "oracle" }).catch(() => null),
       ]);
+
+      /**
+       * Oracle disclosure (spec: health.oracleSources / oracleStalenessSec /
+       * protocolPaused), honestly measured 2026-09-07:
+       * - oracleSources: the comptroller's oracle address, read live. The
+       *   oracle's own source layout is NOT readable (getTokenConfig returns
+       *   no usable feed set; latestRoundData on the returned addresses
+       *   reverts) - so per-source freshness cannot be measured, and the
+       *   field is null WITH ITS REASON rather than a zero.
+       * - protocolPaused: getActionPaused / getMarketPauseFlags both revert
+       *   on this Diamond build - null with reason.
+       * - oracleMarketDivergencePct: the measurable proxy that IS readable:
+       *   the oracle's BNB price vs the deepest WBNB/USDT pool price from
+       *   this run. A frozen feed diverges as the market moves. BNB only in
+       *   v1 - the systemic collateral - disclosed as such.
+       */
+      let oracleBnbDivergencePct: number | null = null;
       const fields = ["symbol", "supplyRatePerBlock", "borrowRatePerBlock", "totalBorrows", "getCash"] as const;
       const reads = await client.multicall({
         contracts: vTokens.flatMap((v) => fields.map((fn) => ({ address: v, abi: vTokenAbi, functionName: fn as any }))),
@@ -213,6 +289,26 @@ export async function GET(request: Request) {
         contracts: vTokens.map((v) => ({ address: VENUS_COMPTROLLER, abi: comptrollerAbi, functionName: "markets" as const, args: [v] })),
         allowFailure: true,
       });
+
+      // BNB divergence: oracle price vs the pool price computed above.
+      let vBnbIdx = -1;
+      for (let i = 0; i < vTokens.length; i++) {
+        const base = i * fields.length;
+        const sym = reads[base]?.status === "success" ? (reads[base]!.result as string) : null;
+        if (sym === "vBNB") { vBnbIdx = i; break; }
+      }
+      if (oracleAddr && vBnbIdx >= 0 && wbnbUsd != null) {
+        const oraclePrice = (await client.readContract({
+          address: oracleAddr as Address, abi: oraclePriceAbi,
+          functionName: "getUnderlyingPrice", args: [vTokens[vBnbIdx]!],
+        }).catch(() => null)) as bigint | null;
+        if (oraclePrice != null) {
+          const oracleBnb = Number(oraclePrice) / 1e18;
+          if (oracleBnb > 0 && wbnbUsd > 0) {
+            oracleBnbDivergencePct = Number(((Math.abs(oracleBnb - wbnbUsd) / wbnbUsd) * 100).toFixed(3));
+          }
+        }
+      }
 
       for (let i = 0; i < vTokens.length; i++) {
         const v = vTokens[i]!;
@@ -244,6 +340,20 @@ export async function GET(request: Request) {
           liquidationIncentiveNote: liqIncentive == null
             ? "unmeasured - the Comptroller's Diamond facets expose no incentive getter"
             : null,
+          oracleSources: oracleAddr ? [oracleAddr] : null,
+          oracleStalenessSec: null,
+          oracleStalenessNote:
+            "unmeasured, not zero - the oracle's source layout is not readable through the " +
+            "comptroller's oracle contract (probed 2026-09-07: no feed set, latestRoundData reverts)",
+          protocolPaused: null,
+          protocolPausedNote:
+            "unmeasured - pause getters (getActionPaused, getMarketPauseFlags) revert on this Comptroller build",
+          oracleMarketDivergencePct: symbol === "vBNB" ? oracleBnbDivergencePct : null,
+          oracleDivergenceBasis: symbol === "vBNB"
+            ? (oracleBnbDivergencePct != null
+                ? "oracle BNB price vs the deepest WBNB/USDT pool read in this run; a frozen feed diverges as the market moves - divergence, not staleness in seconds"
+                : "no pool price or oracle price readable in this run - unmeasured")
+            : "divergence computed for BNB only in v1; other underlyings have no deep pool read in this run",
           isListed, readAtBlock: head.toString(),
         };
         const hasDepth = cash + totalBorrows > 0n;
