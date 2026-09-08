@@ -14,6 +14,7 @@ export const maxDuration = 60;
 const JOBS = [
   "materialize", "sync", "resolve", "probe", "classify",
   "opportunities", "emerging", "grid-record", "regrant",
+  "sessions", "paper", "reputation",
 ] as const;
 
 export async function POST(request: Request) {

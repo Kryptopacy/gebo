@@ -90,6 +90,9 @@ export type CronPanel = {
   jobs: { jobname: string; schedule: string; active: boolean }[];
   recentRuns: { jobname: string; status: string; end: string }[];
   pgNet: { code: number; n: number }[];
+  /** Jobs paused from the console (0039): full definition retained, so
+   *  resume is exact and the fleet guard will not auto-restore them. */
+  paused: { jobname: string; schedule: string; pausedAt: string }[];
 };
 
 export function loadCrons(): Promise<Panel<CronPanel>> {
@@ -106,10 +109,14 @@ export function loadCrons(): Promise<Panel<CronPanel>> {
       from net._http_response
       where created > now() - interval '1 hour'
       group by status_code order by n desc limit 6`;
+    const paused = await sql<{ jobname: string; schedule: string; paused_at: string }[]>`
+      select jobname, schedule, paused_at::text
+      from admin_paused_jobs order by jobname`.catch(() => [] as { jobname: string; schedule: string; paused_at: string }[]);
     return {
       jobs,
       recentRuns: recentRuns.map((r) => ({ jobname: r.jobname, status: r.status, end: r.end })),
       pgNet: net.map((n) => ({ code: n.status_code, n: n.n })),
+      paused: paused.map((p) => ({ jobname: p.jobname, schedule: p.schedule, pausedAt: p.paused_at })),
     };
   });
 }

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { ADMIN_COOKIE, verifySessionToken, adminPasswordConfigured } from "@/lib/admin-auth";
 import { loadAdminData } from "@/lib/admin-data";
-import { AutoRefresh, TriggerButton, LogoutButton } from "./AdminClient";
+import { AutoRefresh, TriggerButton, JobControls, LogoutButton } from "./AdminClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -94,20 +94,35 @@ export default async function AdminPage() {
 
           <PanelBox
             title="Scheduled jobs"
-            note="A cron job that pg_net reports 'succeeded' only queued an HTTP request — the response codes below are the truth. Non-200s persisting across an hour are the pg_net failure shape."
+            note="A cron job that pg_net reports 'succeeded' only queued an HTTP request — the response codes below are the truth. Non-200s persisting across an hour are the pg_net failure shape. Pause captures the job's full definition before unscheduling, so resume is exact; the fleet guard will not auto-restore a job you paused."
           >
             {d.crons.unavailable || !crons ? <Unavailable reason={d.crons.reason} /> : (
               <>
-                <div className="rows-head r-jobs"><span>Job</span><span>Schedule</span><span>Active</span></div>
+                <div className="rows-head r-jobs"><span>Job</span><span>Schedule</span><span>Active</span><span>Control</span></div>
                 <div className="rows">
                   {crons.jobs.map((j) => (
                     <div className="row r-jobs" key={j.jobname}>
                       <span>{j.jobname}</span>
                       <span className="num">{j.schedule}</span>
                       <span style={{ color: j.active ? "var(--pass)" : "var(--fail)" }}>{j.active ? "active" : "INACTIVE"}</span>
+                      <JobControls job={j.jobname} paused={false} />
+                    </div>
+                  ))}
+                  {crons.paused.map((p) => (
+                    <div className="row r-jobs" key={`paused-${p.jobname}`}>
+                      <span>{p.jobname}</span>
+                      <span className="num">{p.schedule}</span>
+                      <span style={{ color: "var(--fail)" }}>PAUSED</span>
+                      <JobControls job={p.jobname} paused />
                     </div>
                   ))}
                 </div>
+                {crons.paused.length === 0 && (
+                  <p className="xs t-4 mt-s" style={{ margin: 0 }}>
+                    No admin-paused jobs. Note: a job absent from this list entirely was shed by the
+                    fleet guard or never scheduled — check AGENTS.md for the free-tier fleet design.
+                  </p>
+                )}
                 <p className="prose sm mt-m">
                   pg_net responses (1h):{" "}
                   {crons.pgNet.length
@@ -137,10 +152,14 @@ export default async function AdminPage() {
             note="Each button calls this deployment's own cron route with the server-held CRON_SECRET — the same call pg_net makes, on demand. Results are relayed verbatim."
           >
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              {["materialize", "sync", "resolve", "probe", "classify", "opportunities", "emerging", "grid-record", "regrant"].map((j) => (
+              {["materialize", "sync", "resolve", "probe", "classify", "opportunities", "emerging", "grid-record", "regrant", "sessions", "paper", "reputation"].map((j) => (
                 <TriggerButton key={j} job={j} />
               ))}
             </div>
+            <p className="xs t-4 mt-s" style={{ margin: 0 }}>
+              The direct-SQL jobs (counts, maint, guard) run from the Scheduled jobs panel above,
+              which executes their SQL functions directly.
+            </p>
           </PanelBox>
 
           <PanelBox

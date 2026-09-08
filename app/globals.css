@@ -273,7 +273,7 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 .row > * { min-width: 0; overflow-wrap: anywhere; }
 .rows-head > * { min-width: 0; }
 
-.r-jobs      { grid-template-columns: 2.1fr 1fr 1fr; }
+.r-jobs      { grid-template-columns: 2.1fr 1fr 1fr 1.4fr; }
 .r-operators { grid-template-columns: 1.6fr 5rem 5rem 1fr; }
 .r-agents    { grid-template-columns: 2.2fr 7.5rem 1.1fr 7rem 1.6fr; }
 .r-spec      { grid-template-columns: 13rem minmax(0, 1fr); }
