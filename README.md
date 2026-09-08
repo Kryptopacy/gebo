@@ -337,6 +337,7 @@ Operational runbook, including scheduler setup and deployment:
 
 | Document | Contents |
 | --- | --- |
+| [docs/DEMO.md](docs/DEMO.md) | The five-minute live demo script, with the punchline at each stop |
 | [docs/STRATEGY.md](docs/STRATEGY.md) | Research, standards verification, marketplace autopsies, user voice, the wedge |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | Design laws, IA, trust states, schemas, metric registry, ranking |
 | [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) | First-party measurements, method, and known defects — auto-refreshed daily |
