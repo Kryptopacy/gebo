@@ -382,15 +382,10 @@ const AGENT_SELECT = `
       select e.host from agent_endpoints e
       where e.chain_id = a.chain_id and e.token_id = a.token_id
       order by e.id limit 1
-    )                                            as op_host,
-    -- capability_doc is projected so search can rank with ts_rank OUTSIDE this
-    -- select: the old query appended ts_rank as a FROM-position function scan,
-    -- which ordered correctly but never projected the value, and cannot carry
-    -- a window count. mapAgentRow ignores the extra column.
-    a.capability_doc
+    )                                            as op_host
   from agents a
   left join operators o on o.key = a.operator_key
-`;
+  `;
 
 function mapAgentRow(r: any): Agent {
   return {
@@ -857,10 +852,14 @@ export const SEARCH_TRUST_STATES: readonly TrustStateFilter[] = TRUST_STATES;
  * (FTS GIN, name trigram, skills-expression trigram). A single
  * non-indexable arm forces a full seq scan of all agents, which is why
  * search once took 21s for a 74-match query (found 2026-09-07). The skills
- * arms use the same expressions as the 0026 indexes.
+ * arms use the same expressions as the 0026 indexes; the FTS arm uses the
+ * same expression as the 0032 index (the capability_doc column it replaced
+ * is dropped by 0033 once this code is deployed, so the two forms must
+ * stay byte-identical).
  */
+const CAPABILITY_EXPR = `to_tsvector('english', coalesce(a.name, '') || ' ' || coalesce(a.description, ''))`;
 const MATCH_PREDICATE = `
-  a.capability_doc @@ websearch_to_tsquery('english', $1)
+  ${CAPABILITY_EXPR} @@ websearch_to_tsquery('english', $1)
   or a.name ilike '%' || $1 || '%'
   or public.skills_text(a.skills) ilike '%' || $1 || '%'
   or replace(public.skills_text(a.skills), '-', ' ') ilike '%' || replace($1, '-', ' ') || '%'`;
@@ -929,7 +928,7 @@ export async function searchAgentsPaged(
        from (
          select a.token_id::bigint as token_id,
                 a.trust_state,
-                a.capability_doc,
+                ${CAPABILITY_EXPR} as cap,
                 ${capped ? String(preTotal) : "count(*) over ()"} as full_total
          from agents a
          where a.chain_id = 56
@@ -942,7 +941,7 @@ export async function searchAgentsPaged(
              ? `case x.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
                 x.token_id desc`
              : `case x.trust_state when 'VERIFIED' then 0 when 'LISTED' then 1 when 'DORMANT' then 2 else 3 end,
-                ts_rank(x.capability_doc, websearch_to_tsquery('english', $1)) desc nulls last,
+                ts_rank(x.cap, websearch_to_tsquery('english', $1)) desc nulls last,
                 x.token_id desc`
          }
        limit $2 offset $3`,
@@ -1342,6 +1341,22 @@ const PCS_DETAIL: OpportunityDetailField[] = [
     }),
   },
   {
+    // Spec: grid.ruinProbabilityEstimate. Null-with-reason while the tick
+    // history accumulates - a thin-sample probability would be dishonest
+    // precision (invariant 9 generalised: unmeasured, not guessed).
+    key: "ruinProbabilityEstimate", label: "Ruin probability (est.)",
+    render: (v, p) => (v == null
+      ? {
+          text: "accumulating",
+          note: typeof p.ruinNote === "string" ? p.ruinNote : "tick history is being accumulated; the estimate publishes at 48 hourly observations spanning 72h",
+        }
+      : {
+          text: `${(Number(v) * 100).toFixed(1)}%`,
+          note: typeof p.ruinNote === "string" ? p.ruinNote : "log-normal model over hourly tick observations",
+        }),
+  },
+  { key: "ruinNote", label: "Ruin probability", render: () => null },
+  {
     key: "readAtBlock", label: "Read at block",
     render: (v) => (v == null ? null : {
       text: Number(v).toLocaleString("en-US"),
@@ -1427,6 +1442,42 @@ const VENUS_DETAIL: OpportunityDetailField[] = [
       : { text: `+${((Number(v) - 1) * 100).toFixed(1)}% above the debt repaid`, note: "the liquidator's premium" }),
   },
   { key: "liquidationIncentiveNote", label: "Liquidation incentive", render: () => null },
+  {
+    // Spec: health.oracleSources - what IS readable, and the disclosure of
+    // what is not (invariant 3: the caveat travels with the claim).
+    key: "oracleSources", label: "Price oracle",
+    render: (v, p) => {
+      if (v == null || !Array.isArray(v) || v.length === 0) {
+        return { text: "unmeasured", note: "the comptroller's oracle address could not be read" };
+      }
+      return {
+        text: (v as string[]).map((a) => `${a.slice(0, 10)}...${a.slice(-6)}`).join(", "),
+        note: typeof p.oracleStalenessNote === "string"
+          ? "source freshness: " + p.oracleStalenessNote
+          : "the comptroller's oracle, read live",
+        mono: true,
+      };
+    },
+  },
+  { key: "oracleStalenessSec", label: "Oracle staleness",
+    render: (v, p) => (v == null
+      ? { text: "unmeasured", note: typeof p.oracleStalenessNote === "string" ? p.oracleStalenessNote : "the read failed - not zero" }
+      : { text: `${Number(v).toLocaleString()}s`, note: "age of the oracle's latest price update" }) },
+  { key: "oracleStalenessNote", label: "Oracle staleness", render: () => null },
+  {
+    key: "oracleMarketDivergencePct", label: "Oracle vs market (BNB)",
+    render: (v, p) => (v == null
+      ? { text: "unmeasured", note: typeof p.oracleDivergenceBasis === "string" ? p.oracleDivergenceBasis : "no readable pair of prices in this run" }
+      : { text: `${Number(v).toFixed(3)}%`, note: "divergence between the oracle's BNB price and the deepest WBNB/USDT pool - a stale-oracle signal, not a staleness timer" }),
+  },
+  { key: "oracleDivergenceBasis", label: "Oracle vs market", render: () => null },
+  {
+    key: "protocolPaused", label: "Protocol paused",
+    render: (v, p) => (v == null
+      ? { text: "unmeasured", note: typeof p.protocolPausedNote === "string" ? p.protocolPausedNote : "the read failed - not zero" }
+      : { text: v ? "yes" : "no", note: "pause flags read from the Comptroller" }),
+  },
+  { key: "protocolPausedNote", label: "Protocol paused", render: () => null },
   {
     key: "reserveFactor", label: "Reserve factor",
     render: (v) => (v == null ? null : {

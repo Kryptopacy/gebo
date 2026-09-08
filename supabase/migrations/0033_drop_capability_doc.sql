@@ -1,0 +1,17 @@
+-- GEBO 0033 - drop the stored capability_doc generated column.
+--
+-- APPLY ONLY AFTER the expression-index code (0032 + the MATCH_PREDICATE
+-- switch in src/lib/data.ts) IS DEPLOYED AND VERIFIED LIVE:
+--   1. 0032 created agents_capability_expr_idx over the expression.
+--   2. The deploy switched every capability_doc query to that expression.
+--   3. A live /search probe returned ranked results.
+-- Only then does this run. Dropping the column while the deployed code still
+-- reads it breaks search - the exact coordinated-deploy failure AGENTS.md
+-- records from the materialize route in August.
+--
+-- Reclaims the 36.7 MB stored-column payload and stops the ~150 bytes/row
+-- of growth a GENERATED ALWAYS column costs on every write. The old
+-- agents_capability_fts_idx drops with the column (it depends on it).
+-- Space returns to the OS only after VACUUM FULL (session pooler, 5432) -
+-- run scripts/tmp-capability-reclaim.ts which does both.
+alter table public.agents drop column if exists capability_doc;
