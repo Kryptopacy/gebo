@@ -420,6 +420,20 @@ export default function CategoryTabs({
                 </div>
               )}
 
+              {slug === "health" && (
+                <div className="notice">
+                  The reference health agent&apos;s decisions are recorded before any money
+                  moves: its zero-spend loop runs daily, and each call is scored on the
+                  next run against what actually happened &mdash;{" "}
+                  <a href="/paper" style={{ color: "var(--accent)" }}>the paper record</a>{" "}
+                  and{" "}
+                  <a href="/api/agent/health/card" style={{ color: "var(--accent)" }}>
+                    its agent card
+                  </a>
+                  .
+                </div>
+              )}
+
               {slug === "grid" && (
                 <div className="notice">
                   Grid trading places a ladder of orders inside a price band. Tail risk is

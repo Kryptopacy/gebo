@@ -100,7 +100,12 @@ export async function recordPaperCycle(
   let correct = 0;
   for (const d of prev) {
     const nowState = nowBySubject.get(d.subject_id);
-    const thenUtil = Number(d.inputs?.utilisation);
+    // The stored inputs may arrive double-encoded (a JSON string inside jsonb,
+    // the invariant-10 shape) depending on how the row was written; unwrap
+    // either shape before reading a value, and skip rather than zero when
+    // neither yields a finite utilisation.
+    const raw = typeof d.inputs === "string" ? JSON.parse(d.inputs) : d.inputs;
+    const thenUtil = Number(raw?.utilisation);
     if (!nowState || !Number.isFinite(thenUtil)) continue; // market gone: stays unscored, not zero
     const s = scoreDecision(d.decision as HealthDecision, thenUtil, nowState.utilisation);
     await sql`
@@ -121,14 +126,27 @@ export async function recordPaperCycle(
       watchThreshold: HEALTH_WATCH_UTILISATION, actThreshold: HEALTH_ACT_UTILISATION,
       readAtBlock: m.readAtBlock,
     };
+    // jsonb as an OBJECT: passing a pre-stringified value into jsonb
+    // double-encodes it (jsonb_typeof = 'string'), and every downstream
+    // read then misses its keys. sql.json() is the codebase's typed
+    // jsonb-parameter form (metrics.ts, grid-record-run.ts).
     await sql`
       insert into paper_decisions (run_id, subject_id, decision, inputs)
-      values (${run!.id}, ${m.subjectId}, ${decideHealth(m.utilisation)}, ${JSON.stringify(inputs)}::jsonb)`;
+      values (${run!.id}, ${m.subjectId}, ${decideHealth(m.utilisation)}, ${sql.json(inputs)}::jsonb)`;
   }
   if (scored > 0) {
+    // Attribute the scoring to the run whose decisions were scored, not to
+    // this run. The max(id) form credited the run that just started, whose
+    // decisions are by definition unscored - so the summary landed on the
+    // wrong row every cycle.
     await sql`
-      update paper_runs set scored_n = ${scored}, correct_n = ${correct}
-      where id = (select max(id) from paper_runs where subject = 'reference-health' and scored_n = 0)`;
+      update paper_runs r set scored_n = ${scored}, correct_n = ${correct}
+      where id = (
+        select min(d.run_id) from paper_decisions d
+        join paper_runs pr on pr.id = d.run_id
+        where d.scored_at >= now() - interval '1 hour'
+          and pr.scored_n = 0
+      )`;
   }
 
   return { runId: run!.id, decisions: freshMarkets.length, scored, correct };

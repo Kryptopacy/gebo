@@ -12,7 +12,7 @@ import postgres from "postgres";
 
 const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1, connect_timeout: 15, idle_timeout: 5, onnotice: () => {} });
 
-const SCHEDULES: [string, string, string][] = [
+const SCHEDULES: [string, string, string | null][] = [
   ["gebo-resolve", "* * * * *", "/api/cron/resolve"],
   ["gebo-materialize", "*/3 * * * *", "/api/cron/materialize"],
   ["gebo-sync", "*/5 * * * *", "/api/cron/sync"],

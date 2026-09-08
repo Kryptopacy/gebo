@@ -228,6 +228,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <li><a href="/live">Live Handshake Feed</a></li>
                   <li><a href="/authority">Authority & Keystore Console</a></li>
                   <li><a href="/search">Capability Search Engine</a></li>
+                  <li><a href="/paper">Paper Record (Health Agent)</a></li>
                   <li><a href="/methodology">Measurement & Defect Log</a></li>
                   <li>
                     <a
