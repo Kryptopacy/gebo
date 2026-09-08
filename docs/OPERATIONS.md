@@ -22,6 +22,7 @@ Environment variables required in the hosting platform:
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Supabase **transaction pooler**, port `6543` |
 | `CRON_SECRET` | yes | Long random string. Cron routes refuse to run without it. |
+| `ADMIN_PASSWORD` | for `/admin` | Ops console gate; login refuses when unset |
 | `NEXT_PUBLIC_SITE_URL` | recommended | Sets `metadataBase`; without it OG images resolve against localhost |
 | `BSC_MAINNET_RPC` | optional | Defaults to a public node |
 | `NEXT_PUBLIC_SUPABASE_URL` | optional | Only if a browser client is added later |
@@ -56,9 +57,24 @@ npx tsx scripts/migrate.ts
 | `0011_lock_down_definer_functions.sql` | Revoke `PUBLIC` execute on definer fns (see AGENTS.md §11) |
 | `0012_pg_net_schema.sql` | Drop/recreate pg_net (non-relocatable) — run `verify:pgnet` after |
 | `0013`/`0014_strip_mojibake*.sql` | Repair double-encoded text |
-| `0015_regrant_sessions.sql` | Session regrant schedule (testnet) |
+| `0015`/`0018`/`0022_regrant*.sql` | Session regrant schedules, extended through the judging window and Nov 5 |
 | `0016_grid_record_schedule.sql` | Daily grid track-record refresh |
-| `0017_verified_reviews.sql` | Verified reviews table (L1 amendment) — applied via `scripts/tmp-apply-0017.ts` (idempotent) |
+| `0017_verified_reviews.sql` | Verified reviews table (L1 amendment) |
+| `0019`/`0020`/`0028_materialize*.sql` | Materialize cron (the frozen-layer fix), cadence settling |
+| `0021_probes_raw_rotation.sql` | 48h rotation for the raw probe window |
+| `0023_materialize_index.sql` | Materialize candidate lookup index |
+| `0024_stats_refresh_selfguard.sql` | `refresh_census_stats` advisory lock + staleness gate |
+| `0025`/`0026`/`0027_search*.sql` | Search indexes: match-predicate arms, skills trgm, probe lookup |
+| `0029_registry_counts.sql` | One-row landing aggregate table, direct-SQL refresh every 15 min |
+| `0030_reputation_cron.sql` | Scheduled ERC-8004 reputation write-back (6h) |
+| `0031_space_surgery.sql` | Free-tier reclaim: dead indexes, token_uri cache nulling, `gebo-maint` |
+| `0032`/`0033_capability*.sql` | Expression index replacing the stored tsvector; column drop (apply 0033 only after the expression code is deployed — see AGENTS.md) |
+| `0034_session_index.sql` | Keystore log indexing → third-party sessions |
+| `0035_opportunity_fields.sql` | `pool_tick_snapshots` + snapshot retention |
+| `0036_paper_mode.sql` | `paper_runs` / `paper_decisions` + daily paper cron |
+| `0037_cron_cadence.sql` | The free-tier cadence relaxations |
+| `0038_fleet_guard.sql` | Self-shedding load guard (see §3.1) |
+| `0039_admin_cron_control.sql` | `admin_paused_jobs` + guard defers to admin pauses (see §3.2) |
 
 ### Why two agent tables
 
@@ -110,18 +126,33 @@ Until both exist, `gebo_run_cron()` logs a warning and returns — the jobs run 
 schedule but deliberately no-op. That is the designed state before deployment,
 not a fault.
 
-### Jobs
+### Jobs (the sustainable free-tier fleet)
+
+The full fleet does **not** fit the Supabase free tier at 257k+ agents —
+measured twice on 2026-09-08, when the database throttled under the
+every-minute fleet (see §5). The current configuration, applied by
+`scripts/tmp-thin-fleet.ts`:
 
 | Job | Cadence | Work |
 | --- | --- | --- |
-| `gebo-resolve` | every minute | Remote registration backlog, bounded slice |
-| `gebo-probe` | every 5 min | A2A/MCP handshakes for endpoints past `next_probe_at` |
-| `gebo-sync` | every 5 min | New identities above the stored high-water mark |
-| `gebo-classify` | every 10 min | Capability classification + rules re-apply on rule change |
-| `gebo-opportunities` | every 10 min | PancakeSwap V3 ticks, Venus rates |
+| `gebo-resolve` | every 5 min | Remote registration backlog, bounded slice |
+| `gebo-materialize` | every 5 min | Census → `agents` (the frozen-layer fix) |
+| `gebo-probe` | every 10 min | A2A/MCP handshakes for endpoints past `next_probe_at` |
+| `gebo-sync` | every 15 min | New identities above the stored high-water mark |
+| `gebo-counts` | every 30 min | `refresh_registry_counts()` — direct SQL, no HTTP hop |
+| `gebo-maint` | hourly :23 | token_uri cache nulling, cron history retention, snapshot retention |
+| `gebo-guard` | every 10 min | The fleet guard (§3.1) — direct SQL |
+| `gebo-opportunities` | every 30 min | PancakeSwap V3 ticks + snapshots, Venus rates + oracle fields — the bonus job the guard manages |
+| `gebo-paper` | daily 03:13 | Zero-spend decision loop, recorded + scored |
 | `gebo-emerging` | daily 03:17 | Emerging-category candidates |
 | `gebo-grid-record` | daily 07:17 | Replay-measured grid track record |
-| `gebo-regrant-1/2` | monthly (Sep) | Re-grant demo session keys before they expire |
+| `gebo-reputation` | every 6 h | ERC-8004 reputation write-back, gated |
+| `gebo-probes-rotate` | hourly :17 | 48h raw-probe window rotation |
+| `gebo-regrant-*` | daily/monthly | Demo session regrants through the judging window |
+| *off (free-tier budget)* | — | `gebo-classify`, `gebo-sessions` — staleness disclosed wherever their data renders |
+
+The full-fleet values remain in git history; restore them only when the
+tier (or Pro) can carry the load.
 
 Probe cadence is tiered by last outcome, so a run only touches what is due:
 
@@ -146,6 +177,50 @@ the pg_net status codes to confirm the endpoint actually answered.
 ```bash
 npx tsx scripts/show-stats.ts     # the figures the site is currently serving
 ```
+
+### 3.1 The fleet guard (`gebo-guard`, migration 0038)
+
+The free tier throttles under sustained load, and a throttle at 3am with
+nobody at the console is hours of degraded site. The guard is pure direct
+SQL every 10 minutes — no HTTP hop, so it always runs:
+
+- **Measures** in-database latency (an index-probe count: 13-858ms healthy,
+  multiple seconds throttled — cold-connection spikes do not reach it).
+- **Sheds** the bonus job (`gebo-opportunities`) after 2 consecutive
+  checks ≥ 2000ms; **panic-sheds** `gebo-materialize`/`gebo-probe`/
+  `gebo-sync` at ≥ 15000ms (the same stand-down that recovered both
+  2026-09-08 incidents).
+- **Restores** the bonus job after 6 consecutive healthy checks (~1h) —
+  **unless an admin paused it** (§3.2: a human pause always wins).
+- The floor fleet (`gebo-resolve`, `gebo-counts`, `gebo-maint`, dailies)
+  never sheds.
+
+Both branches have been verified against the live system, including a
+deterministic restore test (the original thresholds sat below the
+database's own healthy variance and would have starved the restore —
+found by test, fixed same day). The guard's state is readable in
+`public.fleet_guard`.
+
+### 3.2 The ops console (`/admin`)
+
+Browser access to everything this page describes, gated by
+`ADMIN_PASSWORD` (single-admin, HMAC session cookie; login refuses rather
+than defaulting open when the password is unset):
+
+- **Panels**: pipeline lag, scheduled jobs with run history and pg_net
+  response codes, database headroom vs the 500 MB tier, funnel,
+  classification — the same truth `npm run readiness` reports, measured
+  on request, auto-refreshing every 60s.
+- **Run**: per-job run buttons. HTTP jobs call their cron route with the
+  server-held `CRON_SECRET` (the same call pg_net makes); the direct-SQL
+  jobs (`counts`, `maint`, `guard`) execute their SQL functions directly.
+- **Pause / resume**: pause captures the job's full definition from
+  `cron.job` into `admin_paused_jobs` before unscheduling, so resume is
+  exact. The fleet guard checks `admin_paused_jobs` before auto-restoring
+  — a deliberate admin pause is never silently undone by the automation.
+- The shell scripts (`tmp-stand-down.ts`, `tmp-restore-crons.ts`,
+  `tmp-thin-fleet.ts`) remain for bulk operations; the console covers
+  single-job control.
 
 ---
 
@@ -208,6 +283,16 @@ halves its span adaptively; do not raise the starting span.
 A page has been switched away from `force-dynamic` and is now querying Supabase
 during the build.
 
+**Free-tier throttling** (measured twice, 2026-09-08)
+Symptoms: `select 1` takes 6-8s, ordinary queries die with statement
+timeouts, cron responses go mostly `null` — with **zero blocked locks**
+(pure CPU contention, not a locking bug). Playbook: stand the minute fleet
+down (`scripts/tmp-stand-down.ts` or pause from `/admin`), wait ~40
+minutes, verify `select 1` AND a real count query both return fast, then
+restore with `scripts/tmp-restore-crons.ts` (full fleet) or
+`scripts/tmp-thin-fleet.ts` (sustainable fleet). The guard (§3.1) now
+does this automatically for its managed jobs.
+
 **Cron jobs `succeeded` but nothing changes**
 Expected before deployment — the Vault secrets are missing, so `gebo_run_cron()`
 warns and returns. Confirm with `cron-status.ts`; `gebo_site_url` and
@@ -234,12 +319,16 @@ active.
 
 ### Verification commands
 
-- `npm run readiness` — 26 gates measured from the database and filesystem;
+- `npm run readiness` — 31 gates measured from the database and filesystem;
   includes a freshness gate on the docs/MEASUREMENTS.md generated block.
 - `npm run verify:prod` — checks the deployed host actually serves.
 - `npm run verify:pgnet` — queues a real pg_net request and waits for the
   response; the only trustworthy check after touching pg_net (a dead worker
   leaves every job reporting `succeeded` while nothing is fetched).
-- `npm run verify` — `tsc --noEmit && vitest run && next build`. The suite is
-  153 tests; the highest-value historical targets (`clean()`, spend-cap
-  decimals, `registrableDomain()`) are all pinned.
+- `npm run verify` — `tsc --noEmit && vitest run && next build`; 268 tests.
+
+**After any push** (deploys are automatic): verify the *deployed* content,
+not the build log — probe a fingerprint like `/llms.txt`. A green local
+verify on a dirty tree proves nothing about what was pushed: staged-then-
+deleted files once failed every Vercel build for hours while local stayed
+green (AGENTS.md, 2026-09-08).

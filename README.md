@@ -341,7 +341,7 @@ Operational runbook, including scheduler setup and deployment:
 | [docs/STRATEGY.md](docs/STRATEGY.md) | Research, standards verification, marketplace autopsies, user voice, the wedge |
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | Design laws, IA, trust states, schemas, metric registry, ranking |
 | [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) | First-party measurements, method, and known defects — auto-refreshed daily |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Deployment, scheduler, secrets, verification, troubleshooting |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Deployment, scheduler, the fleet guard, the `/admin` ops console (run/pause/resume crons), troubleshooting |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | Session handoff: in-flight steps and gotchas readiness cannot see |
 | [AGENTS.md](docs/../AGENTS.md) | Working notes: verified facts, invariants, environment hazards |
 

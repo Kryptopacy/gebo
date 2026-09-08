@@ -156,6 +156,18 @@ its updated_at. If the tier ever carries more, restore the full values
 from git history. The honest long-term answer remains Pro, which also
 removes the ~3-4 MB/day storage ceiling calculation entirely.
 
+**The fleet guard (0038) and the ops console (0039) automate the
+incidents.** `gebo-guard` runs as direct SQL every 10 minutes, measures
+in-database latency, sheds the bonus `gebo-opportunities` job after two
+slow checks, panic-sheds materialize/probe/sync at 15s, and restores the
+bonus job after an hour of health. `/admin` (ADMIN_PASSWORD-gated) gives
+per-job run/pause/resume: pause stores the job's exact definition in
+`admin_paused_jobs` before unscheduling, and the guard checks that table
+before auto-restoring — **an admin pause always beats the automation**.
+Both guard branches verified live; the original thresholds sat below the
+DB's own healthy variance (13-858ms) and would have starved the restore —
+found by deterministic test, not by assertion.
+
 **Deploys are automatic, and a green local verify proves nothing on a
 dirty tree** (found 2026-09-08): 60169f8 accidentally committed two
 half-alive tmp scripts (staged, then deleted from disk - deleting does
