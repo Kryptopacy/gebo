@@ -8,13 +8,17 @@
 -- extra whose data freshness and snapshot accumulation are worth having
 -- when the tier can carry them).
 --
--- Hysteresis, not flapping:
+-- Hysteresis, not flapping (thresholds measured 2026-09-08: healthy
+-- in-database index probe reads 13-858ms under normal load; the throttled
+-- state reads multiple seconds - the original 500ms fast threshold was
+-- below the database's own healthy variance, so a normal 858ms reading
+-- reset the streak and the restore branch could starve - found by
+-- deterministic test, fixed same day):
 --   - latency measured as the execution time of an index-probe count
---     (under CPU throttle this inflates; when healthy it is sub-ms)
---   - SHED the bonus job after 2 consecutive checks above 5s (the panic
---     tier: also shed materialize + probe + sync above 15s, mirroring the
---     manual stand-down that recovered both incidents)
---   - RESTORE only after 6 consecutive checks under 500ms (~1h healthy at
+--   - SHED the bonus job after 2 consecutive checks >= 2000ms (the panic
+--     tier: also shed materialize + probe + sync at >= 15000ms, mirroring
+--     the manual stand-down that recovered both incidents)
+--   - RESTORE only after 6 consecutive checks < 2000ms (~1h healthy at
 --     the 10-minute check cadence)
 --   - the floor fleet (resolve, counts, maint, daily jobs) is never
 --     touched - it is the proven-stable minimum
@@ -61,23 +65,21 @@ declare
   j text;
 begin
   ms := public.gebo_db_latency_ms();
-  if ms > 5000 then
+  if ms >= 2000 then
     update fleet_guard set slow_streak = slow_streak + 1, fast_streak = 0;
-  elsif ms < 500 then
-    update fleet_guard set fast_streak = fast_streak + 1, slow_streak = 0;
   else
-    update fleet_guard set slow_streak = 0, fast_streak = 0;
+    update fleet_guard set fast_streak = fast_streak + 1, slow_streak = 0;
   end if;
   update fleet_guard set last_ms = ms, checked_at = now();
   select slow_streak, fast_streak into slow, fast from fleet_guard;
 
   -- SHED: two consecutive slow checks, or one catastrophic check.
-  if slow >= 2 or ms > 15000 then
+  if slow >= 2 or ms >= 15000 then
     if exists (select 1 from cron.job where jobname = 'gebo-opportunities') then
       perform cron.unschedule('gebo-opportunities');
       action := 'shed opportunities';
     end if;
-    if ms > 15000 then
+    if ms >= 15000 then
       -- panic tier: mirror the manual stand-down that recovered both
       -- incidents; resolve and counts stay (the proven floor).
       foreach j in array array['gebo-materialize', 'gebo-probe', 'gebo-sync'] loop
