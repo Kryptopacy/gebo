@@ -14,11 +14,11 @@ describe("countsRowFresh (registry_counts staleness)", () => {
     expect(countsRowFresh(new Date().toISOString())).toBe(true);
   });
 
-  it("accepts a row inside the 30-minute window", () => {
+  it("accepts a row inside the 45-minute window", () => {
     expect(countsRowFresh(new Date(Date.now() - COUNTS_STALE_MS + 60_000))).toBe(true);
   });
 
-  it("rejects a row past the window - six missed cron runs is stale, not current", () => {
+  it("rejects a row past the window - three missed cron runs is stale, not current", () => {
     expect(countsRowFresh(new Date(Date.now() - COUNTS_STALE_MS - 1_000).toISOString())).toBe(false);
   });
 

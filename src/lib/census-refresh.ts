@@ -12,10 +12,17 @@
  * is a fresh serverless instance, so in-memory state dedupes nothing in
  * production. A no-op cron pass (nothing added/resolved) skips the refresh
  * entirely.
+ *
+ * The interval is 30 minutes, relaxed from 10 on 2026-09-08: the morning
+ * mint wave plus this aggregate plus gebo-counts saturated the free tier's
+ * CPU (every cron query 50x slow, zero locks - pure contention), and two
+ * full-table scans per hour is the honest free-tier budget. The funnel
+ * figures move by fractions of a percent between runs; measured_at travels
+ * with them.
  */
 import type postgres from "postgres";
 
-const REFRESH_MIN_INTERVAL_MS = 10 * 60 * 1000;
+const REFRESH_MIN_INTERVAL_MS = 30 * 60 * 1000;
 
 export async function refreshCensusStatsIfDue(
   sql: ReturnType<typeof postgres>,

@@ -121,6 +121,9 @@ landed in one session. What they are and the facts they established:
    the expression. **0033 (drop the column) applies ONLY after the
    expression-code deploy is verified live on /search** - dropping early
    breaks the deployed search, the materialize-route lesson.
+   **COMPLETED 2026-09-08 01:30 UTC**: deploy verified (119 matches, 407ms
+   on /search?q=grid), then 0033 + VACUUM FULL via the session pooler:
+   360 -> 309 MB. The coordinated sequence's worked example.
 
 **The RPC depth limit is the reason the session index cannot backfill
 further**: without a paid archive endpoint, history starts where the cron
@@ -146,12 +149,17 @@ with SHADOWED only when every protocol endpoint is fatally linted, operators
 upserted BEFORE agents (foreign key). `npm run readiness` gates the
 census-vs-agents high-water lag so this failure is measured, not remembered.
 
-**Deploys are manual.** Pushing to master does NOT deploy: the materialize
-route 404'd for an hour after its push while every other cron kept working
-(verify via pg_net response codes — a cron job "succeeded" only means pg_net
-*queued* the request, a 404 hides in `net._http_response`). DB-side changes
-(migrations, backfills) land immediately; route code does not. Deploy through
-the project's own flow before expecting the live site to change.
+**Deploys are AUTOMATIC on push to master** (corrected 2026-09-08: the user
+confirmed it, and the evidence agrees - cc1079e's new routes were live
+within ~20 minutes of push). The earlier record below is kept because its
+lesson still stands: **"deployed" means the route answers, not that the
+build finished.** The August materialize route 404'd for an hour after its
+push - whether that was build-queue lag or a manual-deploy setting at the
+time, the detection method is unchanged and still required after any
+route-adding push: check `net._http_response` status codes, because a cron
+job "succeeded" only means pg_net *queued* the request - a 404 or timeout
+hides in the response table. DB-side changes (migrations, backfills) land
+immediately; route code lands when Vercel finishes building.
 
 ### The Altana session shape
 

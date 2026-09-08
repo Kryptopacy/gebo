@@ -498,11 +498,12 @@ const AGG_TTL_MS = 60_000;
 
 /**
  * A registry_counts row is authoritative only while fresh. The table
- * refreshes every 5 minutes; 30 minutes of age means six missed runs, and
- * the honest move is the direct query (or the banner) - never a quietly
- * aging number presented as current.
+ * refreshes every 15 minutes (0037 - the 5-minute cadence saturated the
+ * free tier's CPU on 2026-09-08); 45 minutes of age means three missed
+ * runs, and the honest move is the direct query (or the banner) - never a
+ * quietly aging number presented as current.
  */
-export const COUNTS_STALE_MS = 30 * 60 * 1000;
+export const COUNTS_STALE_MS = 45 * 60 * 1000;
 
 export function countsRowFresh(computedAt: string | Date, nowMs: number = Date.now()): boolean {
   const t = computedAt instanceof Date ? computedAt.getTime() : Date.parse(computedAt);
@@ -1515,27 +1516,27 @@ export const OPPORTUNITY_DETAIL_FIELDS: Partial<Record<CategorySlug, Opportunity
 // role is last-resort offline demo, never a silent substitute for the DB.
 // BEGIN GENERATED: census fallback
 export const CENSUS_FALLBACK = {
-  tokensMinted: 337_179,
-  censused: 337_179,
-  resolved: 255_712,
-  named: 255_704,
-  claimActive: 250_630,
-  withEndpoint: 97_018,
-  callable: 3_178,
-  operators: 115,
-  owners: 272_941,
-  ownersWithOneAgent: 249_169,
-  largestOperatorShare: 77.05,
-  top5OperatorShare: 98.83,
-  top10OwnerShare: 5.97,
-  declaresReputationTrust: 152_121,
-  emptyTokenUri: 10_572,
-  x402Supported: 13_792,
-  fatalDefects: 17_972,
-  uriSchemes: { https: 161_783, data: 158_389, empty: 10_572, other: 5_099, ipfs: 1_327, http: 9 } as Record<string, number>,
-  endpointKinds: { web: 40_119, a2a: 17_827, mcp: 1_104 } as Record<string, number>,
+  tokensMinted: 338_802,
+  censused: 338_787,
+  resolved: 257_265,
+  named: 257_257,
+  claimActive: 252_130,
+  withEndpoint: 98_284,
+  callable: 3_236,
+  operators: 120,
+  owners: 274_244,
+  ownersWithOneAgent: 250_215,
+  largestOperatorShare: 76.79,
+  top5OperatorShare: 98.81,
+  top10OwnerShare: 5.94,
+  declaresReputationTrust: 152_455,
+  emptyTokenUri: 10_629,
+  x402Supported: 13_801,
+  fatalDefects: 18_447,
+  uriSchemes: { https: 163_049, data: 158_687, empty: 10_629, other: 5_099, ipfs: 1_329, http: 9 } as Record<string, number>,
+  endpointKinds: { web: 76_838, a2a: 19_439, mcp: 2_623 } as Record<string, number>,
   topOperators: [] as { domain: string; endpoints: number; callable: number }[],
-  measuredAt: "2026-09-06",
+  measuredAt: "2026-09-08",
   registry: "0x8004a169fb4a3325136eb29fa0ceb6d2e539a432",
 } as const;
 // END GENERATED

@@ -20,7 +20,16 @@ if (!url) {
   process.exit(1);
 }
 
-const sql = postgres(url, { max: 1, idle_timeout: 5, connect_timeout: 15 });
+/**
+ * prepare:false is not optional here: this client goes through the Supavisor
+ * transaction pooler, which does not support prepared statements. Without it
+ * a tagged query intermittently never resolves - no error, just a hang
+ * (found 2026-09-08: readiness sat silent for 10+ minutes while the same
+ * queries through a prepare:false client returned in milliseconds). The
+ * data.ts header has documented the pooler constraint since the start;
+ * this client had silently missed it.
+ */
+const sql = postgres(url, { prepare: false, max: 1, idle_timeout: 5, connect_timeout: 15 });
 
 type Gate = {
   id: string;
@@ -362,14 +371,14 @@ async function main() {
     id: "counts-table",
     item: "Landing aggregates served from registry_counts (cold-start safe)",
     state:
-      countsAgeMin != null && countsAgeMin <= 15 && countsCron
+      countsAgeMin != null && countsAgeMin <= 35 && countsCron
         ? "DONE"
         : countsCron || countsAgeMin != null
           ? "PARTIAL"
           : "MISSING",
     evidence:
       `row age=${countsAgeMin == null ? "no row (direct query in use)" : `${countsAgeMin} min`}, ` +
-      `gebo-counts cron=${countsCron ? "active" : "missing"}`,
+      `gebo-counts cron=${countsCron ? "active" : "missing"} (*/15 since 0037)`,
   });
 
   /**
