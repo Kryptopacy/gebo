@@ -1180,6 +1180,18 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
 .row-hover:hover::before { transform: scaleY(1); }
 a.row-hover:focus-visible { outline-offset: -2px; }
 
+/* ── stretched row links ──────────────────────────────────────────────
+    A row that carries a second control (the shortlist add on search
+    results) cannot stay an <a>: an interactive element nested inside an
+    anchor is invalid and screen readers read it as one big link. So the
+    row becomes a div, the primary link stretches over the whole row via
+    ::after, and the control sits above it with .above-link. Clicking the
+    control hits the control; clicking anywhere else hits the card. */
+.row-stretch .row-link::after { content: ""; position: absolute; inset: 0; }
+.row-stretch .above-link { position: relative; z-index: 1; }
+.row-stretch .row-link { color: inherit; text-decoration: none; }
+.row-stretch .row-link:hover { color: var(--accent); }
+
 /* ── readouts: hairline grid that survives wrapping ─────────────────── */
 .readouts { position: relative; }
 .readout { position: relative; transition: background .14s ease; }

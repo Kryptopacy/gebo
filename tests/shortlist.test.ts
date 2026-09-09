@@ -25,6 +25,10 @@ describe("parseShortlistIds", () => {
     expect(parseShortlistIds("5,5,5,6,5")).toEqual(["5", "6"]);
   });
 
+  it("canonicalises leading zeros - 007 and 7 are one agent, not one row plus a false not-found", () => {
+    expect(parseShortlistIds("007,7,00012")).toEqual(["7", "12"]);
+  });
+
   it("does not cap - the page discloses the drop instead of hiding it here", () => {
     const ten = Array.from({ length: 10 }, (_, i) => String(100 + i)).join(",");
     expect(parseShortlistIds(ten)).toHaveLength(10);
@@ -39,24 +43,51 @@ describe("parseShortlistIds", () => {
 
 describe("addToShortlist", () => {
   it("appends a new id at the end", () => {
-    expect(addToShortlist(["1", "2"], "3")).toEqual({ ids: ["1", "2", "3"], added: true, capped: false });
+    expect(addToShortlist(["1", "2"], "3"))
+      .toEqual({ ids: ["1", "2", "3"], appended: ["3"], refusedByCap: [], duplicates: [], junkInput: false });
   });
 
-  it("is idempotent - re-adding an existing id changes nothing", () => {
-    expect(addToShortlist(["1", "2"], "2")).toEqual({ ids: ["1", "2"], added: false, capped: false });
+  it("accepts a pasted LIST of ids - the first version silently ignored these", () => {
+    expect(addToShortlist(["1"], "2, 3")).toEqual({
+      ids: ["1", "2", "3"], appended: ["2", "3"], refusedByCap: [], duplicates: [], junkInput: false,
+    });
   });
 
-  it("refuses beyond the cap and says so, rather than silently dropping", () => {
-    const full = ["1", "2", "3", "4", "5", "6"];
-    const r = addToShortlist(full, "7");
-    expect(r).toEqual({ ids: full, added: false, capped: true });
+  it("canonicalises and dedupes within the paste itself", () => {
+    expect(addToShortlist(["7"], "007, 8, 8")).toEqual({
+      ids: ["7", "8"], appended: ["8"], refusedByCap: [], duplicates: ["7"], junkInput: false,
+    });
+  });
+
+  it("reports a re-add as a duplicate rather than silently doing nothing", () => {
+    expect(addToShortlist(["1", "2"], "2")).toEqual({
+      ids: ["1", "2"], appended: [], refusedByCap: [], duplicates: ["2"], junkInput: false,
+    });
+  });
+
+  it("reports junk input as junk - the page answers instead of ignoring the click", () => {
+    expect(addToShortlist(["1"], "drop table")).toEqual({
+      ids: ["1"], appended: [], refusedByCap: [], duplicates: [], junkInput: true,
+    });
+    expect(addToShortlist(["1"], "")).toEqual({
+      ids: ["1"], appended: [], refusedByCap: [], duplicates: [], junkInput: false,
+    });
+    expect(addToShortlist(["1"], undefined)).toEqual({
+      ids: ["1"], appended: [], refusedByCap: [], duplicates: [], junkInput: false,
+    });
+  });
+
+  it("refuses beyond the cap, names what was refused, and keeps the additions that fit", () => {
+    const full = ["1", "2", "3", "4", "5"];
+    const r = addToShortlist(full, "6,7");
+    expect(r).toEqual({
+      ids: ["1", "2", "3", "4", "5", "6"],
+      appended: ["6"],
+      refusedByCap: ["7"],
+      duplicates: [],
+      junkInput: false,
+    });
     expect(r.ids).toHaveLength(MAX_SHORTLIST);
-  });
-
-  it("ignores junk adds", () => {
-    expect(addToShortlist(["1"], "drop table")).toEqual({ ids: ["1"], added: false, capped: false });
-    expect(addToShortlist(["1"], "")).toEqual({ ids: ["1"], added: false, capped: false });
-    expect(addToShortlist(["1"], undefined)).toEqual({ ids: ["1"], added: false, capped: false });
   });
 });
 

@@ -31,7 +31,8 @@ export const MAX_SHORTLIST = 6;
 const TOKEN_ID = /^\d{1,10}$/;
 
 /**
- * Parse the ?ids= parameter: numeric token ids only, deduplicated, order
+ * Parse the ?ids= parameter (or a pasted add field): numeric token ids only,
+ * canonicalised (007 and 7 are the same agent), deduplicated, order
  * preserved (the order the user built is the order the columns render).
  * Deliberately does NOT cap - the page slices to MAX_SHORTLIST and discloses
  * what was dropped, because a silent cap is a quiet fabrication of a shorter
@@ -43,27 +44,56 @@ export function parseShortlistIds(raw: string | null | undefined): string[] {
   const out: string[] = [];
   for (const part of String(raw).split(",")) {
     const t = part.trim();
-    if (!TOKEN_ID.test(t) || seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
+    if (!TOKEN_ID.test(t)) continue;
+    const canon = String(BigInt(t)); // leading zeros are the same agent
+    if (seen.has(canon)) continue;
+    seen.add(canon);
+    out.push(canon);
   }
   return out;
 }
 
+export type ShortlistAdd = {
+  /** The resulting list - always a valid state to render. */
+  ids: string[];
+  /** Ids actually appended, in order. */
+  appended: string[];
+  /** Valid, new ids refused because the list was full. */
+  refusedByCap: string[];
+  /** Valid ids already on the list (a no-op, but say so rather than silence). */
+  duplicates: string[];
+  /** Something was typed but parsed to no token id at all. */
+  junkInput: boolean;
+};
+
 /**
- * Merge an ?add= parameter into the list. Idempotent (adding an id already
- * present is a no-op, not a duplicate), and reports a cap refusal so the page
- * can say "remove one first" instead of silently ignoring the request.
+ * Merge an ?add= value into the list. The add field accepts a pasted list
+ * ("265375, 259573"), not just one id, because that is how people share
+ * candidates - the first version validated it as a single token and a
+ * two-id paste silently did nothing, which is the dead end this product
+ * does not ship. Every outcome is reported so the page can answer the user
+ * instead of ignoring them.
  */
 export function addToShortlist(
   ids: string[],
   add: string | null | undefined,
-): { ids: string[]; added: boolean; capped: boolean } {
-  const t = (add ?? "").trim();
-  if (!TOKEN_ID.test(t)) return { ids, added: false, capped: false };
-  if (ids.includes(t)) return { ids, added: false, capped: false };
-  if (ids.length >= MAX_SHORTLIST) return { ids, added: false, capped: true };
-  return { ids: [...ids, t], added: true, capped: false };
+): ShortlistAdd {
+  const typed = (add ?? "").trim();
+  const want = parseShortlistIds(typed);
+  if (!typed || !want.length) {
+    return { ids, appended: [], refusedByCap: [], duplicates: [], junkInput: typed.length > 0 };
+  }
+  const out = [...ids];
+  const appended: string[] = [];
+  const refusedByCap: string[] = [];
+  const duplicates: string[] = [];
+  for (const t of want) {
+    if (out.includes(t)) { duplicates.push(t); continue; }
+    if (out.length >= MAX_SHORTLIST) { refusedByCap.push(t); continue; }
+    out.push(t);
+    appended.push(t);
+  }
+  return { ids: out, appended, refusedByCap, duplicates, junkInput: false };
 }
 
 /** The canonical href for a list of ids - the one form every internal link builds. */

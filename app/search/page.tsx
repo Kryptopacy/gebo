@@ -1,5 +1,6 @@
 import { searchAgentsPaged, searchFacets, trustState, CATEGORIES, type CategorySlug, SEARCH_TRUST_STATES } from "@/lib/data";
 import { parseSearchParams, totalPages, clampPage, offsetFor, hiddenByCap, pageHref, stateHref, sortHref, PAGE_SIZE } from "@/lib/search-page";
+import ShortlistAdd from "./ShortlistAdd";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -216,10 +217,19 @@ export default async function SearchPage({
                   const st = trustState(a);
                   const cat = a.category ? CATEGORIES[a.category as CategorySlug] : null;
                   return (
-                    <a key={a.token_id} href={`/a/${a.token_id}`} className="row row-hover r-agents">
+                    /* A div row, not an anchor row: this row carries a second
+                       control (the shortlist add), and an interactive element
+                       inside an <a> is invalid and unreadable to assistive
+                       tech. The agent link stretches over the row instead
+                       (.row-stretch), and the add button sits above it. */
+                    <div key={a.token_id} className="row row-hover r-agents row-stretch">
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <h3>{a.name ?? `Agent ${a.token_id}`}</h3>
+                          <h3>
+                            <a className="row-link" href={`/a/${a.token_id}`}>
+                              {a.name ?? `Agent ${a.token_id}`}
+                            </a>
+                          </h3>
                           {a.protocols.map((p) => (
                             <span key={p} className="chip chip-flat" style={{ fontSize: 9.5, padding: "1px 5px" }}>
                               {p.toUpperCase()}
@@ -230,6 +240,7 @@ export default async function SearchPage({
                               x402
                             </span>
                           )}
+                          <ShortlistAdd tokenId={a.token_id} />
                         </div>
                         <div className="xs t-4 num">
                           #{a.token_id}
@@ -248,7 +259,7 @@ export default async function SearchPage({
                         )}
                       </div>
                       <div className="xs t-3">{why}</div>
-                    </a>
+                    </div>
                   );
                 })}
               </div>

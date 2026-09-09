@@ -5,6 +5,7 @@ import {
   parseShortlistIds, addToShortlist, shortlistHref, loadShortlist,
   MAX_SHORTLIST, type ShortlistAttest, type ShortlistMetric,
 } from "@/lib/shortlist";
+import SyncShortlistStorage from "./SyncShortlistStorage";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -42,13 +43,15 @@ export default async function ShortlistPage({
 }) {
   const sp = await searchParams;
 
-  // Resolve the list: parse, merge ?add=, cap with disclosure. The cap notice
-  // names what was refused - a silent cap would hand back a shorter list than
-  // the user asked for and call it the same request.
+  // Resolve the list: parse, merge ?add=, cap with disclosure. Every add
+  // outcome the page can name, it names - a paste that parses to nothing, a
+  // duplicate, or a cap refusal each get their own notice, because the first
+  // version of this form silently ignored a two-id paste and that silence is
+  // the dead end this product does not ship.
   const parsed = parseShortlistIds(sp.ids);
   const merged = addToShortlist(parsed, sp.add);
   const ids = merged.ids.slice(0, MAX_SHORTLIST);
-  const droppedByUrl = parsed.length - Math.min(parsed.length, MAX_SHORTLIST);
+  const droppedByUrl = merged.ids.length - ids.length;
 
   // Provenance disclosure, same rule as the agent card: an agent whose
   // endpoint runs on a host this deployment answers on is GEBO-operated,
@@ -106,12 +109,12 @@ export default async function ShortlistPage({
             <div className="surface-card">
               <h2>Nothing to compare yet</h2>
               <p className="prose sm">
-                Build a shortlist two ways: open an agent card and press{" "}
-                <strong>Add to shortlist</strong>, or paste token ids below (up to{" "}
-                {MAX_SHORTLIST}). The list lives in the URL, so a comparison is a link
-                you can send someone.
+                Build a shortlist three ways: press <strong>shortlist</strong> on a search
+                result or an agent card, paste token ids below (up to {MAX_SHORTLIST}), or
+                open a link someone sent you. The list lives in the URL, so a comparison is
+                a link you can send someone.
               </p>
-              <form method="get" action="/shortlist" className="lookup mt-m" role="search">
+              <form method="get" action="/shortlist" className="lookup mt-m">
                 <input
                   type="text"
                   name="add"
@@ -120,7 +123,7 @@ export default async function ShortlistPage({
                   inputMode="numeric"
                   pattern="[0-9,\s]+"
                   placeholder="Agent token id, e.g. 265375"
-                  aria-label="Add an agent by token id"
+                  aria-label="Add agents by token id"
                   autoComplete="off"
                   spellCheck={false}
                   className="lookup-input"
@@ -149,9 +152,16 @@ export default async function ShortlistPage({
 
       <section className="band band-last">
         <div className="shell">
+          {/* The shortlist the user last saw becomes the list the next "add"
+              continues from - without this, removing an agent here and adding
+              from a card later resurrected the removal. */}
+          <SyncShortlistStorage ids={ids} />
+
           {/* The add form carries the resolved list in a hidden field so additions
-              compound; the remove links below rebuild the URL without one id. */}
-          <form method="get" action="/shortlist" className="lookup" role="search" style={{ maxWidth: 560 }}>
+              compound; the remove links below rebuild the URL without one id.
+              A paste of several ids ("265375, 259573") is accepted - that is
+              how candidates get shared. */}
+          <form method="get" action="/shortlist" className="lookup" style={{ maxWidth: 560 }}>
             <input type="hidden" name="ids" value={ids.join(",")} />
             <input
               type="text"
@@ -159,8 +169,8 @@ export default async function ShortlistPage({
               maxLength={64}
               inputMode="numeric"
               pattern="[0-9,\s]+"
-              placeholder={`Add by token id (${ids.length}/${MAX_SHORTLIST})`}
-              aria-label="Add an agent by token id"
+              placeholder={`Add by token id or ids (${ids.length}/${MAX_SHORTLIST})`}
+              aria-label="Add agents by token id"
               autoComplete="off"
               spellCheck={false}
               className="lookup-input"
@@ -168,15 +178,29 @@ export default async function ShortlistPage({
             <button type="submit" className="cta" disabled={ids.length >= MAX_SHORTLIST}>Add</button>
           </form>
 
-          {merged.capped && (
+          {merged.junkInput && (
             <div className="notice mt-m" data-tone="hold">
-              <strong>The shortlist is full.</strong> It holds {MAX_SHORTLIST} agents -
-              remove one before adding another, so the comparison stays readable.
+              <strong>That does not look like token ids.</strong> Enter numeric ids as on an
+              agent card or a shared link - e.g. <span className="num">265375</span> or{" "}
+              <span className="num">265375, 259573</span>.
+            </div>
+          )}
+          {merged.duplicates.length > 0 && (
+            <div className="notice mt-m" data-tone="hold">
+              {merged.duplicates.map((d) => `#${d}`).join(", ")}{" "}
+              {merged.duplicates.length === 1 ? "is" : "are"} already on the shortlist.
+            </div>
+          )}
+          {merged.refusedByCap.length > 0 && (
+            <div className="notice mt-m" data-tone="hold">
+              <strong>The shortlist is full.</strong> {merged.refusedByCap.length} id
+              {merged.refusedByCap.length === 1 ? "" : "s"} ({merged.refusedByCap.map((d) => `#${d}`).join(", ")})
+              {" "}not added - remove one first, so the comparison stays readable.
             </div>
           )}
           {droppedByUrl > 0 && (
             <div className="notice mt-m" data-tone="hold">
-              <strong>Only the first {MAX_SHORTLIST} of {parsed.length} ids are shown.</strong>{" "}
+              <strong>Only the first {MAX_SHORTLIST} of {merged.ids.length} ids are shown.</strong>{" "}
               A longer list stops being a comparison; the cap is disclosed rather than silent.
             </div>
           )}
@@ -401,6 +425,13 @@ export default async function ShortlistPage({
             observation count; probing runs from one region and{" "}
             <a href="/methodology">its limits are published</a>. Verified reviews are anchored
             comments from completed escrow jobs, never a score.
+          </p>
+          <p className="xs t-4 mt-s" style={{ maxWidth: "74ch" }}>
+            <strong>What this page does not compare:</strong> what each agent could do to your
+            wallet. Grant scope, spend caps and blast radius are per-agent and per-wallet -
+            they live on each card&apos;s Authority tab and the{" "}
+            <a href="/authority">authority console</a>, and no comparison column here can
+            substitute for reading them before you hire.
           </p>
         </div>
       </section>
