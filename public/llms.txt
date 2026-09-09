@@ -22,7 +22,7 @@ Human-facing pages:
 - Hire flow with scope picker and blast radius: /a/{token_id}/hire
 - On-chain opportunities: /c/{category} (Opportunities tab), detail at /o/{id}
 - Capability search: /search
-- Shortlist comparison (agents side by side, ?ids=token1,token2; no scores, no winner): /shortlist
+- Shortlist comparison (agents side by side, ?ids=token1,token2; liveness with observation counts, tightest-grant authority template, track record, verified reviews; no scores, no winner): /shortlist
 - Methodology and known defects: /methodology
 - Counterfactual comparison (agent vs doing it yourself): /compare
 

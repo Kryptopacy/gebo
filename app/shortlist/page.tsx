@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { trustState, classify, CATEGORIES, type CategorySlug } from "@/lib/data";
 import {
-  parseShortlistIds, addToShortlist, shortlistHref, loadShortlist,
-  MAX_SHORTLIST, type ShortlistAttest, type ShortlistMetric,
+  parseShortlistIds, addToShortlist, shortlistHref, loadShortlist, authorityFor,
+  MAX_SHORTLIST, type ShortlistAttest, type ShortlistMetric, type AuthorityCell,
 } from "@/lib/shortlist";
 import SyncShortlistStorage from "./SyncShortlistStorage";
 
@@ -227,6 +227,7 @@ export default async function ShortlistPage({
                   <span>Agent</span>
                   <span>State</span>
                   <span>Liveness (7-day window)</span>
+                  <span>Authority · tightest grant</span>
                   <span>Track record</span>
                   <span>Verified reviews</span>
                   <span style={{ textAlign: "right" }}>Decide</span>
@@ -249,6 +250,7 @@ export default async function ShortlistPage({
                           lags the chain; a just-minted agent appears once materialize
                           catches up.
                         </div>
+                        <div className="xs t-4" data-m="Authority">—</div>
                         <div className="xs t-4" data-m="Track record">—</div>
                         <div className="xs t-4" data-m="Verified reviews">—</div>
                         <div className="xs t-4" data-m="Decide">
@@ -278,7 +280,9 @@ export default async function ShortlistPage({
                             href={shortlistHref(others)}
                             aria-label={`Remove ${a.name ?? `agent ${id}`} from the shortlist`}
                             className="chip chip-flat"
-                            style={{ fontSize: 9.5, padding: "1px 6px" }}
+                            /* Target size over glyph size: a 9.5px chip is ~18px
+                               tall - untappable with a thumb. */
+                            style={{ fontSize: 12, padding: "6px 10px", minHeight: 32 }}
                             title="Remove from shortlist"
                           >
                             ×
@@ -359,6 +363,60 @@ export default async function ShortlistPage({
                         )}
                       </div>
 
+                      {/* Authority: the tightest grant a hire of this agent would
+                          offer, derived exactly as the hire flow derives it
+                          (category template, conservative preset, blast radius).
+                          The scoping note under the table says where this comes
+                          from and what stays per-wallet - the figures are here,
+                          the claim is bounded. */}
+                      <div data-m="Authority" className="stack-sm">
+                        {(() => {
+                          const auth: AuthorityCell = authorityFor(cat, fatal.length);
+                          if (auth.kind === "blocked") {
+                            return (
+                              <div className="xs" style={{ color: "var(--fail)" }}>
+                                Cannot be hired - fatal registration defect. No grant
+                                exists that makes an uncallable agent safe to authorise.
+                              </div>
+                            );
+                          }
+                          return (
+                            <>
+                              <div className="xs">
+                                <span className="num">{auth.presetName}</span> grant
+                                {" · "}expires in <span className="num">{auth.expiry}</span>
+                              </div>
+                              <div className="xs t-3">
+                                {auth.contractLabels.length
+                                  ? auth.contractLabels.join(", ")
+                                  : "no calling authority - observe only"}
+                              </div>
+                              <div className="xs t-3">
+                                {auth.selectorCount > 0 && (
+                                  <>{auth.selectorCount} function{auth.selectorCount === 1 ? "" : "s"}
+                                    {auth.approveCount > 0
+                                      ? <span style={{ color: "var(--fail)" }}> · {auth.approveCount} approval{auth.approveCount === 1 ? "" : "s"}</span>
+                                      : " · no approvals"}</>
+                                )}
+                                {" · "}
+                                {auth.caps.length
+                                  ? <span className="num">{auth.caps.join(" · ")}</span>
+                                  : "no spending authority"}
+                              </div>
+                              {auth.worstCase && (
+                                <div className="xs t-4">Worst case: {auth.worstCase}</div>
+                              )}
+                              {auth.isFallback && (
+                                <div className="xs t-4">
+                                  Template from the grid category - this agent is
+                                  unclassified, so a hire needs the closest fit, not its own.
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+
                       <div data-m="Track record" className="stack-sm">
                         {read.attestUnavailable ? (
                           <div className="xs t-4">Could not be read - unmeasured, not zero.</div>
@@ -406,10 +464,14 @@ export default async function ShortlistPage({
                       </div>
 
                       <div data-m="Decide" className="stack-sm" style={{ textAlign: "right" }}>
-                        <a href={`/a/${id}/hire`} className="cta" style={{ fontSize: 12, padding: "6px 12px" }}>
+                        <a
+                          href={`/a/${id}/hire`}
+                          className="cta"
+                          style={{ fontSize: 12.5, padding: "10px 14px", minHeight: 38, display: "inline-block" }}
+                        >
                           {fatal.length ? "View safety details" : "Hire flow"}
                         </a>
-                        <a href={`/a/${id}`} className="xs t-3">full card →</a>
+                        <a href={`/a/${id}`} className="xs t-3" style={{ fontSize: 12 }}>full card →</a>
                       </div>
                     </div>
                   );
@@ -427,11 +489,13 @@ export default async function ShortlistPage({
             comments from completed escrow jobs, never a score.
           </p>
           <p className="xs t-4 mt-s" style={{ maxWidth: "74ch" }}>
-            <strong>What this page does not compare:</strong> what each agent could do to your
-            wallet. Grant scope, spend caps and blast radius are per-agent and per-wallet -
-            they live on each card&apos;s Authority tab and the{" "}
-            <a href="/authority">authority console</a>, and no comparison column here can
-            substitute for reading them before you hire.
+            <strong>Where the authority column comes from:</strong> the tightest grant each
+            hire would offer, derived from the agent&apos;s category the same way the hire
+            flow derives it, and enforced on chain by the session validator - a call outside
+            the limits reverts during validation. The agent itself declares none of this;
+            scope and spend are two independent dimensions. What stays per-wallet: sessions
+            you have <em>already</em> granted - live grants, their blast radius and the kill
+            switch are on the <a href="/authority">authority console</a>.
           </p>
         </div>
       </section>

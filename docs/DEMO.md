@@ -1,6 +1,6 @@
 # GEBO — the demo script
 
-Five minutes, live, in this order. Each stop has one punchline. If a step
+Six minutes, live, in this order. Each stop has one punchline. If a step
 fails live, say so out loud and show the honest failure state — that is the
 product working, not the demo failing.
 
@@ -24,11 +24,26 @@ Do not explain the architecture yet. Show the product.
 ## 2. Search — `/search?q=grid` (30s)
 
 - 119+ matches over 257k materialized agents, ranked, sub-second.
+- Click **+ shortlist** on two results — no navigation, the buttons confirm
+  in place. (This feeds the next beat.)
 - **Punchline:** "If this read ever fails, the page says *could not be
   measured*. It never says zero matches. A marketplace that fabricates a
   number when tired is just a worse version of the thing it replaces."
 
-## 3. An agent card (60s)
+## 3. The shortlist — `/shortlist` (45s)
+
+- Click **on shortlist · open →** on either result. Same measured dimensions
+  side by side — and the column nobody else has: **the tightest grant each
+  hire would offer**. Compare the grid agent's "1 function, 100 USDT/day"
+  against a health agent's "no calling authority, no spending authority".
+- **Punchline:** "Notice what this page refuses to do: it does not pick a
+  winner. No score, no 'best for you' — the GPT Store measured ratings from
+  unverified raters at roughly zero correlation with real usage, so we align
+  the evidence and the judgement stays yours. And the wallet question is a
+  column here, not fine print — the scope template is the same one the hire
+  flow enforces on chain."
+
+## 4. An agent card (60s)
 
 - Pick any VERIFIED agent. Show: probe history with observation counts, the
   real unedited sample response from the agent's own endpoint, EXECUTE vs
@@ -39,7 +54,7 @@ Do not explain the architecture yet. Show the product.
   can rate anything. Here only the wallet that escrowed and completed a job
   can comment — and it's a comment, never a score."
 
-## 4. The authority console — `/authority` (90s, the differentiator)
+## 5. The authority console — `/authority` (90s, the differentiator)
 
 - "Question two: what can an agent do to this wallet?"
 - Paste any BSC address (or the demo wallet
@@ -53,7 +68,7 @@ Do not explain the architecture yet. Show the product.
   our own measurement on the page. A disclosure you have to trigger is not
   a disclosure."
 
-## 5. The work itself — `/c/health` → any opportunity → `/o/[id]` (60s)
+## 6. The work itself — `/c/health` → any opportunity → `/o/[id]` (60s)
 
 - Show the live Venus market state: rates, utilisation, collateral factor.
 - Point at the oracle fields: "Oracle staleness: *unmeasured* — the
@@ -67,7 +82,7 @@ Do not explain the architecture yet. Show the product.
   number you can't verify is how every marketplace in this space has
   lied to its users."
 
-## 6. Paper mode — `/paper` (45s)
+## 7. Paper mode — `/paper` (45s)
 
 - Run #1: 55 decisions recorded at 03:13 UTC today, each on its measured
   inputs, under a zero-spend read-only scope.
@@ -76,7 +91,7 @@ Do not explain the architecture yet. Show the product.
   fraction with counts and a rule. It can never become a rating, because
   ratings are the thing we measured as noise."
 
-## 7. Close — the evidence (45s)
+## 8. Close — the evidence (45s)
 
 > "Everything here that can be on chain, is. The census reads the ERC-8004
 > registry directly. Eleven reputation writes are on the mainnet Reputation

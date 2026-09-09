@@ -23,6 +23,7 @@
  */
 import postgres from "postgres";
 import { agentsByTokenIds, type Agent } from "./data.ts";
+import { PRESETS, blastRadius } from "./session-scope.ts";
 import type { MetricQualifier } from "./metrics.ts";
 
 /** Beyond this the comparison stops being readable - six columns is a decision, twenty is a dump. */
@@ -99,6 +100,68 @@ export function addToShortlist(
 /** The canonical href for a list of ids - the one form every internal link builds. */
 export function shortlistHref(ids: string[]): string {
   return ids.length ? `/shortlist?ids=${ids.join(",")}` : "/shortlist";
+}
+
+// ── authority: what a minimal hire would grant ────────────────────────────────
+//
+// The one question the comparison originally left to a footer disclaimer -
+// "what can it do to my wallet?" - is answerable per agent BEFORE any wallet
+// connects, because the hire flow itself derives a scope template from the
+// agent's category and computes its blast radius. This surfaces exactly that,
+// on the same terms the hire page shows it: the CONSERVATIVE preset (the
+// flow's default), its contracts, spend caps, expiry and worst case.
+//
+// Scoping that must stay explicit (invariant 3): the template comes from the
+// agent's CATEGORY, not from anything the agent declares - and what a wallet
+// has ALREADY granted stays per-wallet on /authority. Both are said on the
+// page, next to the figures.
+
+export type AuthorityCell =
+  | { kind: "blocked" }
+  | {
+      kind: "scoped";
+      presetName: string;
+      /** The category the template came from - not always the agent's own. */
+      categorySlug: string;
+      /** True when the agent is unclassified and the grid template stands in. */
+      isFallback: boolean;
+      contractLabels: string[];
+      selectorCount: number;
+      /** 'approve'-risk selectors are the ones that outlive a single action. */
+      approveCount: number;
+      caps: string[];
+      expiry: string;
+      worstCase: string | null;
+    };
+
+/**
+ * The tightest grant a hire of this agent would offer, as the comparison
+ * renders it. Mirrors the hire flow's own derivation (PRESETS[slug] with the
+ * grid fallback, conservative first) so the two surfaces can never disagree
+ * about what a minimal hire means.
+ */
+export function authorityFor(category: string | null, fatalDefectCount: number): AuthorityCell {
+  if (fatalDefectCount > 0) return { kind: "blocked" };
+  const slug = category && category in PRESETS ? category : "grid";
+  const preset = PRESETS[slug]?.[0];
+  if (!preset) return { kind: "blocked" };
+  const radius = blastRadius(preset);
+  const hours = radius.expiresInHours;
+  const expiry = hours >= 24
+    ? `${Math.round(hours / 24)} day${Math.round(hours / 24) === 1 ? "" : "s"}`
+    : `${hours} hour${hours === 1 ? "" : "s"}`;
+  return {
+    kind: "scoped",
+    presetName: preset.name,
+    categorySlug: slug,
+    isFallback: !(category && category in PRESETS),
+    contractLabels: radius.contracts.map((c) => c.label),
+    selectorCount: radius.selectors.length,
+    approveCount: radius.selectors.filter((s) => s.risk === "approve").length,
+    caps: radius.caps.map((c) => `${c.humanAmount} ${c.symbol}/${c.period}`),
+    expiry,
+    worstCase: radius.worstCase ?? null,
+  };
 }
 
 // ── evidence reads ────────────────────────────────────────────────────────────

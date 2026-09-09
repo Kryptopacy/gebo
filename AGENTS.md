@@ -596,6 +596,30 @@ Recorded so nobody "fixes" a decision.
   `!jobHasBudget[jobId]`. Say so in the report rather than implying value moved.
   Cost: about **0.00023 BNB** for three jobs with headroom.
 
+### The shortlist comparison (2026-09-09)
+
+`/shortlist?ids=` (cap 6, disclosed) is the judged journey's "understand"
+step made plural. State is the URL; localStorage is only the bridge between
+"add" buttons on other pages, and `/shortlist` writes it back on every view
+(`SyncShortlistStorage`) - before that sync existed, removing an agent on the
+page resurrected on the next card "add", because removals changed the URL
+only. `src/lib/shortlist.ts` holds the pure grammar (parsing, idempotent
+list-aware add, canonical ids - `007` and `7` are one agent), the four-query
+batched evidence read (ONE connection - not the per-agent fan-out that
+throttled the free tier twice), and `authorityFor()`, which derives the
+tightest-grant column from the SAME `PRESETS`/`blastRadius` the hire flow
+uses, so the two surfaces cannot disagree about what a minimal hire means.
+No score, no winner, no popularity ordering anywhere in the module - a test
+pins that the exports contain no score/rank/winner helper.
+
+Search result rows are `<div>` + stretched link (`.row-stretch` in
+globals.css), not anchor rows: an "add" button inside an `<a>` row is a
+nested interactive element, invalid and unreadable to screen readers. The
+small chips (shortlist add, remove ×) carry explicit min-heights because a
+10px chip is an ~18px tap target - untappable with a thumb; the mobile audit
+proves no overflow but says nothing about tap targets, which is why they are
+sized in code, not left to the chip class.
+
 ## Conventions
 
 - Comments explain **why**, especially where a non-obvious choice encodes a bug

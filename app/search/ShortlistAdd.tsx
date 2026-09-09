@@ -49,7 +49,10 @@ export default function ShortlistAdd({ tokenId }: { tokenId: string }) {
       type="button"
       onClick={onClick}
       className="chip chip-flat above-link"
-      style={{ fontSize: 10, padding: "2px 8px", cursor: "pointer" }}
+      /* A phone is the primary device for this surface: the chip reads small
+         but the TARGET is a comfortable 34px - a 10px-font, 2px-padding chip
+         is ~18px tall and untappable with a thumb. */
+      style={{ fontSize: 11, padding: "8px 12px", minHeight: 34, cursor: "pointer" }}
       aria-label={
         onList
           ? `Agent #${tokenId} is on your shortlist - open the comparison`

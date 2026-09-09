@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  parseShortlistIds, addToShortlist, shortlistHref, MAX_SHORTLIST,
+  parseShortlistIds, addToShortlist, shortlistHref, authorityFor, MAX_SHORTLIST,
 } from "../src/lib/shortlist.ts";
 
 describe("parseShortlistIds", () => {
@@ -98,6 +98,52 @@ describe("shortlistHref", () => {
 
   it("an empty list is the bare route, not ?ids=", () => {
     expect(shortlistHref([])).toBe("/shortlist");
+  });
+});
+
+describe("authorityFor (the tightest-grant column)", () => {
+  it("a fatal-defect agent cannot be hired - no grant exists to compare", () => {
+    expect(authorityFor("grid", 1)).toEqual({ kind: "blocked" });
+  });
+
+  it("a classified agent gets its own category's conservative template", () => {
+    const a = authorityFor("rebalancing", 0);
+    expect(a.kind).toBe("scoped");
+    if (a.kind !== "scoped") return;
+    expect(a.categorySlug).toBe("rebalancing");
+    expect(a.isFallback).toBe(false);
+    // Straight from session-scope's rebalancing conservative preset.
+    expect(a.caps).toEqual(["0.02 WBNB/day"]);
+    expect(a.expiry).toBe("1 day");
+    expect(a.contractLabels.length).toBeGreaterThan(0);
+    expect(a.approveCount).toBe(0);
+    expect(a.worstCase).toBeTruthy();
+  });
+
+  it("an unclassified agent falls back to the grid template AND SAYS SO", () => {
+    const a = authorityFor(null, 0);
+    expect(a.kind).toBe("scoped");
+    if (a.kind !== "scoped") return;
+    expect(a.categorySlug).toBe("grid");
+    expect(a.isFallback).toBe(true);
+  });
+
+  it("the health watch-only template has no calling and no spending authority", () => {
+    const a = authorityFor("health", 0);
+    expect(a.kind).toBe("scoped");
+    if (a.kind !== "scoped") return;
+    expect(a.contractLabels).toEqual([]);
+    expect(a.caps).toEqual([]);
+    expect(a.selectorCount).toBe(0);
+  });
+
+  it("mirrors the hire flow: same PRESETS source, conservative-first", () => {
+    // If the hire page's default ever changes away from presets[0], this pin
+    // breaks and the two surfaces get reconciled rather than drifting.
+    for (const slug of ["rebalancing", "grid", "yield", "health"] as const) {
+      const a = authorityFor(slug, 0);
+      expect(a.kind).toBe("scoped");
+    }
   });
 });
 

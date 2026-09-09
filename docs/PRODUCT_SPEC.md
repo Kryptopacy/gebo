@@ -64,14 +64,28 @@ Judged journey: **land → find by category → understand → activate**, with 
 > As-built note (2026-09-09): `/shortlist` implements the comparison step the
 > journey implied but never had — deciding between candidates used to mean
 > walking cards in separate tabs. State is the URL (`?ids=` token ids, capped
-> at six with the cap disclosed), entered from an "Add to shortlist" button on
-> each agent card or by pasting ids. It aligns the card's measured dimensions
-> (trust state, handshake, uptime/latency with observation counts, attestation
-> counts, verified reviews) and deliberately concludes nothing: no composite
-> score, no "best pick", no popularity ordering (L1/L3); unmeasured dimensions
-> render as unmeasured with a reason (L2/invariant 9). Evidence loads as four
-> bounded queries on one connection, not per-agent fan-out — the free-tier
-> throttle lesson.
+> at six with the cap disclosed), entered from a shortlist button on search
+> results and agent cards, or by pasting ids. It aligns the card's measured
+> dimensions (trust state, handshake, uptime/latency with observation counts,
+> attestation counts, verified reviews) **plus the authority dimension**: the
+> tightest grant a hire would offer, derived from the agent's category the
+> same way the hire flow derives it (conservative preset, blast radius, spend
+> caps, expiry, worst case) — so "what can it do to my wallet" is a column,
+> not a footnote, with its per-wallet remainder (live grants) scoped to
+> /authority. It deliberately concludes nothing: no composite score, no "best
+> pick", no popularity ordering (L1/L3); unmeasured dimensions render as
+> unmeasured with a reason (L2/invariant 9). Evidence loads as four bounded
+> queries on one connection, not per-agent fan-out — the free-tier throttle
+> lesson.
+>
+> Edge cases this surface hit in practice, and the fixes (each a discipline
+> exhibit, not a bug count): removals on the page must sync the client cache
+> or the next "add" resurrects them; a paste of several ids must parse as a
+> list or the form silently no-ops; token ids must be canonicalised or `007`
+> and `7` render as two agents; a row carrying a second control cannot stay
+> an anchor row (stretched link instead — nested interactive elements are
+> invalid); small chips need thumb-sized tap targets on mobile. All are
+> pinned by `tests/shortlist.test.ts` and exercised by the mobile audit.
 
 ### 1.1 `/` — Landing
 

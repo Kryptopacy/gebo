@@ -96,27 +96,33 @@ For a human reviewer, in the order that shows the most the fastest:
    real unedited sample response from the agent's own endpoint, and the
    **explicit honest empty states**: "no verified reviews — reviews require a
    completed hire".
-4. [`/authority`](https://gebo-bsc.vercel.app/authority) — the question no
+4. [`/shortlist?ids=259573,265375`](https://gebo-bsc.vercel.app/shortlist?ids=259573,265375) —
+   the decision surface: candidates side by side — liveness with observation
+   counts, track record, verified reviews, **and the tightest grant a hire of
+   each would offer** (contracts, spend caps, expiry, worst case, from the same
+   scope templates the hire flow enforces). No score, no winner, no popularity
+   ordering — the judgement stays with the user, by design.
+5. [`/authority`](https://gebo-bsc.vercel.app/authority) — the question no
    other directory answers: **what can an agent do to this wallet?** Paste any
    BSC address. Live Altana Keystore read, third-party sessions from the
    on-chain event index, the global kill switch, and the standing "what this
    check does not cover" disclosure — the caveat is on the page before you
    search, not after.
-5. [`/c/health`](https://gebo-bsc.vercel.app/c/health) → any opportunity →
+6. [`/c/health`](https://gebo-bsc.vercel.app/c/health) → any opportunity →
    `/o/[id]` — the work itself: live Venus market state, the oracle's price
    vs the market's (divergence as a stale-feed signal), pause flags *as
    unmeasured with reasons* where the Comptroller exposes no getter, and the
    grid ruin-probability model that says *accumulating* until it has 72 hours
    of its own tick observations rather than inventing a number.
-6. [`/paper`](https://gebo-bsc.vercel.app/paper) — paper mode: the reference
+7. [`/paper`](https://gebo-bsc.vercel.app/paper) — paper mode: the reference
    health agent's real decision loop under a zero-spend scope, every decision
    recorded on its measured inputs, scored mechanically on the next run. The
    score is a fraction with counts and its rule — never a rating.
-7. [`/live`](https://gebo-bsc.vercel.app/live) and
+8. [`/live`](https://gebo-bsc.vercel.app/live) and
    [`/methodology`](https://gebo-bsc.vercel.app/methodology) — the prober's
    limits published (one region, and it says so), what the site refuses to
    display, and why.
-8. For an **agent** reviewer: `POST /mcp` with a JSON-RPC `tools/list` — eight
+9. For an **agent** reviewer: `POST /mcp` with a JSON-RPC `tools/list` — eight
    read-only tools, every response carrying its caveats; [`/llms.txt`](https://gebo-bsc.vercel.app/llms.txt)
    at the root; the browser-native WebMCP surface for agent-mode browsers.
 
@@ -165,6 +171,15 @@ Everything above that can be on chain, is:
   wallets; the chain verifies keys), and exposes a global kill switch that
   revokes every active session in one action — with the standing disclosure
   of what the check cannot see.
+- **Comparison without ranking.** `/shortlist` puts up to six candidates side
+  by side — liveness with observation counts, evidence-gated track record,
+  verified reviews, and the tightest grant each hire would offer — and
+  computes no score, no "best pick" and no popularity ordering, because
+  unanchored ratings and usage counts carry no information about whether an
+  agent works. The edge-case discipline is part of the surface: removals sync
+  the client cache (no resurrected agents), multi-id pastes parse as lists
+  (no silent no-ops), ids are canonicalised, and the mobile layout is
+  audited, not assumed.
 - **Paper mode.** The Tier-3 on-ramp: an unproven agent's real decision loop
   under a zero-spend, read-only scope, every decision recorded on its
   measured inputs and scored mechanically on the next run. A fraction with
