@@ -781,6 +781,42 @@ export async function agentsInCategory(category: CategorySlug, limit = 200): Pro
   }
 }
 
+/**
+ * A shortlist read: several agents by token id, in the order the caller gave.
+ *
+ * Returns an explicit unavailable flag rather than an empty array on failure -
+ * the shortlist page must distinguish "this agent is not in the registry" from
+ * "the read failed" (invariant 9: a failed measurement is never an empty
+ * state). This is the only multi-agent read that preserves caller order, so
+ * the comparison's columns stay in the order the user built them.
+ */
+export async function agentsByTokenIds(
+  tokenIds: string[],
+): Promise<{ agents: Agent[]; unavailable: boolean; reason: string | null }> {
+  const ids = [...new Set(tokenIds.filter((t) => /^\d{1,10}$/.test(t)))];
+  if (!ids.length) return { agents: [], unavailable: false, reason: null };
+  const sql = db();
+  if (!sql) {
+    const want = new Set(ids);
+    return {
+      agents: (await loadAgents()).filter((a) => want.has(a.token_id)),
+      unavailable: false,
+      reason: null,
+    };
+  }
+  try {
+    const rows = (await sql.unsafe(
+      `${AGENT_SELECT}
+       where a.chain_id = 56 and a.token_id = any($1::bigint[])
+       order by array_position($1::bigint[], a.token_id)`,
+      [ids],
+    )) as unknown as any[];
+    return { agents: rows.map(mapAgentRow), unavailable: false, reason: null };
+  } catch (err) {
+    return { agents: [], unavailable: true, reason: String(err).slice(0, 160) };
+  }
+}
+
 export async function findAgent(tokenId: string): Promise<Agent | undefined> {
   const sql = db();
   if (!sql) return (await loadAgents()).find((a) => a.token_id === tokenId);

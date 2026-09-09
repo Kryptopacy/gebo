@@ -9,6 +9,7 @@ import { probeHistoryFor, type ProbeHistory } from "@/lib/probe-history";
 import { reviewsFor, type Review } from "@/lib/reviews";
 import AgentTabs from "./AgentTabs";
 import { ReviewForm } from "./ReviewForm";
+import ShortlistButton from "./ShortlistButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -183,6 +184,9 @@ export default async function AgentPage({ params }: { params: Promise<{ tokenId:
             <a href={`/a/${a.token_id}/hire`} className="cta">
               {fatal.length ? "View safety details" : "Try this agent"}
             </a>
+            {/* The comparison entry point: accumulates this agent into the
+                visitor's shortlist and opens the side-by-side view. */}
+            <ShortlistButton tokenId={a.token_id} />
             <span className="xs t-4">Review what it can do, then decide. Nothing is signed until you approve.</span>
           </div>
         </div>

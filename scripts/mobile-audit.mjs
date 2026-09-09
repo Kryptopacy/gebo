@@ -352,6 +352,7 @@ async function main() {
       "/live",
       "/authority",
       "/compare",
+      "/shortlist",
       "/methodology",
       "/search?q=rebalancing",
     ];
@@ -393,6 +394,32 @@ async function main() {
           }
         }
         results.push(m);
+      }
+
+      // The shortlist comparison with real columns: take the first two
+      // harvested agent cards and compare them - the populated state is the
+      // one whose six-column grid can overflow, not the empty state above.
+      const ids = agentLinks
+        .map((l) => (l.match(/\/a\/(\d+)/) || [])[1])
+        .filter(Boolean)
+        .slice(0, 2);
+      if (ids.length === 2) {
+        const route = `/shortlist?ids=${ids.join(",")}`;
+        log(`- ${route}`);
+        let m;
+        for (let attempt = 1; ; attempt++) {
+          try {
+            m = await auditRoute(BASE + route, route);
+            break;
+          } catch (e) {
+            if (attempt >= 3) throw e;
+            log(`  retry ${attempt}: ${e.message}`);
+            await sleep(3000);
+          }
+        }
+        results.push(m);
+      } else {
+        log("! fewer than two agent links harvested; skipping populated shortlist");
       }
     } else {
       log("! no agent card link harvested; skipping /a routes");

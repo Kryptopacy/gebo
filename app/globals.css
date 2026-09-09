@@ -305,6 +305,11 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
    arrive as a custom property set inline by the page; the mobile breakpoint
    overrides grid-template-columns itself, not the variable. */
 .r-opps        { grid-template-columns: var(--opp-grid); }
+/* The shortlist comparison: six fixed columns - identity, trust state, a
+   liveness cell that stacks several qualified figures, track record,
+   reviews, and the decision links. Track widths are a class, never inline
+   (see the .row comment above: an inline grid beats every media query). */
+.r-shortlist   { grid-template-columns: minmax(0,1.7fr) 7rem minmax(11rem,1.5fr) minmax(10rem,1.35fr) minmax(8.5rem,1fr) 8rem; }
 
 .rows-head {
   display: grid; gap: 20px;
@@ -846,7 +851,7 @@ h3 { font-size: 15px; font-weight: 560; letter-spacing: -0.012em; margin: 0 0 6p
   .row [data-m] { text-align: left !important; }
 
   .r-dir, .r-transitions, .r-grants, .r-keys, .r-suggest,
-  .r-excluded, .r-measures {
+  .r-excluded, .r-measures, .r-shortlist {
     grid-template-columns: 1fr; gap: 6px;
   }
   .r-runs { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px 14px; }

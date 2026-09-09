@@ -207,6 +207,7 @@ async function main() {
     ["Hire / scope picker", "app/a/[tokenId]/hire/page.tsx"],
     ["Category surface", "app/c/[category]/page.tsx"],
     ["Search", "app/search/page.tsx"],
+    ["Shortlist comparison (agents side by side)", "app/shortlist/page.tsx"],
     ["Liveness ledger", "app/live/page.tsx"],
     ["Authority console", "app/authority/page.tsx"],
     ["Methodology", "app/methodology/page.tsx"],

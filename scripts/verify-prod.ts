@@ -31,6 +31,8 @@ const CHECKS: Check[] = [
   { route: "/authority", must: [/Altana Keystore/, /Agentic Wallet/] },
   { route: "/methodology", must: [/What is measured/] },
   { route: "/search", must: [/Search|capability/i] },
+  { route: "/shortlist", must: [/Nothing to compare yet|the judgement stays yours/i] },
+  { route: "/shortlist?ids=259573,265375", must: [/uptime 7d|No probe yet/] },
   { route: "/c/health", must: [/health/i] },
   { route: "/a/265375", must: [/Track record/] },
 ];

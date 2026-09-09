@@ -47,6 +47,9 @@ Judged journey: **land → find by category → understand → activate**, with 
 /a/[tokenId]/hire              Activation flow: scope → simulate → hire → revoke
                                (the dry run folded into step 02 — no separate route)
 /search                        Capability search (full-text over skills/docs/name)
+/shortlist                     Side-by-side comparison of up to 6 agents (?ids=)
+                               (the "understand" step, plural: aligned measured
+                               dimensions, no score, no winner — L1/L3 apply)
 /authority                     My Agents — live sessions, blast radius, revoke
 /compare                       Agent Advantage — counterfactual engine (serves TermiX)
 /methodology                   Every definition + known defects
@@ -57,6 +60,18 @@ Judged journey: **land → find by category → understand → activate**, with 
 > fixed at 56 for the registry), the simulation lives inside the hire flow's
 > step 02, and background work runs as `pg_cron` jobs calling Next API routes
 > (see docs/OPERATIONS.md) rather than the Bun workers sketched in §8.
+
+> As-built note (2026-09-09): `/shortlist` implements the comparison step the
+> journey implied but never had — deciding between candidates used to mean
+> walking cards in separate tabs. State is the URL (`?ids=` token ids, capped
+> at six with the cap disclosed), entered from an "Add to shortlist" button on
+> each agent card or by pasting ids. It aligns the card's measured dimensions
+> (trust state, handshake, uptime/latency with observation counts, attestation
+> counts, verified reviews) and deliberately concludes nothing: no composite
+> score, no "best pick", no popularity ordering (L1/L3); unmeasured dimensions
+> render as unmeasured with a reason (L2/invariant 9). Evidence loads as four
+> bounded queries on one connection, not per-agent fan-out — the free-tier
+> throttle lesson.
 
 ### 1.1 `/` — Landing
 
